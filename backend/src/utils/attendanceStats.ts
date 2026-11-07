@@ -2,8 +2,10 @@
  * Turns per-status counts into a summary with an attendance %.
  * Late counts as attended; half-day counts as half; leave/absent do not.
  */
-export function attendanceSummary(rows: { status: string; _count: number }[]) {
-  const by = Object.fromEntries(rows.map((r) => [r.status, r._count])) as Record<string, number>;
+export type AttendanceCounts = Partial<Record<'PRESENT' | 'ABSENT' | 'LATE' | 'LEAVE' | 'HALF_DAY', number>>;
+
+export function attendanceSummary(rows: { status: string; _count: number }[]): AttendanceCounts & { total: number; percent: number | null } {
+  const by = Object.fromEntries(rows.map((r) => [r.status, r._count])) as AttendanceCounts;
   const total = rows.reduce((n, r) => n + r._count, 0);
   const attended = (by.PRESENT ?? 0) + (by.LATE ?? 0) + (by.HALF_DAY ?? 0) * 0.5;
   return { total, ...by, percent: total ? Math.round((attended / total) * 1000) / 10 : null };

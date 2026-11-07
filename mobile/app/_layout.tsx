@@ -32,6 +32,10 @@ function openFromNotification(data: Record<string, any> | undefined) {
     case 'DIARY_POSTED': return area === 'family' ? router.push('/(family)/diary') : router.push('/(teacher)/diary');
     case 'NOTICE_PUBLISHED': return router.push('/notices');
     case 'RESULT_PUBLISHED': return area === 'family' && router.push('/exams');
+    case 'LOW_ATTENDANCE': return area === 'family' ? router.push('/(family)/attendance') : router.push('/notifications');
+    case 'LEAVE_DECIDED': return router.push('/leave');
+    case 'LEAVE_REQUESTED':
+    case 'PAYMENT_CLAIM': return router.push('/approvals');
     default: return router.push('/notifications');
   }
 }
@@ -80,6 +84,9 @@ export default function RootLayout() {
           <Stack.Screen name="exams" options={{ title: 'Exams & results' }} />
           <Stack.Screen name="timetable" options={{ title: 'Timetable' }} />
           <Stack.Screen name="marks" options={{ title: 'Marks entry' }} />
+          <Stack.Screen name="pay" options={{ title: 'Pay fee online' }} />
+          <Stack.Screen name="leave" options={{ title: 'Leave' }} />
+          <Stack.Screen name="approvals" options={{ title: 'Approvals' }} />
         </Stack>
       </QueryClientProvider>
     </SafeAreaProvider>

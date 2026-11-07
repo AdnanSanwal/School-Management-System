@@ -23,7 +23,7 @@ export const PERMISSIONS = [
   'attendance.staff.mark', 'attendance.staff.view',
   'leave.apply', 'leave.view', 'leave.approve',
   'fee.view', 'fee.structure.view', 'fee.structure.manage', 'fee.invoice.generate', 'fee.collect',
-  'fee.concession.request', 'fee.concession.approve',
+  'fee.concession.request', 'fee.concession.approve', 'fee.pay',
   'exam.view', 'exam.manage', 'exam.approve', 'marks.enter', 'marks.view', 'reportcard.generate',
   'diary.view', 'diary.post',
   'timetable.view', 'timetable.manage', 'timetable.approve',
@@ -78,7 +78,7 @@ export const ROLE_PERMISSIONS: Record<Role, ReadonlySet<Permission>> = {
     'fee.view', 'fee.structure.view', 'fee.structure.manage', 'fee.invoice.generate', 'fee.collect',
     'fee.concession.request',
     'exam.manage', 'timetable.manage', 'calendar.manage', 'notice.publish',
-    'reports.finance', 'reports.attendance',
+    'reports.finance', 'reports.attendance', 'leave.apply',
   ]),
 
   // Finance only.
@@ -100,7 +100,7 @@ export const ROLE_PERMISSIONS: Record<Role, ReadonlySet<Permission>> = {
   // Scoped to linked children.
   PARENT: new Set<Permission>([
     ...EVERYONE_IN_SCHOOL,
-    'school.view', 'student.view', 'attendance.student.view', 'fee.view', 'marks.view', 'diary.view',
+    'school.view', 'student.view', 'attendance.student.view', 'fee.view', 'fee.pay', 'marks.view', 'diary.view',
   ]),
 
   // Scoped to self.

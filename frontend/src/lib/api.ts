@@ -126,6 +126,7 @@ export const attendanceAPI = {
   calendar: (studentId: string, month?: string) => data(api.get(`/attendance/students/${studentId}/calendar`, { params: { month } })),
   summary: (date?: string) => data(api.get('/attendance/summary', { params: { date } })),
   staff: (date?: string) => data(api.get('/attendance/staff', { params: { date } })),
+  lowAttendanceAlerts: () => data(api.post('/attendance/low-attendance-alerts')),
   markStaff: (body: any) => data(api.put('/attendance/staff', body)),
 };
 
@@ -147,6 +148,8 @@ export const feesAPI = {
   requestConcession: (body: any) => data(api.post('/fees/concessions', body)),
   decideConcession: (id: string, approve: boolean) => api.post(`/fees/concessions/${id}/decision`, { approve }),
   sendReminders: (body: { daysAhead?: number; classId?: string }) => data(api.post('/fees/reminders', body)),
+  applyFines: () => data(api.post('/fees/fines/apply')),
+  waiveFine: (invoiceId: string) => api.post(`/fees/invoices/${invoiceId}/waive-fine`),
 };
 
 export const diaryAPI = {
@@ -194,6 +197,37 @@ export const timetableAPI = {
   section: (sectionId: string) => data<any[]>(api.get(`/timetable/section/${sectionId}`)),
   teacher: (staffId = 'me') => data<any[]>(api.get(`/timetable/teacher/${staffId}`)),
   save: (sectionId: string, slots: any[]) => data(api.put(`/timetable/section/${sectionId}`, { slots })),
+};
+
+export const leaveAPI = {
+  mine: () => data(api.get('/leave/mine')),
+  list: (params?: any) => data<any[]>(api.get('/leave', { params })),
+  apply: (body: any) => data(api.post('/leave', body)),
+  decide: (id: string, approve: boolean, note?: string) => api.post(`/leave/${id}/decision`, { approve, note }),
+  cancel: (id: string) => api.post(`/leave/${id}/cancel`),
+};
+
+export const approvalsAPI = { inbox: () => data(api.get('/approvals')) };
+
+export const paymentsAPI = {
+  options: () => data(api.get('/payments/options')),
+  addAccount: (body: any) => data(api.post('/payments/accounts', body)),
+  removeAccount: (id: string) => api.delete(`/payments/accounts/${id}`),
+  claims: (params?: any) => data<any[]>(api.get('/payments/claims', { params })),
+  decideClaim: (id: string, approve: boolean, note?: string) => data(api.post(`/payments/claims/${id}/decision`, { approve, note })),
+};
+
+export const reportsAPI = {
+  available: () => data<string[]>(api.get('/reports')),
+  /** Downloads a report file and hands it to the browser. */
+  download: async (type: string, params: Record<string, string | undefined>) => {
+    const res = await api.get(`/reports/${type}`, { params, responseType: 'blob' });
+    const name = /filename="([^"]+)"/.exec(res.headers['content-disposition'] ?? '')?.[1] ?? `${type}.${params.format ?? 'pdf'}`;
+    const url = URL.createObjectURL(res.data);
+    const a = document.createElement('a');
+    a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  },
 };
 
 export const dashboardAPI = {

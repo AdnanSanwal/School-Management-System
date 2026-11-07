@@ -27,6 +27,9 @@ const schoolUpdate = z.object({
   email: z.string().email().nullable().optional(),
   logoUrl: z.string().url().max(1024).nullable().optional(),
   timezone: z.string().max(64).optional(),
+  lateFeeAmount: z.coerce.number().min(0).max(100_000).optional(),
+  lateFeeGraceDays: z.coerce.number().int().min(0).max(90).optional(),
+  lowAttendanceThreshold: z.coerce.number().int().min(0).max(100).optional(),
 }).strict();
 
 router.patch('/', can('school.manage'), handler(async (req, res) => {

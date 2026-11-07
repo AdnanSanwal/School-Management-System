@@ -27,6 +27,11 @@ model School {
   currency  String   @default("PKR")
   timezone  String   @default("Asia/Karachi")
   isActive  Boolean  @default(true)
+  // Late fee: a one-time fine added to an invoice this many days after its due date (0 = off).
+  lateFeeAmount          Decimal  @default(0) @db.Decimal(12, 2)
+  lateFeeGraceDays       Int      @default(7)
+  // Monthly attendance % below which parents and the principal are alerted.
+  lowAttendanceThreshold Int      @default(75)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -182,6 +187,8 @@ model Student {
   concessions Concession[]
   invoices    FeeInvoice[]
   payments    Payment[]
+  paymentClaims  PaymentClaim[]
+  paymentIntents PaymentIntent[]
 
   @@unique([schoolId, admissionNo])
   @@index([schoolId, status])
@@ -660,6 +667,7 @@ model FeeInvoice {
   fineAmount     Decimal       @default(0) @db.Decimal(12, 2)
   netAmount      Decimal       @db.Decimal(12, 2)
   paidAmount     Decimal       @default(0) @db.Decimal(12, 2)
+  fineAppliedAt  DateTime?
   status         InvoiceStatus @default(UNPAID)
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
@@ -727,6 +735,70 @@ model PaymentAllocation {
   @@id([paymentId, invoiceId])
   @@index([schoolId])
   @@map("payment_allocations")
+}
+
+// Where parents can send fee money (shown in the app's "Pay online").
+model PaymentAccount {
+  id        String        @id @default(uuid())
+  schoolId  String
+  method    PaymentMethod // JAZZCASH / EASYPAISA / BANK_TRANSFER
+  title     String // "Greenfield School"
+  accountNo String
+  bankName  String?
+  iban      String?
+  isActive  Boolean       @default(true)
+  createdAt DateTime      @default(now())
+
+  @@index([schoolId])
+  @@map("payment_accounts")
+}
+
+// Parent says "I paid": transaction id + screenshot, verified by the accountant.
+model PaymentClaim {
+  id            String         @id @default(uuid())
+  schoolId      String
+  studentId     String
+  invoiceIds    Json // string[]
+  amount        Decimal        @db.Decimal(12, 2)
+  method        PaymentMethod
+  reference     String
+  proofKey      String?        @db.VarChar(512)
+  note          String?
+  status        ApprovalStatus @default(PENDING)
+  submittedById String
+  decidedById   String?
+  decidedAt     DateTime?
+  decisionNote  String?
+  paymentId     String?        @unique
+  createdAt     DateTime       @default(now())
+
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([schoolId, method, reference])
+  @@index([schoolId, status])
+  @@map("payment_claims")
+}
+
+// Online checkout through a payment gateway (see modules/payments/gateways).
+model PaymentIntent {
+  id          String              @id @default(uuid())
+  schoolId    String
+  studentId   String
+  invoiceIds  Json // string[]
+  amount      Decimal             @db.Decimal(12, 2)
+  provider    String              @db.VarChar(20)
+  status      PaymentIntentStatus @default(CREATED)
+  providerRef String?
+  createdById String
+  paymentId   String?             @unique
+  error       String?
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([schoolId, status])
+  @@map("payment_intents")
 }
 
 // ─── Notifications & audit ───────────────────────────────────────────────────
@@ -914,6 +986,13 @@ enum PaymentMethod {
   JAZZCASH
   EASYPAISA
   ONLINE
+}
+
+enum PaymentIntentStatus {
+  CREATED
+  SUCCEEDED
+  FAILED
+  EXPIRED
 }
 
 enum PaymentStatus {

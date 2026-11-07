@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils';
 import {
   LayoutDashboard, Users, GraduationCap, Bell, Settings, LogOut, ChevronLeft, ChevronRight,
   UserCheck, Layers, Wallet, Receipt, AlertTriangle, BadgePercent, FileSpreadsheet, ClipboardCheck,
-  KeyRound, School, Home, Megaphone, BookOpen, CalendarDays, PenLine, Clock,
+  KeyRound, School, Home, Megaphone, BookOpen, CalendarDays, PenLine, Clock, Inbox, FileBarChart, Plane,
 } from 'lucide-react';
 import { can, Capability, ROLE_LABEL } from '@/lib/roles';
 
@@ -32,6 +32,8 @@ const navGroups: NavGroup[] = [
     items: [
       { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, cap: 'dashboard' },
       { label: 'My children', href: '/family', icon: Home, roles: ['PARENT', 'STUDENT'] },
+      { label: 'Approvals', href: '/approvals', icon: Inbox, cap: 'approvals' },
+      { label: 'Reports', href: '/reports', icon: FileBarChart, cap: 'reports' },
     ],
   },
   {
@@ -59,6 +61,7 @@ const navGroups: NavGroup[] = [
       { label: 'Notices', href: '/notices', icon: Megaphone, cap: 'viewNotices' },
       { label: 'Daily diary', href: '/diary', icon: BookOpen, cap: 'viewDiary' },
       { label: 'Calendar', href: '/calendar', icon: CalendarDays, cap: 'viewCalendar' },
+      { label: 'Leave', href: '/leave', icon: Plane, cap: 'applyLeave' },
     ],
   },
   {

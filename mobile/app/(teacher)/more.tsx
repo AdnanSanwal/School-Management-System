@@ -8,6 +8,7 @@ export default function TeacherMore() {
       <MoreMenu extra={<>
         <Item icon="time-outline" label="My timetable" onPress={() => router.push('/timetable')} />
         <Item icon="create-outline" label="Marks entry" onPress={() => router.push('/marks')} />
+        <Item icon="airplane-outline" label="Leave" onPress={() => router.push('/leave')} />
       </>} />
     </Screen>
   );

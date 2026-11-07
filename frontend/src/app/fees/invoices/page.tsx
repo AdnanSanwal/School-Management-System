@@ -27,10 +27,24 @@ export default function InvoicesPage() {
     placeholderData: keepPreviousData,
   });
   const rows: any[] = data?.data ?? [];
+  const qc = useQueryClient();
+  const fines = useMutation({
+    mutationFn: feesAPI.applyFines,
+    onSuccess: (r: any) => { toast.success(`Late fee added to ${r.fined} invoice(s)`); qc.invalidateQueries({ queryKey: ['invoices'] }); },
+    onError: (e) => toast.error(apiError(e)),
+  });
+  const waive = useMutation({
+    mutationFn: (invoiceId: string) => feesAPI.waiveFine(invoiceId),
+    onSuccess: () => { toast.success('Late fee waived'); qc.invalidateQueries({ queryKey: ['invoices'] }); },
+    onError: (e) => toast.error(apiError(e)),
+  });
 
   return (
     <DashboardLayout title="Invoices" allowedRoles={CAN.viewFees} subtitle="Monthly fee vouchers"
-      actions={can(user?.role, 'generateInvoices') && <button className="btn btn-primary" onClick={() => setGenerating(true)}><FilePlus2 className="h-4 w-4" /> Generate month</button>}>
+      actions={<>
+        {can(user?.role, 'applyFines') && <button className="btn btn-secondary" disabled={fines.isPending} onClick={() => confirm('Add the late fee to every overdue invoice past the grace period?') && fines.mutate()}>Apply late fees</button>}
+        {can(user?.role, 'generateInvoices') && <button className="btn btn-primary" onClick={() => setGenerating(true)}><FilePlus2 className="h-4 w-4" /> Generate month</button>}
+      </>}>
       <div className="card flex flex-wrap items-end gap-3">
         <label><span className="label">Month</span><input type="month" className="input" value={period} onChange={(e) => { setPeriod(e.target.value); setPage(1); }} /></label>
         <label><span className="label">Class</span>
@@ -50,7 +64,7 @@ export default function InvoicesPage() {
         {isLoading ? <Spinner /> : rows.length === 0 ? <Empty title="No invoices">Use “Generate month” to create this month&apos;s vouchers.</Empty> : (
           <div className="table-container">
             <table className="table">
-              <thead><tr><th>Invoice</th><th>Student</th><th>Class</th><th>Month</th><th>Due</th><th className="text-right">Net</th><th className="text-right">Paid</th><th>Status</th></tr></thead>
+              <thead><tr><th>Invoice</th><th>Student</th><th>Class</th><th>Month</th><th>Due</th><th className="text-right">Net</th><th className="text-right">Late fee</th><th className="text-right">Paid</th><th>Status</th></tr></thead>
               <tbody>
                 {rows.map((i) => (
                   <tr key={i.id}>
@@ -62,6 +76,7 @@ export default function InvoicesPage() {
                     <td className="text-right" title={i.items.map((it: any) => `${it.feeHead.name}: ${it.amount}${Number(it.discount) ? ` − ${it.discount}` : ''}`).join('\n')}>
                       {formatMoney(i.netAmount, currency)}{Number(i.discountAmount) > 0 && <span className="ml-1 text-xs text-emerald-600">(−{formatMoney(i.discountAmount, currency)})</span>}
                     </td>
+                    <td className="text-right text-sm">{Number(i.fineAmount) > 0 ? <>{formatMoney(i.fineAmount, currency)}{can(user?.role, 'waiveFine') && i.status !== 'PAID' && <button className="ml-1 text-xs text-primary-600 hover:underline" onClick={() => confirm('Waive this late fee?') && waive.mutate(i.id)}>waive</button>}</> : '—'}</td>
                     <td className="text-right">{formatMoney(i.paidAmount, currency)}</td>
                     <td><StatusBadge status={i.status} /></td>
                   </tr>

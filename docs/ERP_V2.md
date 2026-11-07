@@ -120,10 +120,30 @@ Web: `/exams`, `/exams/[id]` (date sheet · results + remarks + PDFs · analysis
 Mobile: parents — Exams & results (date sheet, marks, PDF) and Timetable; teachers — marks entry,
 today's classes on Home, My timetable.
 
+## Phase 4 (done)
+
+- **Leave** (`/leave`): staff apply (overlaps refused), principal approves/rejects, both sides notified;
+  approved leave pre-fills staff attendance.
+- **Approvals inbox** (`/approvals`): pending leave, concessions and payment claims — each section
+  shown only to roles that can decide it.
+- **Online fee payment** (`/payments`):
+  1. *Proof*: school accounts (`/payments/accounts`) → parent submits TID + screenshot (`/claims`)
+     → accountant verifies → receipt. Duplicate TIDs refused; double approval impossible.
+  2. *Gateway*: `/payments/intents` → provider checkout → signed callback → receipt exactly once.
+     Providers implement `modules/payments/gateways` (`createCheckout`, `parseCallback`); only the
+     dev `test` gateway exists — a JazzCash/Easypaisa adapter needs merchant credentials.
+- **Late fees**: school setting (amount + grace days), applied once per invoice, principal can waive.
+- **Low-attendance alerts**: parents once a month per child + principal summary.
+- **Daily jobs** (`jobs/daily.ts`): fines every day; reminders + low-attendance alerts on Mondays,
+  per school timezone. All idempotent. `JOBS_ENABLED=false` turns them off.
+- **Reports** (`/reports/:type?format=pdf|xlsx`): fee collection, monthly summary, defaulters,
+  student attendance register, staff attendance, class strength, leave. One renderer
+  (`utils/tableReport.ts`) does both formats.
+
 ## Phases (from the spec)
 
 1. **MVP — done** (see above). Not yet: file uploads (documents are links), mobile screens.
 2. **Done** — parent app (child switcher, attendance calendar, fee status, notices), daily diary, push notifications.
 3. **Done** — exams, marks entry, grade scales, report-card PDFs, timetable.
-4. Reports (PDF/Excel), online payments (JazzCash/Easypaisa), leave + approvals, calendar.
+4. **Done** — reports (PDF/Excel), online payments (proof + gateway hook), leave + approvals, late fees, alerts, daily jobs.
 5. Transport, library, student app, WhatsApp/SMS.

@@ -5,6 +5,7 @@ import { connectDatabase } from './config/database';
 import { connectRedis } from './config/redis';
 import { initSocketIO } from './config/socket';
 import logger from './utils/logger';
+import { startDailyJobs } from './jobs/daily';
 
 const PORT = process.env.PORT || 5000;
 
@@ -14,6 +15,7 @@ async function bootstrap() {
 
   const server = http.createServer(app);
   initSocketIO(server);
+  startDailyJobs();
 
   server.listen(PORT, () => {
     logger.info(`Server running on port ${PORT} [${process.env.NODE_ENV}]`);

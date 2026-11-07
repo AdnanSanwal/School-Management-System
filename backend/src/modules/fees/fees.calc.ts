@@ -69,7 +69,7 @@ export interface OpenInvoice {
   paidAmount: Prisma.Decimal.Value;
 }
 
-export function outstanding(inv: OpenInvoice) {
+export function outstanding(inv: Omit<OpenInvoice, 'id'>) {
   return D(inv.netAmount).plus(inv.fineAmount ?? 0).minus(inv.paidAmount);
 }
 

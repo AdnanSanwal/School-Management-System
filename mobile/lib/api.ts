@@ -89,6 +89,22 @@ export const API = {
   myTimetable: () => data<any[]>(api.get('/timetable/teacher/me')),
   today: () => data(api.get('/timetable/today')),
 
+  // Payments
+  paymentOptions: () => data(api.get('/payments/options')),
+  submitClaim: (form: FormData) => data(api.post('/payments/claims', form, { headers: { 'Content-Type': 'multipart/form-data' } })),
+  claims: (studentId: string) => data<any[]>(api.get('/payments/claims', { params: { studentId } })),
+  createIntent: (studentId: string, invoiceIds: string[]) => data(api.post('/payments/intents', { studentId, invoiceIds })),
+  intent: (id: string) => data(api.get(`/payments/intents/${id}`)),
+
+  // Leave & approvals
+  myLeave: () => data(api.get('/leave/mine')),
+  applyLeave: (body: any) => data(api.post('/leave', body)),
+  cancelLeave: (id: string) => api.post(`/leave/${id}/cancel`),
+  approvals: () => data(api.get('/approvals')),
+  decideLeave: (id: string, approve: boolean, note?: string) => api.post(`/leave/${id}/decision`, { approve, note }),
+  decideConcession: (id: string, approve: boolean) => api.post(`/fees/concessions/${id}/decision`, { approve }),
+  decideClaim: (id: string, approve: boolean, note?: string) => api.post(`/payments/claims/${id}/decision`, { approve, note }),
+
   // Office
   dashboard: () => data(api.get('/dashboard/overview')),
 };

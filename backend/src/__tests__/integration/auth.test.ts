@@ -129,3 +129,16 @@ describe('POST /api/v1/auth/register', () => {
     expect(res.status).toBe(404);
   });
 });
+
+describe('CORS', () => {
+  it('unknown origins get no CORS headers but the request is not failed', async () => {
+    const res = await request(app).get('/health').set('Origin', 'https://evil.example');
+    expect(res.status).toBe(200);
+    expect(res.headers['access-control-allow-origin']).toBeUndefined();
+  });
+
+  it('the web app origin is allowed', async () => {
+    const res = await request(app).get('/health').set('Origin', 'http://localhost:3000');
+    expect(res.headers['access-control-allow-origin']).toBe('http://localhost:3000');
+  });
+});

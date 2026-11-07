@@ -2,22 +2,34 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Spinner, Stat } from '@/components/ui/kit';
-import { attendanceAPI } from '@/lib/api';
-import { CAN } from '@/lib/roles';
+import { attendanceAPI, apiError } from '@/lib/api';
+import { useAuthStore } from '@/store/authStore';
+import toast from 'react-hot-toast';
+import { CAN, can } from '@/lib/roles';
 import { todayIso } from '@/lib/utils';
 import { CheckCircle2, XCircle, ClipboardList } from 'lucide-react';
 
 export default function AttendanceSummaryPage() {
   const [date, setDate] = useState(todayIso());
   const { data, isLoading } = useQuery({ queryKey: ['att-summary', date], queryFn: () => attendanceAPI.summary(date) });
+  const role = useAuthStore((s) => s.user?.role);
+  const alerts = useMutation({
+    mutationFn: attendanceAPI.lowAttendanceAlerts,
+    onSuccess: (r: any) => toast.success(`${r.students} student(s) below ${r.threshold}% · ${r.parentsNotified} parent(s) alerted`),
+    onError: (e) => toast.error(apiError(e)),
+  });
 
   return (
     <DashboardLayout title="Attendance today" allowedRoles={CAN.viewAttendanceSummary}
       subtitle="Which sections are marked, and how many are present"
-      actions={<input type="date" className="input" value={date} max={todayIso()} onChange={(e) => setDate(e.target.value)} aria-label="Date" />}>
+      actions={<>
+        {can(role, 'lowAttendanceAlerts') && <button className="btn btn-secondary" disabled={alerts.isPending} title="Notify parents of students below the attendance threshold this month"
+          onClick={() => alerts.mutate()}>Send low-attendance alerts</button>}
+        <input type="date" className="input" value={date} max={todayIso()} onChange={(e) => setDate(e.target.value)} aria-label="Date" />
+      </>}>
       {isLoading || !data ? <Spinner /> : (
         <>
           <div className="grid gap-4 sm:grid-cols-3">

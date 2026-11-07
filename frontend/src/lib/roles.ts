@@ -39,6 +39,12 @@ export const CAN = {
   viewResults: ['OWNER', 'PRINCIPAL', 'ADMIN', 'TEACHER'],
   viewTimetable: ['OWNER', 'PRINCIPAL', 'ADMIN', 'ACCOUNTANT', 'TEACHER'],
   manageTimetable: ['PRINCIPAL', 'ADMIN'],
+  applyLeave: ['TEACHER', 'PRINCIPAL', 'ADMIN', 'ACCOUNTANT'],
+  approvals: ['PRINCIPAL', 'ADMIN', 'ACCOUNTANT'],
+  reports: ['OWNER', 'PRINCIPAL', 'ADMIN', 'ACCOUNTANT', 'TEACHER'],
+  waiveFine: ['PRINCIPAL'],
+  applyFines: ['ADMIN', 'ACCOUNTANT'],
+  lowAttendanceAlerts: ['PRINCIPAL', 'ADMIN'],
 } satisfies Record<string, Role[]>;
 
 export type Capability = keyof typeof CAN;

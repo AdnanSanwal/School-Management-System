@@ -12,6 +12,7 @@ import { toDate, toIso, schoolToday, periodRange } from '../../utils/dates';
 import { assertSectionAccess, assertStudentAccess } from '../../utils/scope';
 import { attendanceSummary, countStatuses } from '../../utils/attendanceStats';
 import { guardiansOf, notifyEach } from '../../utils/notify';
+import { sendLowAttendanceAlerts } from './lowAttendance';
 
 // Student and staff attendance (spec: Attendance; Teacher → Mark Attendance).
 
@@ -217,6 +218,13 @@ router.put('/staff', can('attendance.staff.mark'), handler(async (req, res) => {
     }
   });
   return sendSuccess(res, { date: toIso(date), saved: body.records.length }, 'Staff attendance saved');
+}));
+
+// Spec §12 "Low Attendance Alert → Parent + Principal" (also runs every Monday, see jobs/daily.ts).
+router.post('/low-attendance-alerts', can('attendance.student.correct'), handler(async (req, res) => {
+  const { minDays } = parseBody(z.object({ minDays: z.coerce.number().int().min(1).max(31).default(5) }), req);
+  const r = await sendLowAttendanceAlerts(minDays);
+  return sendSuccess(res, r, `Alerted ${r.parentsNotified} parent(s) about ${r.students} student(s)`);
 }));
 
 export default router;

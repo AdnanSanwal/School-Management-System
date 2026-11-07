@@ -30,6 +30,10 @@ import calendarRoutes from './modules/calendar/calendar.routes';
 import familyRoutes from './modules/family/family.routes';
 import examRoutes, { reportCardPdfRouter } from './modules/exams/exams.routes';
 import timetableRoutes from './modules/timetable/timetable.routes';
+import leaveRoutes from './modules/leave/leave.routes';
+import approvalRoutes from './modules/approvals/approvals.routes';
+import paymentRoutes from './modules/payments/payments.routes';
+import reportRoutes from './modules/reports/reports.routes';
 import notificationRoutes from './modules/notifications/notification.routes';
 import pushRoutes from './modules/push/push.routes';
 
@@ -54,8 +58,11 @@ app.use(cors({
   origin: (origin, cb) => {
     // allow requests with no origin (curl, mobile apps, Postman)
     if (!origin) return cb(null, true);
-    if (allowedOrigins.includes(origin)) return cb(null, true);
-    cb(new Error(`CORS: origin ${origin} not allowed`));
+    // Unknown origin: answer without CORS headers (the browser then blocks reading the
+    // response) instead of failing the request. Throwing here turned every cross-site
+    // form post into a 500 — including payment-gateway callbacks posted from the
+    // gateway's domain. Auth is a bearer token, not a cookie, so this is not a CSRF hole.
+    cb(null, allowedOrigins.includes(origin));
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
@@ -106,6 +113,10 @@ app.use(`${api}/calendar`, calendarRoutes);
 app.use(`${api}/family`, familyRoutes);
 app.use(`${api}/exams`, examRoutes);
 app.use(`${api}/timetable`, timetableRoutes);
+app.use(`${api}/leave`, leaveRoutes);
+app.use(`${api}/approvals`, approvalRoutes);
+app.use(`${api}/payments`, paymentRoutes);
+app.use(`${api}/reports`, reportRoutes);
 app.use(`${api}/report-cards`, reportCardPdfRouter);
 app.use(`${api}/notifications`, notificationRoutes);
 app.use(`${api}/push`, pushRoutes);

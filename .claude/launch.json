@@ -9,7 +9,10 @@
         "dev",
         "--workspace=backend"
       ],
-      "port": 5000
+      "port": 5000,
+      "env": {
+        "PAYMENT_GATEWAY": "test"
+      }
     },
     {
       "name": "frontend",

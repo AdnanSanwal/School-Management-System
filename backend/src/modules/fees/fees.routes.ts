@@ -10,7 +10,7 @@ import { sendSuccess, sendPaginated } from '../../utils/apiResponse';
 import { handler, parseBody, parseQuery, paginationSchema, paging, dateOnly, period, money, id, me } from '../../utils/http';
 import { toDate, toIso, addDays, schoolToday, schoolTimezone, zonedDayStart } from '../../utils/dates';
 import { assertStudentAccess, currentAcademicYear, ensureInSchool, isSchoolWide, studentScope } from '../../utils/scope';
-import { collectPayment, defaulters, generateInvoices, receipt } from './fees.service';
+import { applyLateFines, collectPayment, defaulters, generateInvoices, receipt, sendFeeReminders } from './fees.service';
 import { D } from './fees.calc';
 import { guardiansOf, notifyEach } from '../../utils/notify';
 
@@ -237,47 +237,29 @@ router.post('/reminders', can('fee.collect', 'fee.invoice.generate'), handler(as
     daysAhead: z.coerce.number().int().min(0).max(31).default(3),
     classId: id.optional(),
   }), req);
-  const today = await schoolToday();
-  const invoices = await prisma.feeInvoice.findMany({
-    where: {
-      status: { in: ['UNPAID', 'PARTIAL'] },
-      dueDate: { lte: addDays(today, body.daysAhead) },
-      student: { status: 'ACTIVE', ...(body.classId ? { section: { classId: body.classId } } : {}) },
-    },
-    select: { studentId: true, netAmount: true, fineAmount: true, paidAmount: true, dueDate: true },
-  });
-  const byStudent = new Map<string, { due: Prisma.Decimal; earliest: Date }>();
-  for (const i of invoices) {
-    const row = byStudent.get(i.studentId) ?? { due: D(0), earliest: i.dueDate };
-    row.due = row.due.plus(D(i.netAmount).plus(i.fineAmount).minus(i.paidAmount));
-    if (i.dueDate < row.earliest) row.earliest = i.dueDate;
-    byStudent.set(i.studentId, row);
-  }
-  const parents = await guardiansOf([...byStudent.keys()]);
+  const r = await sendFeeReminders(body);
+  return sendSuccess(res, r, `Reminders sent to ${r.parentsReminded} parent(s)`);
+}));
 
-  // At most one reminder per parent per child per day.
-  const tz = await schoolTimezone();
-  const already = await prisma.notification.findMany({
-    where: { type: 'FEE_DUE', userId: { in: parents.map((p) => p.userId) }, createdAt: { gte: zonedDayStart(toIso(today), tz) } },
-    select: { userId: true, data: true },
-  });
-  const sent = new Set(already.map((n) => `${n.userId}:${(n.data as { studentId?: string } | null)?.studentId}`));
-  const school = await prisma.school.findUniqueOrThrow({ where: { id: currentSchoolId() }, select: { currency: true } });
-  const fresh = parents.filter((p) => !sent.has(`${p.userId}:${p.studentId}`));
+// ─── Late fines ───
 
-  const notified = await notifyEach(fresh.map((p) => {
-    const r = byStudent.get(p.studentId)!;
-    const overdue = r.earliest < today;
-    return {
-      userId: p.userId, type: 'FEE_DUE' as const,
-      title: overdue ? `Fee overdue for ${p.studentName}` : `Fee due for ${p.studentName}`,
-      body: `${school.currency} ${r.due.toFixed(0)} ${overdue ? 'was due on' : 'is due by'} ${toIso(r.earliest)}.`,
-      data: { studentId: p.studentId },
-    };
-  }));
-  return sendSuccess(res, {
-    students: byStudent.size, parentsReminded: notified, skippedAlreadyRemindedToday: parents.length - fresh.length,
-  }, `Reminders sent to ${notified} parent(s)`);
+router.post('/fines/apply', can('fee.invoice.generate'), handler(async (_req, res) => {
+  const r = await applyLateFines();
+  if (!r.enabled) throw new AppError('Set a late fee amount in school settings first', 422);
+  return sendSuccess(res, r, `Late fee added to ${r.fined} invoice(s)`);
+}));
+
+// Principal can forgive a late fee; the invoice stays marked so it isn't fined again.
+router.post('/invoices/:id/waive-fine', can('fee.concession.approve'), handler(async (req, res) => {
+  const inv = await prisma.feeInvoice.findFirst({ where: { id: req.params.id } });
+  if (!inv) throw new AppError('Invoice not found', 404);
+  if (D(inv.fineAmount).lte(0)) throw new AppError('This invoice has no late fee', 409);
+  const settled = D(inv.paidAmount).gte(inv.netAmount);
+  await prisma.feeInvoice.update({
+    where: { id: inv.id },
+    data: { fineAmount: 0, fineAppliedAt: inv.fineAppliedAt ?? new Date(), ...(settled ? { status: 'PAID' } : {}) },
+  });
+  return sendSuccess(res, null, 'Late fee waived');
 }));
 
 // ─── Defaulters ───

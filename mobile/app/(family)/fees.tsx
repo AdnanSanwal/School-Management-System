@@ -2,7 +2,7 @@ import { Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { API, apiError } from '../../lib/api';
-import { Badge, Card, ErrorBox, H, Loading, Muted, Row, Screen } from '../../components/ui';
+import { Badge, Button, Card, ErrorBox, H, Loading, Muted, Row, Screen } from '../../components/ui';
 import { ChildSwitcher, useChildren } from '../../components/ChildSwitcher';
 import { colors } from '../../lib/theme';
 import { day, money, period } from '../../lib/format';
@@ -17,6 +17,7 @@ const INVOICE_BADGE: Record<string, { fg: string; bg: string; label: string }> =
 // Spec §10 Fee Details: history, pending amount, due date, receipts.
 export default function FeesScreen() {
   const currency = useAuthStore((s) => s.user?.school?.currency ?? 'PKR');
+  const isParent = useAuthStore((s) => s.user?.role === 'PARENT');
   const { childId } = useChildren();
   const q = useQuery({ queryKey: ['ledger', childId], queryFn: () => API.feeLedger(childId!), enabled: !!childId });
   const L = q.data;
@@ -33,7 +34,7 @@ export default function FeesScreen() {
             <Text style={{ fontSize: 30, fontWeight: '800', color: Number(L.pending) > 0 ? colors.bad : colors.good }}>{money(L.pending, currency)}</Text>
             {L.nextDueDate && <Muted>Next due {day(L.nextDueDate, { day: 'numeric', month: 'long' })}</Muted>}
             {L.paidTill && <Muted>Paid till {period(L.paidTill)}</Muted>}
-            <Muted style={{ marginTop: 8 }}>Pay at the school office. Online payment is coming soon.</Muted>
+            {Number(L.pending) > 0 && isParent && <View style={{ marginTop: 12 }}><Button title="Pay online" onPress={() => router.push('/pay')} /></View>}
           </Card>
 
           <H>Monthly fees</H>
