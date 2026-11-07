@@ -146,6 +146,27 @@ export const feesAPI = {
   concessions: (params?: any) => data<any[]>(api.get('/fees/concessions', { params })),
   requestConcession: (body: any) => data(api.post('/fees/concessions', body)),
   decideConcession: (id: string, approve: boolean) => api.post(`/fees/concessions/${id}/decision`, { approve }),
+  sendReminders: (body: { daysAhead?: number; classId?: string }) => data(api.post('/fees/reminders', body)),
+};
+
+export const diaryAPI = {
+  list: (params?: any) => page(api.get('/diary', { params })),
+  post: (form: FormData) => data(api.post('/diary', form)),
+  remove: (id: string) => api.delete(`/diary/${id}`),
+};
+
+export const noticesAPI = {
+  list: (params?: any) => api.get('/notices', { params }).then((r) => r.data),
+  create: (form: FormData) => data(api.post('/notices', form)),
+  publish: (id: string) => data(api.post(`/notices/${id}/publish`)),
+  read: (id: string) => api.post(`/notices/${id}/read`),
+  remove: (id: string) => api.delete(`/notices/${id}`),
+};
+
+export const calendarAPI = {
+  list: (params?: any) => data<any[]>(api.get('/calendar', { params })),
+  create: (body: any) => data(api.post('/calendar', body)),
+  remove: (id: string) => api.delete(`/calendar/${id}`),
 };
 
 export const dashboardAPI = {

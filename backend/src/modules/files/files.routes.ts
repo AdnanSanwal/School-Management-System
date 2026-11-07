@@ -15,10 +15,22 @@ const parseOne = multer({
  * Multer resumes the request from a stream callback, which drops the
  * AsyncLocalStorage tenant context — so re-enter the context captured here.
  */
-export const uploadOne: RequestHandler = (req, res, next) => {
-  const ctx = tenantStorage.getStore();
-  parseOne(req, res, (err?: unknown) => (ctx ? tenantStorage.run(ctx, () => next(err)) : next(err)));
-};
+export const uploadOne: RequestHandler = keepTenant(parseOne);
+
+/** Up to `max` files in field "files" (e.g. diary attachments). */
+export function uploadMany(max: number): RequestHandler {
+  return keepTenant(multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: UPLOAD_LIMIT_BYTES, files: max, fields: 20 },
+  }).array('files', max));
+}
+
+function keepTenant(mw: RequestHandler): RequestHandler {
+  return (req, res, next) => {
+    const ctx = tenantStorage.getStore();
+    mw(req, res, (err?: unknown) => (ctx ? tenantStorage.run(ctx, () => next(err)) : next(err)));
+  };
+}
 
 // Serves uploaded files to holders of a valid signed URL (see utils/storage.ts).
 // No bearer token here on purpose: <img> tags and downloads can't send one.

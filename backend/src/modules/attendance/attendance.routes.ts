@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { AttendanceStatus } from '@prisma/client';
-import prisma from '../../config/database';
+import prisma, { transaction } from '../../config/database';
 import { currentSchoolId } from '../../config/tenancy';
 import { authenticate } from '../../middleware/auth';
 import { can, hasPermission } from '../../middleware/rbac';
@@ -11,6 +11,7 @@ import { handler, parseBody, parseQuery, dateOnly, period, id, me } from '../../
 import { toDate, toIso, schoolToday, periodRange } from '../../utils/dates';
 import { assertSectionAccess, assertStudentAccess } from '../../utils/scope';
 import { attendanceSummary, countStatuses } from '../../utils/attendanceStats';
+import { guardiansOf, notifyEach } from '../../utils/notify';
 
 // Student and staff attendance (spec: Attendance; Teacher → Mark Attendance).
 
@@ -74,29 +75,27 @@ router.put('/students', can('attendance.student.mark', 'attendance.student.corre
     (await prisma.studentAttendance.findMany({ where: { studentId: { in: ids }, date }, select: { studentId: true, status: true } }))
       .map((r) => [r.studentId, r.status]),
   );
-  await prisma.$transaction(body.records.map((r) => prisma.studentAttendance.upsert({
-    where: { studentId_date: { studentId: r.studentId, date } },
-    create: { schoolId, studentId: r.studentId, sectionId: body.sectionId, date, status: r.status, remarks: r.remarks, markedById: user.id },
-    update: { status: r.status, remarks: r.remarks ?? null, markedById: user.id, sectionId: body.sectionId },
-  })));
+  await transaction(async (tx) => {
+    for (const r of body.records) {
+      await tx.studentAttendance.upsert({
+        where: { studentId_date: { studentId: r.studentId, date } },
+        create: { schoolId, studentId: r.studentId, sectionId: body.sectionId, date, status: r.status, remarks: r.remarks, markedById: user.id },
+        update: { status: r.status, remarks: r.remarks ?? null, markedById: user.id, sectionId: body.sectionId },
+      });
+    }
+  });
 
   // Spec: "Student marked Absent → Parent". Only for newly absent students.
   const newlyAbsent = body.records.filter((r) => r.status === 'ABSENT' && before.get(r.studentId) !== 'ABSENT').map((r) => r.studentId);
   let notified = 0;
   if (newlyAbsent.length) {
-    const links = await prisma.studentGuardian.findMany({
-      where: { studentId: { in: newlyAbsent }, guardian: { userId: { not: null } } },
-      include: { guardian: { select: { userId: true } }, student: { select: { id: true, name: true } } },
-    });
-    await prisma.notification.createMany({
-      data: links.map((l) => ({
-        schoolId, userId: l.guardian.userId!, type: 'ATTENDANCE_ABSENT',
-        title: `${l.student.name} is absent today`,
-        body: `${l.student.name} was marked absent on ${toIso(date)}.`,
-        data: { studentId: l.student.id, date: toIso(date) },
-      })),
-    });
-    notified = links.length;
+    const parents = await guardiansOf(newlyAbsent);
+    notified = await notifyEach(parents.map((p) => ({
+      userId: p.userId, type: 'ATTENDANCE_ABSENT' as const,
+      title: `${p.studentName} is absent today`,
+      body: `${p.studentName} was marked absent on ${toIso(date)}.`,
+      data: { studentId: p.studentId, date: toIso(date) },
+    })));
   }
 
   const counts = attendanceSummary(countStatuses(body.records));
@@ -204,17 +203,19 @@ router.put('/staff', can('attendance.staff.mark'), handler(async (req, res) => {
     throw new AppError('Some staff members are not active', 422);
   }
   const schoolId = currentSchoolId();
-  await prisma.$transaction(body.records.map((r) => {
-    const data = {
-      status: r.status, remarks: r.remarks ?? null, markedById: user.id,
-      checkIn: r.checkIn ? new Date(r.checkIn) : null, checkOut: r.checkOut ? new Date(r.checkOut) : null,
-    };
-    return prisma.staffAttendance.upsert({
-      where: { staffId_date: { staffId: r.staffId, date } },
-      create: { schoolId, staffId: r.staffId, date, ...data },
-      update: data,
-    });
-  }));
+  await transaction(async (tx) => {
+    for (const r of body.records) {
+      const data = {
+        status: r.status, remarks: r.remarks ?? null, markedById: user.id,
+        checkIn: r.checkIn ? new Date(r.checkIn) : null, checkOut: r.checkOut ? new Date(r.checkOut) : null,
+      };
+      await tx.staffAttendance.upsert({
+        where: { staffId_date: { staffId: r.staffId, date } },
+        create: { schoolId, staffId: r.staffId, date, ...data },
+        update: data,
+      });
+    }
+  });
   return sendSuccess(res, { date: toIso(date), saved: body.records.length }, 'Staff attendance saved');
 }));
 

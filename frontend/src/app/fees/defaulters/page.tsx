@@ -2,14 +2,15 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
+import toast from 'react-hot-toast';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Spinner, Empty, Stat } from '@/components/ui/kit';
-import { feesAPI, academicsAPI } from '@/lib/api';
+import { feesAPI, academicsAPI, apiError } from '@/lib/api';
 import { CAN, can } from '@/lib/roles';
 import { formatMoney, formatPeriod } from '@/lib/utils';
 import { useAuthStore } from '@/store/authStore';
-import { AlertTriangle, Users } from 'lucide-react';
+import { AlertTriangle, Users, BellRing } from 'lucide-react';
 
 export default function DefaultersPage() {
   const user = useAuthStore((s) => s.user);
@@ -22,8 +23,20 @@ export default function DefaultersPage() {
     queryFn: () => feesAPI.defaulters({ classId: classId || undefined, minDaysOverdue: minDays }),
   });
 
+  const remind = useMutation({
+    mutationFn: () => feesAPI.sendReminders({ daysAhead: 3, classId: classId || undefined }),
+    onSuccess: (r: any) => toast.success(`Reminders sent to ${r.parentsReminded} parent(s)` + (r.skippedAlreadyRemindedToday ? ` · ${r.skippedAlreadyRemindedToday} already reminded today` : '')),
+    onError: (e) => toast.error(apiError(e)),
+  });
+
   return (
-    <DashboardLayout title="Defaulters" allowedRoles={CAN.viewFees} subtitle="Students with overdue fee">
+    <DashboardLayout title="Defaulters" allowedRoles={CAN.viewFees} subtitle="Students with overdue fee"
+      actions={can(user?.role, 'sendFeeReminders') && (
+        <button className="btn btn-primary" disabled={remind.isPending} title="Push reminder to parents with fee overdue or due in the next 3 days"
+          onClick={() => confirm('Send a fee reminder to parents with overdue fee or fee due in the next 3 days?') && remind.mutate()}>
+          <BellRing className="h-4 w-4" /> Send reminders
+        </button>
+      )}>
       <div className="card flex flex-wrap items-end gap-3">
         <label><span className="label">Class</span>
           <select className="select w-44" value={classId} onChange={(e) => setClassId(e.target.value)}>

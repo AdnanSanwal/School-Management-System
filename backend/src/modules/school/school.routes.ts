@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import prisma from '../../config/database';
+import prisma, { transaction } from '../../config/database';
 import { currentSchoolId } from '../../config/tenancy';
 import { authenticate } from '../../middleware/auth';
 import { can } from '../../middleware/rbac';
@@ -60,7 +60,7 @@ router.post('/academic-years', can('school.manage'), handler(async (req, res) =>
 }));
 
 router.post('/academic-years/:id/make-current', can('school.manage'), handler(async (req, res) => {
-  const year = await prisma.$transaction(async (tx) => {
+  const year = await transaction(async (tx) => {
     const target = await tx.academicYear.findFirst({ where: { id: req.params.id } });
     if (!target) throw new AppError('Academic year not found', 404);
     await tx.academicYear.updateMany({ where: { isCurrent: true }, data: { isCurrent: false } });

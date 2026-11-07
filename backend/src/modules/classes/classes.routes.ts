@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import prisma from '../../config/database';
+import prisma, { transaction } from '../../config/database';
 import { currentSchoolId } from '../../config/tenancy';
 import { authenticate } from '../../middleware/auth';
 import { can } from '../../middleware/rbac';
@@ -45,7 +45,7 @@ const classBody = z.object({ name: z.string().min(1).max(50), level: z.coerce.nu
 router.post('/classes', can('class.manage'), handler(async (req, res) => {
   const body = parseBody(classBody.extend({ sections: z.array(z.string().min(1).max(10)).max(20).default(['A']) }), req);
   const schoolId = currentSchoolId();
-  const created = await prisma.$transaction(async (tx) => {
+  const created = await transaction(async (tx) => {
     const cls = await tx.class.create({ data: { schoolId, name: body.name, level: body.level } });
     for (const name of new Set(body.sections)) await tx.section.create({ data: { schoolId, classId: cls.id, name } });
     return tx.class.findUniqueOrThrow({ where: { id: cls.id }, include: { sections: true } });
@@ -62,7 +62,7 @@ router.patch('/classes/:id', can('class.manage'), handler(async (req, res) => {
 router.delete('/classes/:id', can('class.manage'), handler(async (req, res) => {
   const students = await prisma.student.count({ where: { section: { classId: req.params.id } } });
   if (students) throw new AppError('Class still has students; move them first', 409);
-  await prisma.$transaction(async (tx) => {
+  await transaction(async (tx) => {
     await tx.section.deleteMany({ where: { classId: req.params.id } });
     await tx.class.delete({ where: { id: req.params.id } });
   });
@@ -98,7 +98,7 @@ router.delete('/sections/:id', can('class.manage'), handler(async (req, res) => 
   if (await prisma.student.count({ where: { sectionId: req.params.id } })) {
     throw new AppError('Section still has students; move them first', 409);
   }
-  await prisma.$transaction(async (tx) => {
+  await transaction(async (tx) => {
     await tx.subjectAssignment.deleteMany({ where: { sectionId: req.params.id } });
     await tx.timetableSlot.deleteMany({ where: { sectionId: req.params.id } });
     await tx.section.delete({ where: { id: req.params.id } });
@@ -156,7 +156,7 @@ router.put('/sections/:id/subjects', can('class.manage'), handler(async (req, re
 
   const year = await currentAcademicYear();
   const schoolId = currentSchoolId();
-  await prisma.$transaction(async (tx) => {
+  await transaction(async (tx) => {
     await tx.subjectAssignment.deleteMany({ where: { sectionId, academicYearId: year.id } });
     await tx.subjectAssignment.createMany({
       data: assignments.map((a) => ({ schoolId, academicYearId: year.id, sectionId, ...a })),

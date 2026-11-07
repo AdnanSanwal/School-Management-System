@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils';
 import {
   LayoutDashboard, Users, GraduationCap, Bell, Settings, LogOut, ChevronLeft, ChevronRight,
   UserCheck, Layers, Wallet, Receipt, AlertTriangle, BadgePercent, FileSpreadsheet, ClipboardCheck,
-  KeyRound, School, Home,
+  KeyRound, School, Home, Megaphone, BookOpen, CalendarDays,
 } from 'lucide-react';
 import { can, Capability, ROLE_LABEL } from '@/lib/roles';
 
@@ -48,6 +48,14 @@ const navGroups: NavGroup[] = [
       { label: 'Attendance', href: '/attendance', icon: UserCheck, cap: 'markAttendance' },
       { label: 'Attendance today', href: '/attendance/summary', icon: ClipboardCheck, cap: 'viewAttendanceSummary' },
       { label: 'Staff attendance', href: '/attendance/staff', icon: UserCheck, cap: 'staffAttendance' },
+    ],
+  },
+  {
+    title: 'Communication',
+    items: [
+      { label: 'Notices', href: '/notices', icon: Megaphone, cap: 'viewNotices' },
+      { label: 'Daily diary', href: '/diary', icon: BookOpen, cap: 'viewDiary' },
+      { label: 'Calendar', href: '/calendar', icon: CalendarDays, cap: 'viewCalendar' },
     ],
   },
   {

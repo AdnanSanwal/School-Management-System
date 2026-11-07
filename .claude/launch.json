@@ -4,14 +4,36 @@
     {
       "name": "backend",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "--workspace=backend"],
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "--workspace=backend"
+      ],
       "port": 5000
     },
     {
       "name": "frontend",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "--workspace=frontend"],
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "--workspace=frontend"
+      ],
       "port": 3000
+    },
+    {
+      "name": "mobile-web",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "web",
+        "--prefix",
+        "mobile",
+        "--",
+        "--port",
+        "8081"
+      ],
+      "port": 8081
     }
   ]
 }

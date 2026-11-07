@@ -24,6 +24,10 @@ import attendanceRoutes from './modules/attendance/attendance.routes';
 import feeRoutes from './modules/fees/fees.routes';
 import dashboardRoutes from './modules/dashboard/dashboard.routes';
 import fileRoutes from './modules/files/files.routes';
+import diaryRoutes from './modules/diary/diary.routes';
+import noticeRoutes from './modules/notices/notices.routes';
+import calendarRoutes from './modules/calendar/calendar.routes';
+import familyRoutes from './modules/family/family.routes';
 import notificationRoutes from './modules/notifications/notification.routes';
 import pushRoutes from './modules/push/push.routes';
 
@@ -40,7 +44,7 @@ const allowedOrigins = [
   ...(process.env.MOBILE_ORIGIN ? [process.env.MOBILE_ORIGIN] : []),
   // always allow localhost variants in development
   ...(process.env.NODE_ENV !== 'production'
-    ? ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002', 'http://127.0.0.1:3000']
+    ? ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002', 'http://127.0.0.1:3000', 'http://localhost:8081'] // 8081: Expo web preview
     : []),
 ].filter(Boolean);
 
@@ -94,6 +98,10 @@ app.use(`${api}/attendance`, attendanceRoutes);
 app.use(`${api}/fees`, feeRoutes);
 app.use(`${api}/dashboard`, dashboardRoutes);
 app.use(`${api}/files`, fileRoutes);
+app.use(`${api}/diary`, diaryRoutes);
+app.use(`${api}/notices`, noticeRoutes);
+app.use(`${api}/calendar`, calendarRoutes);
+app.use(`${api}/family`, familyRoutes);
 app.use(`${api}/notifications`, notificationRoutes);
 app.use(`${api}/push`, pushRoutes);
 

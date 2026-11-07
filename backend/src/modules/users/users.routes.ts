@@ -2,7 +2,7 @@ import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 import { Role } from '@prisma/client';
-import prisma from '../../config/database';
+import prisma, { transaction } from '../../config/database';
 import { getRedis } from '../../config/redis';
 import { authenticate } from '../../middleware/auth';
 import { can } from '../../middleware/rbac';
@@ -55,7 +55,7 @@ const createBody = z.object({
 // their own screens (staff / admission), which also link the profile.
 router.post('/', handler(async (req, res) => {
   const body = parseBody(createBody, req);
-  const result = await prisma.$transaction((tx) => createAccount(tx, me(req).role, body));
+  const result = await transaction((tx) => createAccount(tx, me(req).role, body));
   return sendSuccess(res, result, 'User created', 201);
 }));
 

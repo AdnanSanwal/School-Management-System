@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import prisma from '../../config/database';
+import prisma, { transaction } from '../../config/database';
 import { currentSchoolId } from '../../config/tenancy';
 import { authenticate } from '../../middleware/auth';
 import { can, hasPermission } from '../../middleware/rbac';
@@ -73,7 +73,7 @@ router.post('/', can('staff.manage'), handler(async (req, res) => {
   if (login && !hasPermission(me(req).role, 'users.manage')) throw new AppError('You cannot create logins', 403);
   const schoolId = currentSchoolId();
 
-  const result = await prisma.$transaction(async (tx) => {
+  const result = await transaction(async (tx) => {
     const account = login
       ? await createAccount(tx, me(req).role, { name: body.name, email: login.email, phone: body.phone, role: login.role, password: login.password })
       : undefined;
@@ -93,7 +93,7 @@ const staffUpdate = staffBody.omit({ login: true, isTeacher: true }).partial().e
 
 router.patch('/:id', can('staff.manage'), handler(async (req, res) => {
   const { joiningDate, ...body } = parseBody(staffUpdate, req);
-  const staff = await prisma.$transaction(async (tx) => {
+  const staff = await transaction(async (tx) => {
     const updated = await tx.staff.update({
       where: { id: req.params.id },
       data: { ...body, ...(joiningDate !== undefined ? { joiningDate: toDate(joiningDate) } : {}) },
@@ -112,7 +112,7 @@ router.patch('/:id', can('staff.manage'), handler(async (req, res) => {
 router.post('/:id/login', can('staff.manage'), handler(async (req, res) => {
   if (!hasPermission(me(req).role, 'users.manage')) throw new AppError('You cannot create logins', 403);
   const login = parseBody(z.object({ email: z.string().email(), role: loginRoles.default('TEACHER'), password: z.string().min(8).max(100).optional() }), req);
-  const result = await prisma.$transaction(async (tx) => {
+  const result = await transaction(async (tx) => {
     const staff = await tx.staff.findFirst({ where: { id: req.params.id } });
     if (!staff) throw new AppError('Staff member not found', 404);
     if (staff.userId) throw new AppError('This staff member already has a login', 409);

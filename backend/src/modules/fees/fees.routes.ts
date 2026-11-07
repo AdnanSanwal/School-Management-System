@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { Prisma, PaymentMethod, FeeFrequency } from '@prisma/client';
-import prisma from '../../config/database';
+import prisma, { transaction } from '../../config/database';
 import { currentSchoolId } from '../../config/tenancy';
 import { authenticate } from '../../middleware/auth';
 import { can } from '../../middleware/rbac';
@@ -12,6 +12,7 @@ import { toDate, toIso, addDays, schoolToday, schoolTimezone, zonedDayStart } fr
 import { assertStudentAccess, currentAcademicYear, ensureInSchool, isSchoolWide, studentScope } from '../../utils/scope';
 import { collectPayment, defaulters, generateInvoices, receipt } from './fees.service';
 import { D } from './fees.calc';
+import { guardiansOf, notifyEach } from '../../utils/notify';
 
 // Fee heads, class fee structure, monthly invoices, collection & receipts,
 // concessions and defaulters (spec: Fee Management, Accountant).
@@ -76,7 +77,7 @@ router.put('/structure/:classId', can('fee.structure.manage'), handler(async (re
 
   const year = await currentAcademicYear();
   const schoolId = currentSchoolId();
-  await prisma.$transaction(async (tx) => {
+  await transaction(async (tx) => {
     await tx.feeStructure.deleteMany({ where: { academicYearId: year.id, classId } });
     await tx.feeStructure.createMany({
       data: items.filter((i) => i.amount > 0).map((i) => ({ schoolId, academicYearId: year.id, classId, feeHeadId: i.feeHeadId, amount: i.amount })),
@@ -181,21 +182,13 @@ router.post('/payments', can('fee.collect'), handler(async (req, res) => {
   if (body.method !== 'CASH' && !body.reference) throw new AppError('Transaction reference is required for non-cash payments', 422);
   const result = await collectPayment({ ...body, collectedById: me(req).id });
 
-  // Spec: "Fee paid successfully → Parent + Accountant".
-  const links = await prisma.studentGuardian.findMany({
-    where: { studentId: body.studentId, guardian: { userId: { not: null } } },
-    include: { guardian: { select: { userId: true } }, student: { select: { name: true } } },
-  });
-  if (links.length) {
-    await prisma.notification.createMany({
-      data: links.map((l) => ({
-        schoolId: currentSchoolId(), userId: l.guardian.userId!, type: 'FEE_PAID',
-        title: 'Fee received',
-        body: `Payment of ${D(body.amount).toFixed(2)} received for ${l.student.name}. Receipt ${result.payment.receiptNo}.`,
-        data: { paymentId: result.payment.id },
-      })),
-    });
-  }
+  // Spec: "Fee paid successfully → Parent + Accountant" (the accountant sees it on screen).
+  const parents = await guardiansOf([body.studentId]);
+  await notifyEach(parents.map((p) => ({
+    userId: p.userId, type: 'FEE_PAID' as const, title: 'Fee received',
+    body: `Payment of ${D(body.amount).toFixed(2)} received for ${p.studentName}. Receipt ${result.payment.receiptNo}.`,
+    data: { paymentId: result.payment.id, studentId: p.studentId },
+  })));
   return sendSuccess(res, result, `Payment recorded — receipt ${result.payment.receiptNo}`, 201);
 }));
 
@@ -235,6 +228,56 @@ router.get('/payments', can('fee.view'), handler(async (req, res) => {
 
 router.get('/payments/:id/receipt', can('fee.view'), handler(async (req, res) => {
   return sendSuccess(res, await receipt(req.params.id, await studentScope(me(req))));
+}));
+
+// ─── Fee due reminders (spec §12: "Fee Due / Overdue → Parent") ───
+
+router.post('/reminders', can('fee.collect', 'fee.invoice.generate'), handler(async (req, res) => {
+  const body = parseBody(z.object({
+    daysAhead: z.coerce.number().int().min(0).max(31).default(3),
+    classId: id.optional(),
+  }), req);
+  const today = await schoolToday();
+  const invoices = await prisma.feeInvoice.findMany({
+    where: {
+      status: { in: ['UNPAID', 'PARTIAL'] },
+      dueDate: { lte: addDays(today, body.daysAhead) },
+      student: { status: 'ACTIVE', ...(body.classId ? { section: { classId: body.classId } } : {}) },
+    },
+    select: { studentId: true, netAmount: true, fineAmount: true, paidAmount: true, dueDate: true },
+  });
+  const byStudent = new Map<string, { due: Prisma.Decimal; earliest: Date }>();
+  for (const i of invoices) {
+    const row = byStudent.get(i.studentId) ?? { due: D(0), earliest: i.dueDate };
+    row.due = row.due.plus(D(i.netAmount).plus(i.fineAmount).minus(i.paidAmount));
+    if (i.dueDate < row.earliest) row.earliest = i.dueDate;
+    byStudent.set(i.studentId, row);
+  }
+  const parents = await guardiansOf([...byStudent.keys()]);
+
+  // At most one reminder per parent per child per day.
+  const tz = await schoolTimezone();
+  const already = await prisma.notification.findMany({
+    where: { type: 'FEE_DUE', userId: { in: parents.map((p) => p.userId) }, createdAt: { gte: zonedDayStart(toIso(today), tz) } },
+    select: { userId: true, data: true },
+  });
+  const sent = new Set(already.map((n) => `${n.userId}:${(n.data as { studentId?: string } | null)?.studentId}`));
+  const school = await prisma.school.findUniqueOrThrow({ where: { id: currentSchoolId() }, select: { currency: true } });
+  const fresh = parents.filter((p) => !sent.has(`${p.userId}:${p.studentId}`));
+
+  const notified = await notifyEach(fresh.map((p) => {
+    const r = byStudent.get(p.studentId)!;
+    const overdue = r.earliest < today;
+    return {
+      userId: p.userId, type: 'FEE_DUE' as const,
+      title: overdue ? `Fee overdue for ${p.studentName}` : `Fee due for ${p.studentName}`,
+      body: `${school.currency} ${r.due.toFixed(0)} ${overdue ? 'was due on' : 'is due by'} ${toIso(r.earliest)}.`,
+      data: { studentId: p.studentId },
+    };
+  }));
+  return sendSuccess(res, {
+    students: byStudent.size, parentsReminded: notified, skippedAlreadyRemindedToday: parents.length - fresh.length,
+  }, `Reminders sent to ${notified} parent(s)`);
 }));
 
 // ─── Defaulters ───

@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { Prisma } from '@prisma/client';
-import prisma, { ScopedTx } from '../../config/database';
+import prisma, { ScopedTx, transaction } from '../../config/database';
 import { currentSchoolId } from '../../config/tenancy';
 import { authenticate } from '../../middleware/auth';
 import { can, hasPermission } from '../../middleware/rbac';
@@ -166,7 +166,7 @@ router.post('/', can('student.manage'), handler(async (req, res) => {
 
   const schoolId = currentSchoolId();
   const today = await schoolToday();
-  const result = await prisma.$transaction(async (tx) => {
+  const result = await transaction(async (tx) => {
     const admissionNo = body.admissionNo ?? formatNumber('ADM', await nextNumber(tx, 'admission'), 5);
     const student = await tx.student.create({
       data: {
@@ -219,7 +219,7 @@ router.post('/:id/status', can('student.manage'), handler(async (req, res) => {
     reason: z.string().max(300).optional(),
   }), req);
   const leaving = body.status !== 'ACTIVE';
-  const student = await prisma.$transaction(async (tx) => {
+  const student = await transaction(async (tx) => {
     const s = await tx.student.update({
       where: { id: req.params.id },
       data: {
@@ -239,7 +239,7 @@ router.post('/:id/status', can('student.manage'), handler(async (req, res) => {
 router.post('/:id/guardians', can('student.manage'), handler(async (req, res) => {
   const g = parseBody(guardianInput, req);
   await ensureInSchool(prisma.student, req.params.id, 'Student');
-  const login = await prisma.$transaction(async (tx) => {
+  const login = await transaction(async (tx) => {
     if (g.isPrimary) await tx.studentGuardian.updateMany({ where: { studentId: req.params.id }, data: { isPrimary: false } });
     return linkGuardian(tx, me(req).role, req.params.id, g);
   });
@@ -257,7 +257,7 @@ router.delete('/:id/guardians/:guardianId', can('student.manage'), handler(async
 // Give a guardian parent-app access (covers all their children).
 router.post('/guardians/:guardianId/login', can('users.manage'), handler(async (req, res) => {
   const { email } = parseBody(z.object({ email: z.string().email() }), req);
-  const result = await prisma.$transaction(async (tx) => {
+  const result = await transaction(async (tx) => {
     const g = await tx.guardian.findFirst({ where: { id: req.params.guardianId } });
     if (!g) throw new AppError('Guardian not found', 404);
     if (g.userId) throw new AppError('This guardian already has a login', 409);

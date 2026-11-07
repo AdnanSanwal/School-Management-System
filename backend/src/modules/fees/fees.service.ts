@@ -1,5 +1,5 @@
 import { Prisma, FeeFrequency } from '@prisma/client';
-import prisma from '../../config/database';
+import prisma, { transaction } from '../../config/database';
 import { currentSchoolId } from '../../config/tenancy';
 import { AppError } from '../../middleware/errorHandler';
 import { formatNumber, nextNumber } from '../../utils/counter';
@@ -72,7 +72,7 @@ export async function generateInvoices(opts: GenerateOptions) {
     if (!lines.length) { noStructure.add(classId); continue; }
     const items = applyConcessions(lines, concessions.filter((c) => c.studentId === s.id));
     const t = totals(items);
-    await prisma.$transaction(async (tx) => {
+    await transaction(async (tx) => {
       const n = await nextNumber(tx, 'invoice');
       const inv = await tx.feeInvoice.create({
         data: {
@@ -109,7 +109,7 @@ export interface CollectInput {
  */
 export async function collectPayment(input: CollectInput) {
   const schoolId = currentSchoolId();
-  return prisma.$transaction(async (tx) => {
+  return transaction(async (tx) => {
     const student = await tx.student.findFirst({ where: { id: input.studentId }, select: { id: true } });
     if (!student) throw new AppError('Student not found', 404);
 

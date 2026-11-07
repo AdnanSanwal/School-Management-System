@@ -53,7 +53,7 @@ function fullPath(key: string) {
   return p;
 }
 
-export async function saveFile(schoolId: string, folder: 'documents' | 'photos', buf: Buffer, kind: FileKind): Promise<string> {
+export async function saveFile(schoolId: string, folder: 'documents' | 'photos' | 'diary' | 'notices', buf: Buffer, kind: FileKind): Promise<string> {
   const key = `${schoolId}/${folder}/${crypto.randomUUID()}.${kind}`;
   const p = fullPath(key);
   await fs.mkdir(path.dirname(p), { recursive: true });

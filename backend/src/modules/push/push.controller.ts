@@ -1,9 +1,9 @@
 import { Response, NextFunction } from 'express';
 import webpush from 'web-push';
 import { AuthRequest } from '../../middleware/auth';
-import prisma from '../../config/database';
+import prisma, { basePrisma } from '../../config/database';
 import { currentSchoolId } from '../../config/tenancy';
-import { sendSuccess } from '../../utils/apiResponse';
+import { sendSuccess, sendError } from '../../utils/apiResponse';
 import logger from '../../utils/logger';
 
 // Configure VAPID once at module load
@@ -67,5 +67,32 @@ export async function sendPush(req: AuthRequest, res: Response, next: NextFuncti
     if (failed.length) logger.warn(`Push: ${failed.length} failed out of ${subscriptions.length}`);
 
     return sendSuccess(res, { sent: subscriptions.length - failed.length, failed: failed.length });
+  } catch (err) { next(err); }
+}
+
+// ─── Mobile (Expo) device tokens ───
+
+const EXPO_TOKEN = /^(ExponentPushToken|ExpoPushToken)\[[A-Za-z0-9_-]+\]$/;
+
+export async function registerDevice(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const { token, platform } = req.body as { token?: string; platform?: string };
+    if (!token || !EXPO_TOKEN.test(token)) return sendError(res, 'Invalid push token', 422);
+    // A phone belongs to whoever signed in last: hand the token over from any previous user/school.
+    await basePrisma.deviceToken.deleteMany({ where: { token, NOT: { userId: req.user!.id } } });
+    await prisma.deviceToken.upsert({
+      where: { token },
+      update: { platform: (platform ?? 'unknown').slice(0, 16) },
+      create: { schoolId: currentSchoolId(), userId: req.user!.id, token, platform: (platform ?? 'unknown').slice(0, 16) },
+    });
+    return sendSuccess(res, null, 'Device registered', 201);
+  } catch (err) { next(err); }
+}
+
+export async function unregisterDevice(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const { token } = req.body as { token?: string };
+    if (token) await prisma.deviceToken.deleteMany({ where: { token, userId: req.user!.id } });
+    return sendSuccess(res, null, 'Device removed');
   } catch (err) { next(err); }
 }

@@ -1,43 +1,43 @@
+import { Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
-import { Platform } from 'react-native';
-import { api } from './api';
+import Constants from 'expo-constants';
+import { API } from './api';
+import { useAuthStore } from '../store/authStore';
 
-export async function registerForPushNotifications() {
-  if (!Device.isDevice) return null;
-
-  const { status: existingStatus } = await Notifications.getPermissionsAsync();
-  let finalStatus = existingStatus;
-
-  if (existingStatus !== 'granted') {
-    const { status } = await Notifications.requestPermissionsAsync();
-    finalStatus = status;
-  }
-
-  if (finalStatus !== 'granted') return null;
-
-  const tokenData = await Notifications.getExpoPushTokenAsync({
-    projectId: process.env.EXPO_PUBLIC_PROJECT_ID,
-  });
+/**
+ * Asks for permission, gets this phone's Expo push token and registers it for the
+ * signed-in user. Safe to call on every login; does nothing on web/simulators.
+ */
+export async function registerForPushNotifications(): Promise<string | null> {
+  if (Platform.OS === 'web' || !Device.isDevice) return null;
 
   if (Platform.OS === 'android') {
     await Notifications.setNotificationChannelAsync('default', {
-      name: 'School SMS',
-      importance: Notifications.AndroidImportance.MAX,
+      name: 'School updates',
+      importance: Notifications.AndroidImportance.HIGH,
       vibrationPattern: [0, 250, 250, 250],
     });
   }
 
-  // Register token with backend
-  try {
-    await api.post('/push/subscribe', {
-      endpoint: tokenData.data,
-      keys: { p256dh: 'expo', auth: 'expo' }, // Expo manages its own keys
-      platform: 'mobile',
-    });
-  } catch {
-    // Silently fail — app still works without push
-  }
+  let { status } = await Notifications.getPermissionsAsync();
+  if (status !== 'granted') status = (await Notifications.requestPermissionsAsync()).status;
+  if (status !== 'granted') return null;
 
-  return tokenData.data;
+  const projectId = process.env.EXPO_PUBLIC_PROJECT_ID ?? Constants.expoConfig?.extra?.eas?.projectId;
+  try {
+    const { data: token } = await Notifications.getExpoPushTokenAsync(projectId ? { projectId } : undefined);
+    await API.registerDevice(token, Platform.OS);
+    useAuthStore.getState().setPushToken(token);
+    return token;
+  } catch {
+    return null; // the app works without push
+  }
+}
+
+/** On logout: stop sending this user's notifications to this phone. */
+export async function unregisterPush() {
+  const token = useAuthStore.getState().pushToken;
+  if (token) await API.unregisterDevice(token).catch(() => {});
+  useAuthStore.getState().setPushToken(null);
 }
