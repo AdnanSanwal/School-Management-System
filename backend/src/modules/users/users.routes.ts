@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import bcrypt from 'bcryptjs';
+import { hashPassword } from '../../utils/password';
 import { z } from 'zod';
 import { Role } from '@prisma/client';
 import prisma, { transaction } from '../../config/database';
@@ -108,7 +108,7 @@ router.patch('/:id', handler(async (req, res) => {
 router.post('/:id/reset-password', handler(async (req, res) => {
   const target = await loadManageable(me(req), req.params.id);
   const password = temporaryPassword();
-  await prisma.user.update({ where: { id: target.id }, data: { password: await bcrypt.hash(password, 12) } });
+  await prisma.user.update({ where: { id: target.id }, data: { password: await hashPassword(password) } });
   await getRedis().del(`refresh:${target.id}`);
   return sendSuccess(res, { temporaryPassword: password }, 'Password reset — share the new password with the user');
 }));

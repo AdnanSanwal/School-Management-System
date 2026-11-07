@@ -1,5 +1,13 @@
-import axios from 'axios';
+import axios, { type InternalAxiosRequestConfig } from 'axios';
 import { useAuthStore } from '../store/authStore';
+import { activity } from './activity';
+
+declare module 'axios' {
+  interface AxiosRequestConfig {
+    /** Don't show the loader for this request. */
+    silent?: boolean;
+  }
+}
 
 // Android emulator: use http://10.0.2.2:5000/api/v1. Real phone: your computer's LAN IP.
 export const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5000/api/v1';
@@ -11,6 +19,25 @@ api.interceptors.request.use((config) => {
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
+
+// Loading indicator: count saves (non-GET requests) until they settle. Data loading is
+// tracked by React Query in the loader. Registered before the token-refresh handler so a
+// retried request is counted again on its own.
+type Tracked = InternalAxiosRequestConfig & { _tracked?: boolean };
+api.interceptors.request.use((config: Tracked) => {
+  if (!config.silent && (config.method ?? 'get').toLowerCase() !== 'get') {
+    config._tracked = true;
+    activity.writeStarted();
+  }
+  return config;
+});
+const settle = (config?: Tracked) => {
+  if (config?._tracked) { activity.writeDone(); delete config._tracked; }
+};
+api.interceptors.response.use(
+  (res) => { settle(res.config); return res; },
+  (error) => { settle(error.config); return Promise.reject(error); },
+);
 
 api.interceptors.response.use(
   (res) => res,

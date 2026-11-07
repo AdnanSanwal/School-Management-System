@@ -1,3 +1,4 @@
+import logger from './utils/logger';
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -95,7 +96,18 @@ app.use((_req, res, next) => {
 });
 
 // Logging + metrics
-app.use(morgan('combined'));
+app.use(morgan(':remote-addr ":method :url" :status :res[content-length] - :response-time ms'));
+
+// Flag slow requests so real bottlenecks show up in the logs (SLOW_REQUEST_MS, default 500).
+const slowMs = Number(process.env.SLOW_REQUEST_MS) || 500;
+app.use((req, res, next) => {
+  const start = process.hrtime.bigint();
+  res.on('finish', () => {
+    const ms = Number(process.hrtime.bigint() - start) / 1e6;
+    if (ms >= slowMs) logger.warn(`Slow request ${Math.round(ms)} ms: ${req.method} ${req.originalUrl.split('?')[0]} -> ${res.statusCode}`);
+  });
+  next();
+});
 app.use(metricsMiddleware);
 app.use(auditConsent);
 

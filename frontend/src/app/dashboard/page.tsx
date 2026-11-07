@@ -130,7 +130,7 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
 
 function CollectionChart({ months, currency }: { months: { month: string; amount: string }[]; currency: string }) {
   return (
-    <div className="h-64">
+    <div className="relative h-64">
       <Bar
         aria-label="Bar chart of fee collected per month for the last six months"
         data={{

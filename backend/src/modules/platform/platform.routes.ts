@@ -1,5 +1,5 @@
 import { Router, Response, NextFunction } from 'express';
-import bcrypt from 'bcryptjs';
+import { hashPassword } from '../../utils/password';
 import { z } from 'zod';
 import { basePrisma } from '../../config/database';
 import { authenticate, AuthRequest } from '../../middleware/auth';
@@ -52,7 +52,7 @@ router.get('/schools', async (_req: AuthRequest, res: Response, next: NextFuncti
 router.post('/schools', validate(createSchoolSchema), async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { academicYear, owner, ...school } = req.body as z.infer<typeof createSchoolSchema>['body'];
-    const password = await bcrypt.hash(owner.password, 12);
+    const password = await hashPassword(owner.password);
 
     const created = await basePrisma.$transaction(async (tx) => {
       const s = await tx.school.create({ data: school });

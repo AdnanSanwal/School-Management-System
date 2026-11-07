@@ -21,6 +21,7 @@ export default function StaffPage() {
   const qc = useQueryClient();
   const { data, isLoading } = useQuery({
     queryKey: ['staff', status, search],
+    meta: { quiet: !!search },
     queryFn: () => staffAPI.list({ status, search: search || undefined, limit: 200 }),
   });
   const markLeft = useMutation({

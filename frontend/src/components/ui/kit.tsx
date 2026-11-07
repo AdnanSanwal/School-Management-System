@@ -137,6 +137,7 @@ export function StudentPicker({ value, onChange, placeholder = 'Search student b
   const [q, setQ] = useState('');
   const { data, isFetching } = useQuery({
     queryKey: ['student-pick', q],
+    meta: { quiet: true },
     queryFn: () => studentsAPI.list({ search: q, status: 'ACTIVE', limit: 8 }),
     enabled: q.trim().length >= 2 && !value,
   });

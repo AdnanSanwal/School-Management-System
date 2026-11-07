@@ -118,6 +118,16 @@ This starts both apps:
 | Web panel | http://localhost:3000 |
 | API | http://localhost:5000/api/v1 (health check: http://localhost:5000/health) |
 
+> **Dev mode is slower than the real app.** `npm run dev` compiles each web page the first time you open it
+> (2–7 s), and again after every code change. That is not how fast the app is. To see real speed, run it
+> in production mode instead (pages open in about 0.1 s and links are prefetched):
+>
+> ```bash
+> npm run start:prod
+> ```
+>
+> `npm run dev:turbo` uses Next.js's faster Turbopack compiler for development.
+
 ---
 
 ## Demo logins

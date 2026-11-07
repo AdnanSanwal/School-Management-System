@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import bcrypt from 'bcryptjs';
+import { hashPassword } from '../utils/password';
 import { PrismaClient, AttendanceStatus, Role, DayOfWeek } from '@prisma/client';
 
 /**
@@ -291,7 +291,7 @@ async function main() {
     return;
   }
   console.log('Seeding ERP demo data...');
-  const hash = await bcrypt.hash(PASSWORD, 12);
+  const hash = await hashPassword(PASSWORD);
   await seedPlatform(hash);
   const gf = await seedGreenfield(hash);
   await seedRiverside(hash);

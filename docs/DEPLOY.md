@@ -17,6 +17,9 @@ browser / mobile app ──HTTPS──► Caddy ─┬─ /api, /socket.io, /hea
 ## 1. Server
 
 - Ubuntu 22.04/24.04 with at least 2 vCPU, 4 GB RAM and 40 GB disk. One server like this handles several schools.
+- **Pick a data-centre region close to the schools.** Every click waits for a round trip to the server, so
+  distance matters more than CPU. For Pakistan, the Middle East (e.g. Dubai/Bahrain) or India (Mumbai) is
+  usually far faster than Europe or the US.
 - A domain, e.g. `erp.yourschool.pk`, with an **A record** pointing at the server's IP.
 - Open ports 22, 80 and 443 in the firewall:
 
@@ -157,7 +160,15 @@ cd mobile
 EXPO_PUBLIC_API_URL=https://<DOMAIN>/api/v1 npx eas build -p android
 ```
 
-## 9. Troubleshooting
+## 9. Speed
+
+- `MYSQL_BUFFER_POOL` (default `512M`) is MySQL's memory cache. Set it to `1G` on a 4 GB server.
+- `BCRYPT_ROUNDS` (default `10`) sets how slow password hashing is. `10` gives ~0.2 s logins; each +1 doubles that.
+  Existing passwords switch to the current setting the next time each user logs in.
+- Any API request slower than `SLOW_REQUEST_MS` (default 500 ms) is logged as a warning. Find them with
+  `erp logs backend | grep "Slow request"` and tell the developer which ones repeat.
+
+## 10. Troubleshooting
 
 | Symptom | Check |
 |---|---|

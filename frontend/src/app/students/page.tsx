@@ -20,6 +20,7 @@ export default function StudentsPage() {
 
   const { data, isLoading, isFetching } = useQuery({
     queryKey: ['students', { search, sectionId, status, page }],
+    meta: { quiet: !!search },
     queryFn: () => studentsAPI.list({ search: search || undefined, sectionId: sectionId || undefined, status, page, limit: 25 }),
     placeholderData: keepPreviousData,
   });

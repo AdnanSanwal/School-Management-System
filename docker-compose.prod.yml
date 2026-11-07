@@ -19,6 +19,9 @@ services:
   mysql:
     <<: *restart
     image: mysql:8.4
+    # Keep the working set in memory so screens don't wait on disk. Size it to about half
+    # the server's RAM that MySQL may use (e.g. 512M on a 2 GB VPS, 1G on 4 GB).
+    command: ['--innodb-buffer-pool-size=${MYSQL_BUFFER_POOL:-512M}']
     environment:
       MYSQL_DATABASE: school_db
       MYSQL_USER: sms_user
@@ -74,6 +77,8 @@ services:
       PAYMENT_GATEWAY_SECRET: ${PAYMENT_GATEWAY_SECRET:-}
       MESSAGING_PROVIDER: ${MESSAGING_PROVIDER:-}
       DEFAULT_COUNTRY_CODE: ${DEFAULT_COUNTRY_CODE:-92}
+      BCRYPT_ROUNDS: ${BCRYPT_ROUNDS:-10}
+      SLOW_REQUEST_MS: ${SLOW_REQUEST_MS:-500}
       TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
       TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
       TWILIO_PHONE_NUMBER: ${TWILIO_PHONE_NUMBER:-}

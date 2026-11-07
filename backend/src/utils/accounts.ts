@@ -1,4 +1,4 @@
-import bcrypt from 'bcryptjs';
+import { hashPassword } from './password';
 import crypto from 'crypto';
 import type { Role } from '@prisma/client';
 import type { ScopedTx } from '../config/database';
@@ -53,7 +53,7 @@ export async function createAccount(tx: Pick<ScopedTx, 'user'>, actorRole: strin
       email: a.email.toLowerCase().trim(),
       phone: a.phone ?? null,
       role: a.role,
-      password: await bcrypt.hash(plain, 12),
+      password: await hashPassword(plain),
     },
     select: { id: true, name: true, email: true, role: true },
   });

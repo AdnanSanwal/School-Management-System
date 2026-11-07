@@ -117,7 +117,7 @@ function Books({ manage }: { manage: boolean }) {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [edit, setEdit] = useState<any | null>(null);
-  const { data, isLoading } = useQuery({ queryKey: ['library', 'books', search, page], queryFn: () => libraryAPI.books({ search: search || undefined, page, limit: 25 }) });
+  const { data, isLoading } = useQuery({ queryKey: ['library', 'books', search, page], meta: { quiet: !!search }, queryFn: () => libraryAPI.books({ search: search || undefined, page, limit: 25 }) });
   const rows: any[] = data?.data ?? [];
   const pages = data?.pagination?.totalPages ?? 1;
   return (
@@ -201,7 +201,7 @@ function IssueModal({ onClose }: { onClose: () => void }) {
   const [q, setQ] = useState('');
   const [book, setBook] = useState<any>(null);
   const [dueDate, setDueDate] = useState('');
-  const books = useQuery({ queryKey: ['library', 'books', 'pick', q], queryFn: () => libraryAPI.books({ search: q, available: 'true', limit: 8 }), enabled: q.trim().length >= 2 && !book });
+  const books = useQuery({ queryKey: ['library', 'books', 'pick', q], meta: { quiet: true }, queryFn: () => libraryAPI.books({ search: q, available: 'true', limit: 8 }), enabled: q.trim().length >= 2 && !book });
   const m = useMutation({
     mutationFn: () => libraryAPI.issue({ bookId: book.id, studentId: student.id, dueDate: dueDate || undefined }),
     onSuccess: (r: any) => { toast.success(`Issued — due ${formatDate(r.dueDate)}`); qc.invalidateQueries({ queryKey: ['library'] }); onClose(); },

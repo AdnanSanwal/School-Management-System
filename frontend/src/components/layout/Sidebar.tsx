@@ -2,16 +2,18 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { useQueryClient } from '@tanstack/react-query';
+import { prefetchPage } from '@/lib/prefetch';
 import { usePathname } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
 import { cn } from '@/lib/utils';
 import {
-  LayoutDashboard, Users, GraduationCap, Bell, Settings, LogOut, ChevronLeft, ChevronRight,
+  LayoutDashboard, Users, GraduationCap, Bell, Settings, ChevronLeft, ChevronRight,
   UserCheck, Layers, Wallet, Receipt, AlertTriangle, BadgePercent, FileSpreadsheet, ClipboardCheck,
   KeyRound, School, Home, Megaphone, BookOpen, CalendarDays, PenLine, Clock, Inbox, FileBarChart, Plane,
   Building2, ArrowUpCircle, Bus, Library,
 } from 'lucide-react';
-import { can, Capability, ROLE_LABEL } from '@/lib/roles';
+import { can, Capability } from '@/lib/roles';
 
 interface NavGroup {
   title: string;
@@ -96,23 +98,13 @@ const navGroups: NavGroup[] = [
   },
 ];
 
-const ROLE_COLORS: Record<string, { color: string; bg: string }> = {
-  OWNER: { color: 'text-amber-700', bg: 'bg-amber-50' },
-  PRINCIPAL: { color: 'text-violet-700', bg: 'bg-violet-50' },
-  ADMIN: { color: 'text-indigo-700', bg: 'bg-indigo-50' },
-  ACCOUNTANT: { color: 'text-emerald-700', bg: 'bg-emerald-50' },
-  TEACHER: { color: 'text-blue-700', bg: 'bg-blue-50' },
-  STUDENT: { color: 'text-green-700', bg: 'bg-green-50' },
-  PARENT: { color: 'text-orange-700', bg: 'bg-orange-50' },
-};
-
 export function Sidebar() {
   const pathname = usePathname();
-  const { user, clearAuth } = useAuthStore();
+  const { user } = useAuthStore();
+  const qc = useQueryClient();
   const [collapsed, setCollapsed] = useState(false);
 
   const role = user?.role || '';
-  const roleMeta = { label: ROLE_LABEL[role] ?? role, ...(ROLE_COLORS[role] ?? { color: 'text-gray-600', bg: 'bg-gray-100' }) };
 
   const visibleGroups = navGroups
     .map(group => ({
@@ -191,6 +183,8 @@ export function Sidebar() {
                   <Link
                     key={item.href}
                     href={item.href}
+                    onMouseEnter={() => prefetchPage(qc, item.href)}
+                    onFocus={() => prefetchPage(qc, item.href)}
                     title={collapsed ? item.label : undefined}
                     aria-current={active ? 'page' : undefined}
                     className={cn(
@@ -224,41 +218,6 @@ export function Sidebar() {
         ))}
       </nav>
 
-      {/* User footer */}
-      <div className="flex-shrink-0 border-t border-slate-100 p-3">
-        {collapsed ? (
-          <div className="flex flex-col items-center gap-2">
-            <div className="w-9 h-9 rounded-xl bg-primary-100 flex items-center justify-center text-sm font-bold text-primary-700">
-              {user?.name?.[0]?.toUpperCase()}
-            </div>
-            <button onClick={clearAuth} className="p-2 rounded-xl text-red-400 hover:bg-red-50 transition-colors">
-              <LogOut className="w-4 h-4" />
-            </button>
-          </div>
-        ) : (
-          <>
-            <div className="flex items-center gap-3 px-2 py-2 rounded-xl hover:bg-slate-50 transition-colors cursor-pointer">
-              <div className="w-9 h-9 rounded-xl bg-primary-100 flex items-center justify-center text-sm font-bold text-primary-700 flex-shrink-0">
-                {user?.name?.[0]?.toUpperCase()}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-gray-900 truncate">{user?.name}</p>
-                <span className={cn('text-2xs font-semibold px-1.5 py-0.5 rounded-full', roleMeta.bg, roleMeta.color)}>
-                  {roleMeta.label}
-                </span>
-              </div>
-              <ChevronRight className="w-3.5 h-3.5 text-slate-300 flex-shrink-0" />
-            </div>
-            <button
-              onClick={clearAuth}
-              className="flex items-center gap-2.5 w-full px-3 py-2 rounded-xl text-sm text-slate-500 hover:bg-red-50 hover:text-red-600 transition-all duration-150 mt-1"
-            >
-              <LogOut className="w-4 h-4" />
-              <span>Sign out</span>
-            </button>
-          </>
-        )}
-      </div>
     </aside>
   );
 }

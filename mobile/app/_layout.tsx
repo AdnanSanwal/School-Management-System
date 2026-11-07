@@ -9,6 +9,7 @@ import { registerForPushNotifications } from '../lib/pushNotifications';
 import { areaFor, useAuthStore, useHydrated } from '../store/authStore';
 import { useChildStore } from '../store/childStore';
 import { colors } from '../lib/theme';
+import { GlobalLoader } from '../components/GlobalLoader';
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 30_000, retry: 1 } },
@@ -91,6 +92,7 @@ export default function RootLayout() {
           <Stack.Screen name="library" options={{ title: 'Library' }} />
           <Stack.Screen name="homework/[id]" options={{ title: 'Homework done' }} />
         </Stack>
+        <GlobalLoader />
       </QueryClientProvider>
     </SafeAreaProvider>
   );

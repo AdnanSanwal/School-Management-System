@@ -1,4 +1,4 @@
-import bcrypt from 'bcryptjs';
+import { hashPassword, needsRehash, verifyPassword } from '../../utils/password';
 import crypto from 'crypto';
 import { authenticator } from 'otplib';
 import QRCode from 'qrcode';
@@ -40,8 +40,14 @@ export async function login(email: string, password: string, mfaCode?: string) {
   const user = await basePrisma.user.findUnique({ where: { email: email.toLowerCase().trim() } });
   if (!user) throw new AppError('Invalid credentials', 401);
 
-  const valid = await bcrypt.compare(password, user.password);
+  const valid = await verifyPassword(password, user.password);
   if (!valid) throw new AppError('Invalid credentials', 401);
+  // Older hashes used a slower cost; upgrade quietly so the next login is fast.
+  if (needsRehash(user.password)) {
+    hashPassword(password)
+      .then((hash) => basePrisma.user.update({ where: { id: user.id }, data: { password: hash } }))
+      .catch(() => { /* keep the old hash; try again next login */ });
+  }
 
   await assertCanSignIn(user);
 
@@ -111,7 +117,7 @@ export async function resetPassword(token: string, newPassword: string) {
   });
   if (!user) throw new AppError('Invalid or expired reset token', 400);
 
-  const hash = await bcrypt.hash(newPassword, 12);
+  const hash = await hashPassword(newPassword);
   await basePrisma.user.update({
     where: { id: user.id },
     data: { password: hash, resetToken: null, resetTokenExpires: null },
@@ -121,10 +127,10 @@ export async function resetPassword(token: string, newPassword: string) {
 
 export async function changePassword(userId: string, currentPassword: string, newPassword: string) {
   const user = await basePrisma.user.findUniqueOrThrow({ where: { id: userId } });
-  const valid = await bcrypt.compare(currentPassword, user.password);
+  const valid = await verifyPassword(currentPassword, user.password);
   if (!valid) throw new AppError('Current password is incorrect', 400);
 
-  const hash = await bcrypt.hash(newPassword, 12);
+  const hash = await hashPassword(newPassword);
   await basePrisma.user.update({ where: { id: userId }, data: { password: hash } });
 }
 

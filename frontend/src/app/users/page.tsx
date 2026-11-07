@@ -23,6 +23,7 @@ export default function UsersPage() {
   const qc = useQueryClient();
   const { data, isLoading } = useQuery({
     queryKey: ['users', role, search],
+    meta: { quiet: !!search },
     queryFn: () => usersAPI.list({ role: role || undefined, search: search || undefined, limit: 100 }),
   });
   const toggle = useMutation({

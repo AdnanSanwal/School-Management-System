@@ -12,7 +12,7 @@ export interface User {
   email: string;
   role: Role;
   avatar?: string | null;
-  school?: { id: string; name: string; code: string; currency: string } | null;
+  school?: { id: string; name: string; code: string; currency: string; logoUrl?: string | null } | null;
 }
 
 interface AuthState {

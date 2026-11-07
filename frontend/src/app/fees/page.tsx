@@ -31,6 +31,7 @@ function CollectFee() {
 
   const search = useQuery({
     queryKey: ['fee-search', query],
+    meta: { quiet: true },
     queryFn: () => studentsAPI.list({ search: query, limit: 8 }),
     enabled: query.trim().length >= 2,
   });

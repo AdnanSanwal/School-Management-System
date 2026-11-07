@@ -24,7 +24,12 @@ const nextConfig = {
   },
 };
 
-module.exports = withSentryConfig(nextConfig, {
+// The Sentry webpack plugin (source-map upload, wrapping) slows every dev compile a lot,
+// so it is only applied to production builds. Runtime error reporting still works via
+// sentry.*.config.ts when SENTRY_DSN is set.
+const useSentryPlugin = process.env.NODE_ENV === 'production' || !!process.env.SENTRY_AUTH_TOKEN;
+
+module.exports = !useSentryPlugin ? nextConfig : withSentryConfig(nextConfig, {
   // Sentry org + project from wizard
   org: 'orda-delivery',
   project: 'javascript-nextjs',
