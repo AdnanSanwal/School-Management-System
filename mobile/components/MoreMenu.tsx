@@ -10,7 +10,7 @@ import { Button, Card, H, Muted, Row } from './ui';
 import { colors } from '../lib/theme';
 import { day } from '../lib/format';
 
-function Item({ icon, label, badge, onPress }: { icon: keyof typeof Ionicons.glyphMap; label: string; badge?: number; onPress: () => void }) {
+export function Item({ icon, label, badge, onPress }: { icon: keyof typeof Ionicons.glyphMap; label: string; badge?: number; onPress: () => void }) {
   return (
     <Pressable onPress={onPress} style={({ pressed }) => [s.item, pressed && { backgroundColor: '#f8fafc' }]} accessibilityRole="button">
       <Ionicons name={icon} size={20} color={colors.primary} />

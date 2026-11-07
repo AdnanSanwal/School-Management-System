@@ -11,6 +11,7 @@ import { assertStudentAccess, studentScope } from '../../utils/scope';
 import { attendanceSummary } from '../../utils/attendanceStats';
 import { signedUrl } from '../../utils/storage';
 import { outstanding, D } from '../fees/fees.calc';
+import { sectionResults } from '../exams/exams.service';
 
 // Parent / student app home (spec §10 Parents Home Screen, §11 Student View).
 
@@ -102,6 +103,40 @@ router.get('/home', handler(async (req, res) => {
     upcoming: upcoming.map((e) => ({ ...e, startDate: toIso(e.startDate), endDate: toIso(e.endDate) })),
     unreadNotices,
   });
+}));
+
+// Spec §10 Exam Schedule + Progress Report: upcoming papers for the child's class and published results.
+router.get('/exams', handler(async (req, res) => {
+  const { studentId } = parseQuery(z.object({ studentId: id }), req);
+  await assertStudentAccess(me(req), studentId);
+  const student = await prisma.student.findFirstOrThrow({ where: { id: studentId }, select: { sectionId: true, section: { select: { classId: true } } } });
+  if (!student.section) return sendSuccess(res, []);
+  const exams = await prisma.exam.findMany({
+    where: { status: { in: ['SCHEDULED', 'PUBLISHED'] }, subjects: { some: { classId: student.section.classId } } },
+    orderBy: [{ startDate: 'desc' }, { createdAt: 'desc' }],
+    include: {
+      subjects: {
+        where: { classId: student.section.classId },
+        orderBy: { date: 'asc' },
+        select: { id: true, date: true, totalMarks: true, syllabus: true, subject: { select: { name: true } } },
+      },
+    },
+  });
+  const published = await Promise.all(exams.filter((e) => e.status === 'PUBLISHED')
+    .map(async (e) => [e.id, (await sectionResults(e.id, student.sectionId!)).students.find((s) => s.student.id === studentId)] as const));
+  const resultOf = new Map(published);
+  return sendSuccess(res, exams.map((e) => {
+    const r = resultOf.get(e.id);
+    return {
+      id: e.id, name: e.name, status: e.status,
+      startDate: e.startDate ? toIso(e.startDate) : null, endDate: e.endDate ? toIso(e.endDate) : null,
+      papers: e.subjects.map((p) => ({ id: p.id, subject: p.subject.name, date: p.date ? toIso(p.date) : null, totalMarks: Number(p.totalMarks), syllabus: p.syllabus })),
+      result: r ? {
+        percent: r.percent, grade: r.grade, passed: r.passed, position: r.position, obtained: r.obtained, maxMarks: r.maxMarks,
+        subjects: r.subjects.map((s) => ({ subject: s.subject, obtained: s.obtained, totalMarks: s.totalMarks, isAbsent: s.isAbsent, grade: s.grade, passed: s.passed })),
+      } : null,
+    };
+  }));
 }));
 
 export default router;

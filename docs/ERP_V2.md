@@ -98,10 +98,32 @@ Run in a browser with `npm run web --prefix mobile` (port 8081); on a phone with
 
 Web: `/notices`, `/diary`, `/calendar`, "Send reminders" on `/fees/defaulters`.
 
+## Phase 3 (done)
+
+**Exams** (`/exams`): DRAFT (office builds the date sheet per class: subject, date, total/pass marks,
+syllabus) → **principal approves** → SCHEDULED (parents see the date sheet; marks entry open) →
+**principal publishes** → PUBLISHED (families notified; marks and remarks locked; can be unpublished
+for corrections). Teachers enter marks only for subjects they teach in that section
+(`exams/marks/assignments` is their to-do list). Results compute total, %, grade (school grade
+scale, `exams/grade-scale`), pass/fail (every subject must pass; absent = fail) and class position
+(1, 2, 2, 4). Class teachers write report-card remarks. `exams/:id/analysis` gives pass rate,
+averages by section/subject, grade distribution and toppers.
+
+**Report cards**: `exams/:id/report-card/:studentId` (JSON) and `/pdf-link` → a 15-minute signed link
+to an A4 PDF rendered with pdfkit (`modules/exams/exams.pdf.ts`). Parents/students only see
+published exams.
+
+**Timetable** (`/timetable`): section week, teacher week (`teacher/me`), today's periods; saving
+rejects a teacher booked in two classes at overlapping times.
+
+Web: `/exams`, `/exams/[id]` (date sheet · results + remarks + PDFs · analysis), `/marks`, `/timetable`.
+Mobile: parents — Exams & results (date sheet, marks, PDF) and Timetable; teachers — marks entry,
+today's classes on Home, My timetable.
+
 ## Phases (from the spec)
 
 1. **MVP — done** (see above). Not yet: file uploads (documents are links), mobile screens.
 2. **Done** — parent app (child switcher, attendance calendar, fee status, notices), daily diary, push notifications.
-3. Exams, marks entry, grade scales, report-card PDFs, timetable.
+3. **Done** — exams, marks entry, grade scales, report-card PDFs, timetable.
 4. Reports (PDF/Excel), online payments (JazzCash/Easypaisa), leave + approvals, calendar.
 5. Transport, library, student app, WhatsApp/SMS.

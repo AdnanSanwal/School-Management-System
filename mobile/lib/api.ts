@@ -79,6 +79,16 @@ export const API = {
   markAttendance: (sectionId: string, records: { studentId: string; status: string }[]) =>
     data(api.put('/attendance/students', { sectionId, records })),
 
+  // Exams & timetable
+  familyExams: (studentId: string) => data<any[]>(api.get('/family/exams', { params: { studentId } })),
+  reportCardLink: (examId: string, studentId: string) => data<{ url: string }>(api.get(`/exams/${examId}/report-card/${studentId}/pdf-link`)),
+  markTasks: () => data<any[]>(api.get('/exams/marks/assignments')),
+  marks: (examId: string, sectionId: string, subjectId: string) => data(api.get(`/exams/${examId}/marks`, { params: { sectionId, subjectId } })),
+  saveMarks: (examId: string, body: any) => data(api.put(`/exams/${examId}/marks`, body)),
+  sectionTimetable: (sectionId: string) => data<any[]>(api.get(`/timetable/section/${sectionId}`)),
+  myTimetable: () => data<any[]>(api.get('/timetable/teacher/me')),
+  today: () => data(api.get('/timetable/today')),
+
   // Office
   dashboard: () => data(api.get('/dashboard/overview')),
 };

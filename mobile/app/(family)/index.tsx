@@ -76,6 +76,14 @@ export default function FamilyHome() {
             ))}
           </Card>
 
+          <Card onPress={() => router.push('/exams')}>
+            <View style={s.noticeRow}>
+              <Ionicons name="school-outline" size={20} color={colors.primary} />
+              <H style={{ flex: 1 }}>Exams & results</H>
+              <Ionicons name="chevron-forward" size={18} color={colors.faint} />
+            </View>
+          </Card>
+
           <Card onPress={() => router.push('/notices')}>
             <View style={s.noticeRow}>
               <Ionicons name="megaphone-outline" size={20} color={colors.primary} />

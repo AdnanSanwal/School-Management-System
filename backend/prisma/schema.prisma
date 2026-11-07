@@ -178,6 +178,7 @@ model Student {
   documents   StudentDocument[]
   attendance  StudentAttendance[]
   marks       Mark[]
+  examRemarks ExamRemark[]
   concessions Concession[]
   invoices    FeeInvoice[]
   payments    Payment[]
@@ -404,6 +405,7 @@ model Exam {
 
   academicYear AcademicYear  @relation(fields: [academicYearId], references: [id])
   subjects     ExamSubject[]
+  remarks      ExamRemark[]
 
   @@index([schoolId])
   @@map("exams")
@@ -448,6 +450,24 @@ model Mark {
   @@index([schoolId])
   @@index([studentId])
   @@map("marks")
+}
+
+// Class teacher's overall remark on a student's report card.
+model ExamRemark {
+  id          String   @id @default(uuid())
+  schoolId    String
+  examId      String
+  studentId   String
+  remarks     String   @db.Text
+  enteredById String?
+  updatedAt   DateTime @updatedAt
+
+  exam    Exam    @relation(fields: [examId], references: [id], onDelete: Cascade)
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([examId, studentId])
+  @@index([schoolId])
+  @@map("exam_remarks")
 }
 
 model GradeScale {

@@ -31,6 +31,7 @@ function openFromNotification(data: Record<string, any> | undefined) {
     case 'FEE_PAID': return area === 'family' && router.push('/(family)/fees');
     case 'DIARY_POSTED': return area === 'family' ? router.push('/(family)/diary') : router.push('/(teacher)/diary');
     case 'NOTICE_PUBLISHED': return router.push('/notices');
+    case 'RESULT_PUBLISHED': return area === 'family' && router.push('/exams');
     default: return router.push('/notifications');
   }
 }
@@ -76,6 +77,9 @@ export default function RootLayout() {
           <Stack.Screen name="notifications" options={{ title: 'Notifications' }} />
           <Stack.Screen name="post-diary" options={{ title: 'Post diary', presentation: 'modal' }} />
           <Stack.Screen name="receipt/[id]" options={{ title: 'Receipt' }} />
+          <Stack.Screen name="exams" options={{ title: 'Exams & results' }} />
+          <Stack.Screen name="timetable" options={{ title: 'Timetable' }} />
+          <Stack.Screen name="marks" options={{ title: 'Marks entry' }} />
         </Stack>
       </QueryClientProvider>
     </SafeAreaProvider>

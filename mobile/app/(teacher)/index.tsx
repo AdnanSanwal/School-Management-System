@@ -18,6 +18,7 @@ export default function TeacherHome() {
     queries: (sections.data ?? []).map((s) => ({ queryKey: ['roster', s.id], queryFn: () => API.roster(s.id) })),
   });
   const recent = useQuery({ queryKey: ['diary', 'mine'], queryFn: () => API.diary({ mine: 'true', limit: 3 }) });
+  const today = useQuery({ queryKey: ['timetable', 'today'], queryFn: API.today });
   const classTeacherOf = sections.data?.find((s) => s.isClassTeacher);
 
   return (
@@ -36,7 +37,23 @@ export default function TeacherHome() {
           <Ionicons name="create-outline" size={28} color={colors.primary} />
           <Text style={s.quickText}>Post diary</Text>
         </Card>
+        <Card style={s.quickCard} onPress={() => router.push('/marks')}>
+          <Ionicons name="calculator-outline" size={28} color={colors.primary} />
+          <Text style={s.quickText}>Enter marks</Text>
+        </Card>
       </View>
+
+      {(today.data?.slots?.length ?? 0) > 0 && (
+        <Card onPress={() => router.push('/timetable')}>
+          <H>Today&apos;s classes</H>
+          {today.data.slots.map((p: any) => (
+            <View key={p.id} style={s.period}>
+              <Text style={s.periodTime}>{p.startTime}</Text>
+              <Text style={{ flex: 1, color: colors.text }}>{p.subject.name} · {p.section.name}{p.room ? ` · Room ${p.room}` : ''}</Text>
+            </View>
+          ))}
+        </Card>
+      )}
 
       <H>Today&apos;s attendance</H>
       {sections.isLoading && <Loading />}
@@ -75,7 +92,9 @@ const s = StyleSheet.create({
   hello: { fontSize: 22, fontWeight: '800', color: colors.text },
   quick: { flexDirection: 'row', gap: 12 },
   quickCard: { flex: 1, alignItems: 'center', gap: 8, paddingVertical: 20 },
-  quickText: { fontWeight: '700', color: colors.text },
+  quickText: { fontWeight: '700', color: colors.text, textAlign: 'center' },
+  period: { flexDirection: 'row', gap: 12, paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
+  periodTime: { width: 48, fontWeight: '700', color: colors.primary },
   row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   section: { fontSize: 16, fontWeight: '700', color: colors.text },
 });

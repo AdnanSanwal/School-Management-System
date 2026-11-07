@@ -100,6 +100,17 @@ export function signedUrl(key: string | null | undefined, ttlSeconds = 3600): st
   return `${base}/api/v1/files/${key}?exp=${exp}&sig=${sign(key, exp)}`;
 }
 
+/**
+ * Signed link to any API path that should open without a bearer token (e.g. a
+ * report-card PDF on a phone). `value` is what gets signed — include the school id
+ * and record ids so the link can't be pointed at anything else.
+ */
+export function signedLink(apiPath: string, value: string, ttlSeconds = 900): string {
+  const exp = Math.floor(Date.now() / 1000) + ttlSeconds;
+  const base = (process.env.BACKEND_URL || `http://localhost:${process.env.PORT || 5000}`).replace(/\/$/, '');
+  return `${base}/api/v1${apiPath}?exp=${exp}&sig=${sign(value, exp)}`;
+}
+
 export function verifySignature(key: string, exp: string | undefined, sig: string | undefined): boolean {
   const e = Number(exp);
   if (!sig || !Number.isInteger(e) || e < Date.now() / 1000) return false;

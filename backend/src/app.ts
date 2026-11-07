@@ -28,6 +28,8 @@ import diaryRoutes from './modules/diary/diary.routes';
 import noticeRoutes from './modules/notices/notices.routes';
 import calendarRoutes from './modules/calendar/calendar.routes';
 import familyRoutes from './modules/family/family.routes';
+import examRoutes, { reportCardPdfRouter } from './modules/exams/exams.routes';
+import timetableRoutes from './modules/timetable/timetable.routes';
 import notificationRoutes from './modules/notifications/notification.routes';
 import pushRoutes from './modules/push/push.routes';
 
@@ -102,6 +104,9 @@ app.use(`${api}/diary`, diaryRoutes);
 app.use(`${api}/notices`, noticeRoutes);
 app.use(`${api}/calendar`, calendarRoutes);
 app.use(`${api}/family`, familyRoutes);
+app.use(`${api}/exams`, examRoutes);
+app.use(`${api}/timetable`, timetableRoutes);
+app.use(`${api}/report-cards`, reportCardPdfRouter);
 app.use(`${api}/notifications`, notificationRoutes);
 app.use(`${api}/push`, pushRoutes);
 

@@ -32,6 +32,13 @@ export const CAN = {
   viewCalendar: ['OWNER', 'PRINCIPAL', 'ADMIN', 'ACCOUNTANT', 'TEACHER', 'PARENT', 'STUDENT'],
   manageCalendar: ['PRINCIPAL', 'ADMIN'],
   sendFeeReminders: ['ADMIN', 'ACCOUNTANT'],
+  viewExams: ['OWNER', 'PRINCIPAL', 'ADMIN', 'TEACHER'],
+  manageExams: ['PRINCIPAL', 'ADMIN'],
+  approveExams: ['PRINCIPAL'],
+  enterMarks: ['TEACHER', 'PRINCIPAL', 'ADMIN'],
+  viewResults: ['OWNER', 'PRINCIPAL', 'ADMIN', 'TEACHER'],
+  viewTimetable: ['OWNER', 'PRINCIPAL', 'ADMIN', 'ACCOUNTANT', 'TEACHER'],
+  manageTimetable: ['PRINCIPAL', 'ADMIN'],
 } satisfies Record<string, Role[]>;
 
 export type Capability = keyof typeof CAN;

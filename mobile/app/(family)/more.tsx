@@ -1,6 +1,7 @@
 import { Linking, Text } from 'react-native';
 import { Screen, Card, H, Row } from '../../components/ui';
-import { MoreMenu } from '../../components/MoreMenu';
+import { router } from 'expo-router';
+import { Item, MoreMenu } from '../../components/MoreMenu';
 import { useChildren } from '../../components/ChildSwitcher';
 import { colors } from '../../lib/theme';
 import { sectionName } from '../../lib/format';
@@ -25,7 +26,10 @@ export default function FamilyMore() {
           )}
         </Card>
       )}
-      <MoreMenu />
+      <MoreMenu extra={<>
+        <Item icon="school-outline" label="Exams & results" onPress={() => router.push('/exams')} />
+        <Item icon="time-outline" label="Timetable" onPress={() => router.push('/timetable')} />
+      </>} />
     </Screen>
   );
 }

@@ -169,6 +169,33 @@ export const calendarAPI = {
   remove: (id: string) => api.delete(`/calendar/${id}`),
 };
 
+export const examsAPI = {
+  list: () => data<any[]>(api.get('/exams')),
+  get: (id: string) => data(api.get(`/exams/${id}`)),
+  create: (body: any) => data(api.post('/exams', body)),
+  update: (id: string, body: any) => data(api.patch(`/exams/${id}`, body)),
+  remove: (id: string) => api.delete(`/exams/${id}`),
+  saveDateSheet: (id: string, classId: string, subjects: any[]) => api.put(`/exams/${id}/classes/${classId}/subjects`, { subjects }),
+  approve: (id: string) => data(api.post(`/exams/${id}/approve`)),
+  publish: (id: string) => data(api.post(`/exams/${id}/publish`)),
+  unpublish: (id: string) => data(api.post(`/exams/${id}/unpublish`)),
+  assignments: () => data<any[]>(api.get('/exams/marks/assignments')),
+  marks: (id: string, sectionId: string, subjectId: string) => data(api.get(`/exams/${id}/marks`, { params: { sectionId, subjectId } })),
+  saveMarks: (id: string, body: any) => data(api.put(`/exams/${id}/marks`, body)),
+  results: (id: string, sectionId: string) => data(api.get(`/exams/${id}/results`, { params: { sectionId } })),
+  analysis: (id: string, classId: string) => data(api.get(`/exams/${id}/analysis`, { params: { classId } })),
+  saveRemarks: (id: string, sectionId: string, remarks: { studentId: string; remarks: string }[]) => api.put(`/exams/${id}/remarks`, { sectionId, remarks }),
+  pdfLink: (id: string, studentId: string) => data<{ url: string }>(api.get(`/exams/${id}/report-card/${studentId}/pdf-link`)),
+  gradeScale: () => data<any[]>(api.get('/exams/grade-scale')),
+  saveGradeScale: (grades: any[]) => api.put('/exams/grade-scale', { grades }),
+};
+
+export const timetableAPI = {
+  section: (sectionId: string) => data<any[]>(api.get(`/timetable/section/${sectionId}`)),
+  teacher: (staffId = 'me') => data<any[]>(api.get(`/timetable/teacher/${staffId}`)),
+  save: (sectionId: string, slots: any[]) => data(api.put(`/timetable/section/${sectionId}`, { slots })),
+};
+
 export const dashboardAPI = {
   overview: () => data(api.get('/dashboard/overview')),
 };
