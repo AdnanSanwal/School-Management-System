@@ -1,617 +1,332 @@
-# SchoolMS — School Management System
+# School ERP
 
-[![CI/CD](https://github.com/TemiKayode/School-Management-System/actions/workflows/ci-cd.yml/badge.svg)](https://github.com/TemiKayode/School-Management-System/actions/workflows/ci-cd.yml)
-![Status](https://img.shields.io/badge/status-active-success)
-![Node](https://img.shields.io/badge/node-20-brightgreen)
-![License](https://img.shields.io/badge/license-MIT-blue)
+A multi-school school management system: one installation serves many schools, each with its own data,
+staff, parents and fees. It comes with a web panel for the office and a mobile app for parents, teachers
+and owners.
 
-> **Production-ready · 10,000+ concurrent users · P99 < 350ms · Multi-gateway payments (Stripe · PayPal · Flutterwave) · Kubernetes autoscaling**
+**Roles:** Owner · Principal · Office admin · Accountant · Teacher · Parent · Student (plus a platform admin who onboards schools).
 
-A production-ready, full-stack school management platform with role-based dashboards for **Admin**, **Teacher**, **Student**, and **Parent**. Covers the full academic lifecycle — attendance, grades, fees, assignments, e-learning, timetable, transport, library, and real-time notifications — all in one system.
+| Area | What it does |
+|---|---|
+| Students & staff | Admissions with guardians and sibling linking, documents and photos, staff with app logins, classes/sections, subject teachers |
+| Attendance | Teachers mark their sections (one tap "all present"), staff attendance, parents alerted on absence, monthly low-attendance alerts |
+| Fees | Class-wise fee structure, monthly invoices, concessions (principal approves), counter collection with printable receipts, defaulters, late fees, reminders |
+| Online payment | Parent pays to a school JazzCash/Easypaisa/bank account and submits proof → accountant verifies; pluggable payment-gateway checkout |
+| Academics | Exams with date sheet → principal approves → marks entry → publish; grades, positions, PDF report cards; timetable with clash checks |
+| Communication | Daily diary/homework with attachments, notices by audience, holidays calendar, push notifications |
+| Office | Owner dashboard, approvals inbox, leave management, PDF/Excel reports, daily automation |
 
----
-
-## Live Demo
-
-> Deploy your own instance to Railway, Render, or Fly.io in under 10 minutes — see [Running with Docker Compose](#running-with-docker-compose) then push to your chosen platform.
-> Once deployed, update this section with your live URL and demo credentials below.
-
-| Role    | Email                  | Password    |
-|---------|------------------------|-------------|
-| Admin   | `admin@school.com`     | `Admin@123` |
-| Teacher | `teacher@school.com`   | `Admin@123` |
-| Student | `student@school.com`   | `Admin@123` |
-| Parent  | `parent@school.com`    | `Admin@123` |
+**Stack:** Node 20 + Express + Prisma (MySQL) · Next.js 14 web panel · Expo (React Native) mobile app · Redis (optional in development).
 
 ---
 
-## Screenshots
+## Contents
 
-### Login Page
-![Login Page](docs/screenshots/login.png)
-
-### Admin Dashboard
-![Admin Dashboard](docs/screenshots/admin-dashboard.png)
-
-### Teacher Dashboard
-![Teacher Dashboard](docs/screenshots/teacher-dashboard.png)
-
-### Student Dashboard
-![Student Dashboard](docs/screenshots/student-dashboard.png)
+- [Run it locally](#run-it-locally)
+- [Demo logins](#demo-logins)
+- [Mobile app](#mobile-app)
+- [Run with Docker](#run-with-docker)
+- [Configuration](#configuration)
+- [Adding a real school](#adding-a-real-school)
+- [Tests](#tests)
+- [Troubleshooting](#troubleshooting)
+- [Project layout](#project-layout)
 
 ---
 
-## Table of Contents
+## Run it locally
 
-- [Demo Credentials](#demo-credentials)
-- [Architecture](#architecture)
-- [Features](#features)
-- [Tech Stack](#tech-stack)
-- [Project Structure](#project-structure)
-- [Running Locally (Node)](#running-locally-node)
-- [Running with Docker Compose](#running-with-docker-compose)
-- [Kubernetes Deployment](#kubernetes-deployment)
-- [Environment Variables](#environment-variables)
-- [Monitoring & Logging](#monitoring--logging)
-- [Error Tracking (Sentry)](#error-tracking-sentry)
-- [CI/CD Pipeline](#cicd-pipeline)
-- [API Reference](#api-reference)
+### 1. Prerequisites
 
----
+| | Version | Notes |
+|---|---|---|
+| Node.js | 20 or newer | `node -v` |
+| npm | 10 or newer | comes with Node |
+| MySQL | 8.x | an empty database the app can create tables in |
+| Redis | 7.x | **optional** in development — without it the API uses an in-memory store and logs a harmless `Redis error ECONNREFUSED` |
 
-## Demo Credentials
-
-After running the seed (`npm run db:seed` or Docker Compose auto-seeds on first start):
-
-| Role    | Email                  | Password    |
-|---------|------------------------|-------------|
-| Admin   | `admin@school.com`     | `Admin@123` |
-| Teacher | `teacher@school.com`   | `Admin@123` |
-| Student | `student@school.com`   | `Admin@123` |
-
----
-
-## Key Engineering Decisions
-
-**Payment idempotency**
-Every payment request carries a UUID idempotency key generated client-side. The backend stores processed keys in Redis with a 24h TTL — duplicate requests within that window return the original response without recharging. Prevents double-billing on network retries across Stripe, PayPal, and Flutterwave.
-
-**Multi-gateway reconciliation**
-Each payment gateway (Stripe, PayPal, Flutterwave) has different webhook schemas, delivery guarantees, and failure modes. SchoolMS normalises all three into a single internal `PaymentEvent` struct and runs a nightly reconciliation job that compares internal records against gateway settlement reports — flagging discrepancies automatically.
-
-**PostgreSQL query optimisation**
-Term-end fee reports aggregate across 5 tables (students, enrolments, fees, payments, classes). Initial queries on seeded data took 4–8 seconds. After `EXPLAIN ANALYZE`: added composite indexes on `(student_id, term_id)` and `(payment_status, created_at)`, rewrote correlated subqueries as CTEs, reduced query time to < 200ms.
-
-**Real-time architecture (Socket.io)**
-Payment status updates use Socket.io rooms — one room per authenticated user session. The backend emits directly to the correct room on webhook receipt. No polling, no broadcast storms. Scales horizontally because Socket.io room state lives in Redis, not in-process memory.
-
-**Multi-tenant data isolation**
-Every database query is scoped by `school_id` extracted from the JWT. PostgreSQL Row-Level Security (RLS) policies enforce this at the database layer — a misconfigured API route cannot leak cross-tenant data even if the application-layer check is bypassed.
-
----
-
-## Architecture
-
-```
-Browser
-  │
-  ▼
-Nginx (port 80/443)
-  ├── /          → Next.js Frontend  (port 3000)
-  ├── /api/      → Express Backend   (port 5000)
-  └── /socket.io → Socket.IO (WS)
-
-Backend
-  ├── PostgreSQL  (primary DB)
-  ├── Redis       (cache + session blacklist)
-  ├── Socket.IO   (real-time events)
-  └── Notifications Microservice (port 5010)
-
-Monitoring
-  ├── Prometheus  (metrics scraping, port 9090)
-  ├── Grafana     (dashboards, port 3001)
-  └── ELK Stack   (logs: ES 9200, Kibana 5601)
-```
-
-```mermaid
-flowchart LR
-    U[User Browser] --> N[Nginx]
-    N --> F[Next.js Frontend]
-    N --> B[Express Backend]
-    F -- REST /api/v1 --> B
-    B --> P[(PostgreSQL)]
-    B --> R[(Redis)]
-    B <--> S[Socket.IO]
-    B --> NS[Notifications Svc]
-    NS --> R
-    B --> PR[Prometheus]
-    PR --> GF[Grafana]
-    B --> ES[Elasticsearch]
-    ES --> KB[Kibana]
-```
-
----
-
-## Features
-
-| Domain | Capabilities |
-|--------|--------------|
-| **Auth** | JWT + Refresh tokens, Google/Microsoft OAuth, MFA (TOTP), session blacklist |
-| **Roles** | Admin, Teacher, Student, Parent — RBAC on every endpoint |
-| **Students** | Enroll, assign to class, view CGPA, attendance, fee status, assignments |
-| **Teachers** | Class management, timetable, assignment creation & grading, workload overview |
-| **Attendance** | Mark daily attendance per class, student view, charts |
-| **Exams** | Create exams, enter results, auto-calculate CGPA, generate report cards |
-| **Assignments** | Create with due dates, student submission tracking, inline grading |
-| **Fees** | Fee structures, payments (Cash / Stripe / PayPal / Flutterwave), statements |
-| **Timetable** | Weekly slot management, teacher schedule, student day view |
-| **E-Learning** | Course creation, lessons, enrollment, progress tracking |
-| **Library** | Book catalogue, borrowing records |
-| **Transport** | Route management, student transport assignment |
-| **Notifications** | In-app, push (VAPID), Socket.IO real-time |
-| **Messaging** | Role-scoped in-app messaging |
-| **Monitoring** | Prometheus metrics, Grafana dashboards, ELK logs, Sentry errors |
-| **GDPR** | Consent audit, data export, deletion endpoints |
-
----
-
-## Tech Stack
-
-| Layer | Technology |
-|-------|-----------|
-| Frontend | Next.js 14 (App Router), React, TypeScript, Tailwind CSS |
-| State | TanStack Query (React Query), Zustand |
-| Backend | Node.js 20, Express, TypeScript |
-| ORM | Prisma 5 |
-| Database | PostgreSQL 16 |
-| Cache | Redis 7 |
-| Realtime | Socket.IO |
-| Auth | JWT, bcrypt, Passport (OAuth) |
-| Payments | Stripe, PayPal, Flutterwave |
-| Storage | AWS S3 |
-| Email | SendGrid |
-| SMS | Twilio |
-| Error tracking | Sentry (Node SDK + Next.js SDK) |
-| Metrics | Prometheus + Grafana |
-| Logs | Winston + ELK Stack |
-| Reverse proxy | Nginx |
-| Containers | Docker + Docker Compose |
-| Orchestration | Kubernetes (Kustomize) |
-| CI/CD | GitHub Actions → GHCR → K8s |
-
----
-
-## Project Structure
-
-```
-School-Management-System/
-├── backend/                   # Express API
-│   ├── prisma/                # Schema + migrations + seed
-│   ├── src/
-│   │   ├── modules/           # Feature modules (students, teachers, exams…)
-│   │   ├── middleware/        # auth, RBAC, GDPR, error handler
-│   │   ├── utils/             # Sentry, cache, logger, payments
-│   │   └── config/            # DB, Redis, Socket.IO
-│   └── Dockerfile
-├── frontend/                  # Next.js App Router
-│   ├── src/app/               # Pages (admin/, teacher/, student/)
-│   ├── src/components/        # Shared UI components
-│   ├── src/store/             # Zustand auth store
-│   ├── src/lib/               # API client, utils
-│   ├── public/                # favicon.svg, icons, webmanifest
-│   ├── sentry.*.config.ts     # Sentry (client/server/edge)
-│   └── Dockerfile
-├── services/
-│   └── notifications/         # Redis-backed notification microservice
-├── k8s/
-│   ├── base/                  # Namespace, Postgres, Redis, Backend, Frontend, Ingress
-│   └── overlays/production/   # Kustomize production overrides
-├── nginx/
-│   └── nginx.conf             # Reverse proxy (gzip, rate limiting, WebSocket)
-├── monitoring/
-│   ├── prometheus/            # prometheus.yml scrape config
-│   ├── grafana/               # Dashboard provisioning
-│   └── logstash/              # Pipeline config
-├── .github/workflows/
-│   └── ci-cd.yml              # Test → Docker → K8s deploy
-├── docker-compose.yml
-└── README.md
-```
-
----
-
-## Running Locally (Node)
-
-### Prerequisites
-
-- Node.js 20+
-- PostgreSQL 14+ running locally (or use Docker just for Postgres)
-- Redis running locally (or use Docker just for Redis)
-
-### 1. Clone & install
+### 2. Install
 
 ```bash
-git clone https://github.com/TemiKayode/School-Management-System.git
+git clone https://github.com/AdnanSanwal/School-Management-System.git
 cd School-Management-System
-npm install           # installs root workspace deps
+npm install
 ```
 
-### 2. Configure environment
+`npm install` at the root installs the backend and the web panel (they are npm workspaces).
+The mobile app is installed separately — see [Mobile app](#mobile-app).
+
+### 3. Configure
+
+Copy the template into the backend folder and edit it:
 
 ```bash
-# Copy backend env template
-cp backend/.env.example backend/.env   # then edit with your values
-# Copy frontend env
-cp frontend/.env.local.example frontend/.env.local  # or just set below
+cp .env.example backend/.env
 ```
 
-Minimum required values in `backend/.env`:
+The values you **must** set in `backend/.env`:
 
-```env
-DATABASE_URL=postgresql://sms_user:sms_pass@localhost:5432/school_db
-REDIS_URL=redis://localhost:6379
-JWT_SECRET=your-super-secret-at-least-32-chars
-REFRESH_TOKEN_SECRET=your-refresh-secret-at-least-32-chars
+```ini
+DATABASE_URL="mysql://root:YOUR_PASSWORD@localhost:3306/school_db"
+JWT_SECRET=...            # long random string
+REFRESH_TOKEN_SECRET=...  # a different long random string
+AES_SECRET_KEY=...        # 64 hex characters
 ```
 
-`frontend/.env.local`:
+Generate the secrets with:
 
-```env
-NEXT_PUBLIC_API_URL=http://localhost:5000/api/v1
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
 
-### 3. Setup database
+Everything else can stay as it is for local development. All settings are listed under [Configuration](#configuration).
+
+### 4. Create the database tables and demo data
+
+Run Prisma commands **from the `backend` folder**. It is where `prisma/schema.prisma` lives.
 
 ```bash
 cd backend
-npx prisma migrate deploy    # run all migrations
-npx prisma generate          # generate Prisma client
-npm run db:seed              # seed demo users, classes, timetable…
+npx prisma migrate deploy
+npm run db:seed
 cd ..
 ```
 
-### 4. Start both servers
+`migrate deploy` creates the database if it doesn't exist and applies every migration. `db:seed` adds two
+demo schools (see [Demo logins](#demo-logins)). It does nothing if the demo data is already there.
+
+To wipe the database and start again (this **deletes all data**):
+
+```bash
+cd backend
+npx prisma migrate reset
+```
+
+### 5. Start
 
 ```bash
 npm run dev
 ```
 
-This runs the root workspace script which starts both the backend (port 5000) and frontend (port 3000) concurrently.
+This starts both apps:
 
-Or start them individually:
-
-```bash
-# Terminal 1 — Backend
-cd backend && npm run dev
-
-# Terminal 2 — Frontend
-cd frontend && npm run dev
-```
-
-### 5. Open in browser
-
-| Service | URL |
-|---------|-----|
-| Frontend | http://localhost:3000 |
-| Backend API | http://localhost:5000/api/v1 |
-| Health check | http://localhost:5000/health |
-| Metrics | http://localhost:5000/metrics |
+| | URL |
+|---|---|
+| Web panel | http://localhost:3000 |
+| API | http://localhost:5000/api/v1 (health check: http://localhost:5000/health) |
 
 ---
 
-## Running with Docker Compose
+## Demo logins
 
-Docker Compose starts everything — database, cache, app, nginx, monitoring, and logging — with one command.
+Every demo account uses the password **`Admin@123`**.
 
-### Prerequisites
+| Email | Role | Lands on |
+|---|---|---|
+| `owner@school.com` | Owner | Dashboard |
+| `principal@school.com` | Principal | Dashboard, approvals, exams |
+| `admin@school.com` | Office admin | Admissions, fees, settings |
+| `accountant@school.com` | Accountant | Collect fee, collections, defaulters |
+| `teacher@school.com` | Teacher (class teacher of 8-A) | Attendance, diary, marks |
+| `parent@school.com` | Parent of two children (8-A and 6-B) | Mobile app / "My children" |
+| `student@school.com` | Student (8-A) | Mobile app |
+| `owner@riverside.com` | Owner of a second school | Used to check that schools can't see each other's data |
+| `superadmin@platform.com` | Platform admin | Onboards new schools (API only) |
 
-- Docker Desktop (or Docker Engine + Compose plugin)
-- Ports 80, 3000, 5000, 5432, 6379 must be free
+The demo school "Greenfield Public School" has 48 students in Classes 6–8, a month of attendance,
+fee invoices from August, notices, diary entries and a timetable for 8-A.
 
-### 1. Clone
+---
 
-```bash
-git clone https://github.com/TemiKayode/School-Management-System.git
-cd School-Management-System
-```
+## Mobile app
 
-### 2. Configure secrets
-
-The backend reads from `backend/.env`. Copy the example and fill in secrets:
-
-```bash
-cp backend/.env.example backend/.env
-```
-
-At minimum review/change:
-
-```env
-JWT_SECRET=change-me-to-32-plus-random-chars
-REFRESH_TOKEN_SECRET=change-me-to-another-secret
-```
-
-Payment and OAuth keys are optional for local testing — the app works without them.
-
-### 3. Start all services
+One Expo app for every role. What you see depends on the login: parents and students get the
+family app, teachers get the teacher app, and owners/principals/office get the dashboard and approvals.
 
 ```bash
-docker compose up -d
+cd mobile
+npm install --legacy-peer-deps
 ```
 
-First run downloads images and builds the backend and frontend. This takes 3–5 minutes.
+**In a browser** (quickest way to try it):
 
 ```bash
-# Watch startup logs
-docker compose logs -f backend frontend
-
-# Check all containers are healthy
-docker compose ps
+npm run web
 ```
 
-### 4. Run database migrations & seed
+Then open http://localhost:8081. The API already allows this address in development.
+
+**On a phone** with [Expo Go](https://expo.dev/go):
+
+1. Your phone and computer must be on the same Wi-Fi.
+2. Create `mobile/.env` with your computer's local IP address (find it with `ipconfig` on Windows or `ifconfig` on Mac/Linux):
+   ```ini
+   EXPO_PUBLIC_API_URL=http://192.168.1.20:5000/api/v1
+   ```
+3. Run `npm start` in `mobile/` and scan the QR code with Expo Go.
+
+For the Android emulator, use `http://10.0.2.2:5000/api/v1`.
+
+**Push notifications on phones** need an Expo account and a development build: Expo Go on Android no
+longer receives remote push. Create an EAS project, put its id in `mobile/.env` as
+`EXPO_PUBLIC_PROJECT_ID=...`, and build with `eas build --profile development`. Everything else works without push:
+notifications are always saved and shown in the app.
+
+---
+
+## Run with Docker
+
+Requires Docker Desktop (or Docker Engine with Compose v2). This runs MySQL, Redis, the API and the web panel:
+
+```bash
+cp .env.example backend/.env       # then set JWT_SECRET, REFRESH_TOKEN_SECRET, AES_SECRET_KEY
+docker compose up -d --build mysql redis backend frontend
+```
+
+The first time only, create the tables and (optionally) load the demo data:
 
 ```bash
 docker compose exec backend npx prisma migrate deploy
-docker compose exec backend npx prisma db seed
+docker compose exec backend node dist/database/seed.js
 ```
 
-### 5. Access services
+| | URL |
+|---|---|
+| Web panel | http://localhost:3000 |
+| API | http://localhost:5000 |
+| MySQL | `localhost:3307`, user `sms_user` / password `sms_pass` |
 
-| Service | URL |
-|---------|-----|
-| App (via Nginx) | http://localhost |
-| Frontend (direct) | http://localhost:3000 |
-| Backend API (direct) | http://localhost:5000/api/v1 |
-| Grafana | http://localhost:3001 (admin / admin) |
-| Prometheus | http://localhost:9090 |
-| Kibana | http://localhost:5601 |
-| Elasticsearch | http://localhost:9200 |
+Compose sets `DATABASE_URL`, `REDIS_URL` and `UPLOAD_DIR` for the containers itself, overriding
+`backend/.env`. Uploaded files are kept in the `uploads_data` volume. Change the database passwords with
+`MYSQL_PASSWORD` / `MYSQL_ROOT_PASSWORD` environment variables before the first start.
 
-### Useful Docker commands
+`docker compose up -d` with no service names also starts the optional monitoring stack (nginx,
+Prometheus, Grafana, ELK).
 
 ```bash
-# Stop all services
-docker compose down
-
-# Stop and remove volumes (wipes database!)
-docker compose down -v
-
-# Rebuild after code changes
-docker compose build --no-cache backend
-docker compose up -d backend
-
-# View logs for a specific service
-docker compose logs -f backend
-docker compose logs -f nginx
-
-# Open a shell in the backend container
-docker compose exec backend sh
-
-# Run Prisma Studio (DB browser)
-docker compose exec backend npx prisma studio
+docker compose logs -f backend      # follow API logs
+docker compose down                 # stop
+docker compose down -v              # stop and DELETE the database and uploads
 ```
 
-### Lite mode (no monitoring stack)
-
-To skip ELK + Prometheus + Grafana and save memory:
-
-```bash
-docker compose up -d postgres redis backend frontend nginx
-```
+> The Kubernetes manifests in `k8s/` were written for the earlier PostgreSQL version and have not been updated yet.
 
 ---
 
-## Kubernetes Deployment
+## Configuration
 
-Kubernetes manifests are in `k8s/` using [Kustomize](https://kustomize.io/).
+Backend settings live in `backend/.env` (template: `.env.example`).
 
-### Prerequisites
+| Setting | Required | What it does |
+|---|---|---|
+| `DATABASE_URL` | ✔ | MySQL connection string |
+| `JWT_SECRET`, `REFRESH_TOKEN_SECRET` | ✔ | Sign login tokens. Use different long random values |
+| `AES_SECRET_KEY` | ✔ | 64 hex chars, encrypts sensitive fields |
+| `PORT` | | API port, default `5000` |
+| `FRONTEND_URL` | | Web panel address(es), comma-separated. Used for CORS and password-reset links |
+| `BACKEND_URL` | in production | Public address of the API. Used in signed file/report-card links and payment-gateway callbacks |
+| `REDIS_URL` | in production | Without Redis, logins don't survive an API restart and logout isn't shared between servers |
+| `UPLOAD_DIR` | | Where uploaded documents and photos are stored. Default `backend/uploads` |
+| `FILE_URL_SECRET` | | Signs file links. Defaults to `JWT_SECRET` |
+| `PAYMENT_GATEWAY` | | Online checkout provider. `test` = built-in simulated gateway for development (refused in production). Empty = parents pay to school accounts and submit proof |
+| `PAYMENT_GATEWAY_SECRET` | | Secret for gateway callbacks. Defaults to `JWT_SECRET` |
+| `JOBS_ENABLED`, `JOBS_RUN_HOUR` | | Daily automation after this hour, school time: late fees every day; fee reminders and low-attendance alerts on Mondays. Default on, 9 |
+| `PUSH_DISABLED` | | `true` skips sending push (notifications are still saved in the app) |
+| `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` | | Browser push. Generate with `npx web-push generate-vapid-keys` |
+| `SENDGRID_API_KEY`, `EMAIL_FROM` | | Password-reset and broadcast emails |
+| `TWILIO_*` | | SMS for broadcasts |
+| `GOOGLE_CLIENT_*`, `MS_CLIENT_*` | | "Sign in with Google/Microsoft" for accounts the school already created |
+| `SENTRY_DSN` | | Error tracking |
 
-- `kubectl` connected to a cluster (local: `minikube`, `kind`, or cloud: EKS/GKE/AKS)
-- `kustomize` CLI (or use `kubectl apply -k`)
-- Container images pushed to a registry (see CI/CD section)
+Web panel (`frontend/.env.local`, optional): `NEXT_PUBLIC_API_URL`, default `http://localhost:5000/api/v1`.
+Mobile (`mobile/.env`): `EXPO_PUBLIC_API_URL`, `EXPO_PUBLIC_PROJECT_ID`.
 
-### 1. Apply base manifests (local/dev)
-
-```bash
-# Creates: namespace, postgres, redis, backend, frontend, ingress
-kubectl apply -k k8s/base/
-```
-
-### 2. Verify pods are running
-
-```bash
-kubectl get pods -n schoolms
-kubectl get services -n schoolms
-kubectl get ingress -n schoolms
-```
-
-### 3. Run migrations inside the cluster
-
-```bash
-kubectl exec -n schoolms deploy/backend -- npx prisma migrate deploy
-kubectl exec -n schoolms deploy/backend -- npx prisma db seed
-```
-
-### 4. Production overlay
-
-The production overlay in `k8s/overlays/production/` sets:
-- Image names from GHCR (`ghcr.io/your-org/schoolms-backend:sha`)
-- 3 backend replicas, 2 frontend replicas
-
-Update the org name first:
-
-```bash
-# Edit k8s/overlays/production/kustomization.yaml
-# Replace "your-org" with your GitHub username/org
-
-kubectl apply -k k8s/overlays/production/
-```
-
-### 5. Update secrets for production
-
-```bash
-# Replace the example secrets before applying
-kubectl create secret generic backend-secret \
-  --namespace schoolms \
-  --from-literal=JWT_SECRET='your-real-secret' \
-  --from-literal=REFRESH_TOKEN_SECRET='your-real-refresh-secret' \
-  --from-literal=SENTRY_DSN='your-sentry-dsn' \
-  --dry-run=client -o yaml | kubectl apply -f -
-```
-
-### 6. Auto-scaling
-
-HPAs are pre-configured:
-- Backend: 2–10 pods, scales at 70% CPU / 80% memory
-- Frontend: 2–6 pods, scales at 70% CPU
-
-```bash
-kubectl get hpa -n schoolms
-```
+**School-level settings** (late fee amount and grace days, low-attendance threshold, payment accounts,
+academic years, timezone) are set in the web panel under **School settings**, not in `.env`.
 
 ---
 
-## Environment Variables
+## Adding a real school
 
-### Backend (`backend/.env`)
+Schools are created by the platform admin through the API. There is no screen for this yet.
 
-| Variable | Description | Required |
-|----------|-------------|----------|
-| `DATABASE_URL` | PostgreSQL connection string | Yes |
-| `REDIS_URL` | Redis connection string | Yes |
-| `JWT_SECRET` | Access token signing secret (32+ chars) | Yes |
-| `REFRESH_TOKEN_SECRET` | Refresh token secret (32+ chars) | Yes |
-| `SENTRY_DSN` | Sentry error tracking DSN | Recommended |
-| `STRIPE_SECRET_KEY` | Stripe payments | Optional |
-| `PAYPAL_CLIENT_ID` / `PAYPAL_CLIENT_SECRET` | PayPal payments | Optional |
-| `FLUTTERWAVE_SECRET_KEY` | Flutterwave payments | Optional |
-| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Google OAuth | Optional |
-| `MS_CLIENT_ID` / `MS_CLIENT_SECRET` | Microsoft OAuth | Optional |
-| `SENDGRID_API_KEY` | Email delivery | Optional |
-| `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` | SMS | Optional |
-| `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | File uploads to S3 | Optional |
-| `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` | Web Push notifications | Optional |
-
-### Frontend (`frontend/.env.local`)
-
-| Variable | Description | Required |
-|----------|-------------|----------|
-| `NEXT_PUBLIC_API_URL` | Backend API URL | Yes |
-| `NEXT_PUBLIC_SENTRY_DSN` | Sentry DSN (browser) | Recommended |
-| `SENTRY_AUTH_TOKEN` | For source map uploads in CI | Optional |
-
----
-
-## Monitoring & Logging
-
-### Prometheus + Grafana
-
-The backend exposes `/metrics` (Prometheus format). Prometheus scrapes it every 15s.
-
-- Open Grafana at http://localhost:3001
-- Default credentials: `admin` / `admin`
-- Prometheus datasource is pre-provisioned
-
-### ELK Stack
-
-- Backend logs via Winston → Logstash pipeline → Elasticsearch
-- Open Kibana at http://localhost:5601
-- Create an index pattern: `logs-*`
-
-### Health endpoint
+1. Create a platform admin. The demo seed creates `superadmin@platform.com`. For a clean install, run the seed once and change that password, or insert a `SUPER_ADMIN` user yourself.
+2. Log in and create the school with its first academic year and owner:
 
 ```bash
-curl http://localhost:5000/health
-# {"status":"ok","timestamp":"2025-04-26T..."}
+TOKEN=$(curl -s -X POST http://localhost:5000/api/v1/auth/login -H "Content-Type: application/json" \
+  -d '{"email":"superadmin@platform.com","password":"Admin@123"}' | node -pe "JSON.parse(require('fs').readFileSync(0)).data.accessToken")
+
+curl -X POST http://localhost:5000/api/v1/platform/schools \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{
+    "name": "City Grammar School", "code": "city-grammar",
+    "academicYear": { "name": "2026-27", "startDate": "2026-04-01", "endDate": "2027-03-31" },
+    "owner": { "name": "School Owner", "email": "owner@citygrammar.pk", "password": "ChangeMe@2026" }
+  }'
 ```
 
----
-
-## Error Tracking (Sentry)
-
-Both the backend (Node.js SDK) and frontend (Next.js SDK) send errors to Sentry.
-
-### Backend
-
-`SENTRY_DSN` in `backend/.env` — already wired up in `src/utils/sentry.ts`.
-
-### Frontend
-
-`NEXT_PUBLIC_SENTRY_DSN` in `frontend/.env.local` — configured in:
-- `sentry.client.config.ts` (browser errors + Session Replay)
-- `sentry.server.config.ts` (SSR/API route errors)
-- `sentry.edge.config.ts` (Edge runtime)
-
-To upload source maps in CI add `SENTRY_AUTH_TOKEN` to GitHub secrets.
+3. The owner signs in to the web panel and sets things up in this order: **Users & logins** (principal, admin,
+   accountant) → **School settings** (contact details, late fee, payment accounts) → **Classes**
+   (classes, sections, subjects) → **Staff** (teachers, with app logins) → **Fee structure** →
+   **Students → New admission** (guardian logins give parents the app) → **Invoices → Generate month**.
 
 ---
 
-## CI/CD Pipeline
+## Tests
 
-`.github/workflows/ci-cd.yml` runs on every push to `main`:
-
-```
-Push to main
-  │
-  ├── test-backend    → install, prisma generate, build, npm test
-  ├── test-frontend   → install, next build
-  │
-  └── docker (after tests pass)
-        ├── Build & push backend image  → ghcr.io/your-org/schoolms-backend:sha
-        ├── Build & push frontend image → ghcr.io/your-org/schoolms-frontend:sha
-        │
-        └── deploy (production environment gate)
-              └── kubectl apply -k k8s/overlays/production/
+```bash
+npm test --workspace=backend
 ```
 
-### Required GitHub secrets
+This runs the unit and API tests, with no database needed. To also run the end-to-end tests against your MySQL:
 
-| Secret | Value |
-|--------|-------|
-| `KUBECONFIG` | Base64-encoded kubeconfig for your cluster |
-| `SENTRY_AUTH_TOKEN` | Sentry token for source map upload (optional) |
+```bash
+# bash
+RUN_DB_TESTS=1 npm test --workspace=backend
+# PowerShell
+$env:RUN_DB_TESTS=1; npm test --workspace=backend
+```
 
-Images are pushed to GitHub Container Registry (GHCR) automatically using `GITHUB_TOKEN` (no extra secret needed).
+The database tests create their own throwaway schools and delete them afterwards. They don't touch the demo data.
+
+Type checks: `npx tsc --noEmit -p backend`, `npx tsc --noEmit -p frontend`, and `npm run typecheck` in `mobile/`.
+
+---
+
+## Troubleshooting
+
+| Problem | Fix |
+|---|---|
+| `Could not find Prisma Schema` | Run Prisma commands inside `backend/`, not the repo root |
+| `the URL must start with the protocol postgresql://` (or the client looks out of date) | The generated Prisma client is stale. Run `npx prisma generate` in `backend/` and restart |
+| `Redis error ECONNREFUSED` in the API log | Harmless in development: the API switched to its in-memory store. Start Redis or set `REDIS_URL` to silence it |
+| `npm error Missing script: "devnpx"` | Two commands typed on one line. Run `npm run dev` on its own |
+| Port 3000 or 5000 already in use | Stop the other process, or change `PORT` / run Next on another port and add it to `FRONTEND_URL` |
+| The web panel loads but every request fails | Check `NEXT_PUBLIC_API_URL`, and that the panel's address is listed in `FRONTEND_URL` |
+| Phone app can't reach the server | Use your computer's LAN IP in `EXPO_PUBLIC_API_URL` (not `localhost`), same Wi-Fi, firewall allows port 5000 |
+| `P2034` / deadlock warnings in the log | Expected under concurrent writes. The API retries these automatically |
 
 ---
 
-## API Reference
+## Project layout
 
-Base URL: `http://localhost:5000/api/v1`
+```
+backend/            Express API (TypeScript)
+  prisma/           schema.prisma + migrations
+  src/modules/      one folder per feature (students, fees, exams, payments, …)
+  src/config/       database (tenant-scoped Prisma client), tenancy, redis, socket
+  src/jobs/         daily automation
+  src/database/     demo seed
+frontend/           Next.js web panel
+mobile/             Expo app (parents, students, teachers, owners)
+docs/ERP_V2.md      developer guide: tenancy rules, permissions, module conventions, phase notes
+docker-compose.yml  MySQL, Redis, API, web panel (+ optional monitoring stack)
+```
 
-All protected endpoints require: `Authorization: Bearer <access_token>`
-
-### Auth
-
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/auth/login` | Login → returns `accessToken`, `refreshToken`, `user` |
-| POST | `/auth/refresh` | Refresh access token |
-| POST | `/auth/logout` | Blacklist token |
-| POST | `/auth/register` | Register new user |
-
-### Key endpoints
-
-| Resource | Base Path | Notes |
-|----------|-----------|-------|
-| Students | `/students` | CRUD, `GET /students/:id/grades`, `/fees`, `/attendance` |
-| Teachers | `/teachers` | CRUD, stats at `/teachers/stats` |
-| Classes | `/classes` | CRUD, `/classes/my` for teacher's classes |
-| Timetable | `/timetable` | CRUD, `/timetable/my` for current user's slots |
-| Exams | `/exams` | CRUD, `/exams/my-results` for student results |
-| Assignments | `/assignments` | CRUD, submissions, grading |
-| Attendance | `/attendance` | Mark and query, `?mine=true` for student view |
-| Fees | `/fees` | Fee structures + `/fees/my` for student payments |
-| Dashboard | `/dashboard` | Admin stats; `/dashboard/teacher` for teacher stats |
-| Announcements | `/announcements` | Broadcast messages |
-| Notifications | `/notifications` | In-app notification feed |
-| Library | `/library` | Books + borrowing records |
-| Transport | `/transport` | Routes + assignments |
-| E-Learning | `/elearning` | Courses + lessons + enrollment |
-
----
+Anyone writing code should read [`docs/ERP_V2.md`](docs/ERP_V2.md) first. It explains how school data is kept
+separate (every query is scoped to the signed-in school automatically) and the rules new modules must follow.
 
 ## License
 
-MIT — free for educational and school use. Attribution appreciated.
+MIT

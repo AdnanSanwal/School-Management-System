@@ -1,22 +1,25 @@
 
 services:
   # ─── Core Data ──────────────────────────────────────────────────────────────
-  postgres:
-    image: postgres:16-alpine
-    container_name: sms_postgres
+  mysql:
+    image: mysql:8.4
+    container_name: sms_mysql
     restart: unless-stopped
     environment:
-      POSTGRES_USER: sms_user
-      POSTGRES_PASSWORD: sms_pass
-      POSTGRES_DB: school_db
-    ports: ['5432:5432']
+      MYSQL_DATABASE: school_db
+      MYSQL_USER: sms_user
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-sms_pass}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-sms_root_pass}
+    # 3307 on the host so it doesn't clash with a local MySQL on 3306
+    ports: ['3307:3306']
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - mysql_data:/var/lib/mysql
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U sms_user -d school_db']
+      test: ['CMD-SHELL', 'mysqladmin ping -h 127.0.0.1 -u root -p$$MYSQL_ROOT_PASSWORD --silent']
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 30s
 
   redis:
     image: redis:7-alpine
@@ -41,16 +44,20 @@ services:
     container_name: sms_backend
     restart: unless-stopped
     depends_on:
-      postgres:
+      mysql:
         condition: service_healthy
       redis:
         condition: service_healthy
     env_file: ./backend/.env
     environment:
       NODE_ENV: production
-      DATABASE_URL: postgresql://sms_user:sms_pass@postgres:5432/school_db?schema=public
+      DATABASE_URL: mysql://sms_user:${MYSQL_PASSWORD:-sms_pass}@mysql:3306/school_db
       REDIS_URL: redis://redis:6379
       FRONTEND_URL: http://localhost:3000
+      BACKEND_URL: http://localhost:5000
+      UPLOAD_DIR: /app/uploads
+    volumes:
+      - uploads_data:/app/uploads
     ports: ['5000:5000']
     healthcheck:
       test: ['CMD-SHELL', 'wget -qO- http://localhost:5000/health || exit 1']
@@ -205,7 +212,8 @@ services:
   # sentry: ...
 
 volumes:
-  postgres_data:
+  mysql_data:
+  uploads_data:
   redis_data:
   prometheus_data:
   grafana_data:
