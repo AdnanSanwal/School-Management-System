@@ -1,12 +1,37 @@
 import { Router, Request, Response } from 'express';
 import crypto from 'crypto';
 import axios from 'axios';
-import prisma from '../../config/database';
-import { signToken, signRefreshToken } from '../../utils/jwt';
-import { getRedis } from '../../config/redis';
-import { sendError } from '../../utils/apiResponse';
+import { basePrisma } from '../../config/database';
+import { issueTokens } from './auth.service';
 
 const router = Router();
+
+// OAuth only signs in accounts a school has already created — it never creates
+// users, because a new account would have no school and no vetted role.
+async function signInExisting(email: string, provider: 'GOOGLE' | 'MICROSOFT', oauthId: string, avatar?: string) {
+  const user = await basePrisma.user.findUnique({ where: { email: email.toLowerCase() } });
+  if (!user || !user.isActive) return null;
+  if (user.oauthId && user.oauthId !== oauthId) return null;
+  if (!user.oauthId) {
+    await basePrisma.user.update({
+      where: { id: user.id },
+      data: { oauthProvider: provider, oauthId, ...(avatar && !user.avatar ? { avatar } : {}) },
+    });
+  }
+  if (user.role !== 'SUPER_ADMIN') {
+    const school = user.schoolId
+      ? await basePrisma.school.findUnique({ where: { id: user.schoolId }, select: { isActive: true } })
+      : null;
+    if (!school?.isActive) return null;
+  }
+  return { user, ...(await issueTokens(user)) };
+}
+
+function redirectWithTokens(res: Response, r: NonNullable<Awaited<ReturnType<typeof signInExisting>>>) {
+  // Tokens go in the URL fragment so they are not sent to servers or written to access logs.
+  const frag = new URLSearchParams({ accessToken: r.accessToken, refreshToken: r.refreshToken, role: r.user.role });
+  res.redirect(`${process.env.FRONTEND_URL}/oauth-callback#${frag}`);
+}
 
 // ─── Google OAuth 2.0 ────────────────────────────────────────────────────────
 
@@ -49,40 +74,11 @@ router.get('/google/callback', async (req: Request, res: Response) => {
       headers: { Authorization: `Bearer ${access_token}` },
     });
 
-    const { email, name, picture, sub: googleId } = userInfo.data;
+    const { email, picture, sub: googleId } = userInfo.data;
 
-    // Upsert user
-    let user = await prisma.user.findUnique({ where: { email } });
-    if (!user) {
-      user = await prisma.user.create({
-        data: {
-          email,
-          name,
-          password: crypto.randomBytes(32).toString('hex'), // unusable password
-          role: 'STUDENT',
-          avatar: picture,
-          oauthProvider: 'GOOGLE',
-          oauthId: googleId,
-        },
-      });
-    } else if (!user.oauthId) {
-      user = await prisma.user.update({
-        where: { id: user.id },
-        data: { oauthProvider: 'GOOGLE', oauthId: googleId, avatar: picture },
-      });
-    }
-
-    const payload = { id: user.id, role: user.role, email: user.email };
-    const accessToken = signToken(payload);
-    const refreshToken = signRefreshToken(payload);
-
-    const redis = getRedis();
-    await redis.setex(`refresh:${user.id}`, 30 * 24 * 3600, refreshToken);
-
-    // Redirect to frontend with tokens in query (frontend stores them)
-    res.redirect(
-      `${process.env.FRONTEND_URL}/oauth-callback?accessToken=${accessToken}&refreshToken=${refreshToken}&role=${user.role}`
-    );
+    const result = await signInExisting(email, 'GOOGLE', googleId, picture);
+    if (!result) return res.redirect(`${process.env.FRONTEND_URL}/login?error=no_account`);
+    redirectWithTokens(res, result);
   } catch (err) {
     console.error('OAuth error', err);
     res.redirect(`${process.env.FRONTEND_URL}/login?error=oauth_failed`);
@@ -128,32 +124,12 @@ router.get('/microsoft/callback', async (req: Request, res: Response) => {
       headers: { Authorization: `Bearer ${tokenRes.data.access_token}` },
     });
 
-    const { mail, displayName, id: msId } = userInfo.data;
+    const { mail, id: msId } = userInfo.data;
     const email = mail || userInfo.data.userPrincipalName;
 
-    let user = await prisma.user.findUnique({ where: { email } });
-    if (!user) {
-      user = await prisma.user.create({
-        data: {
-          email,
-          name: displayName,
-          password: crypto.randomBytes(32).toString('hex'),
-          role: 'STUDENT',
-          oauthProvider: 'MICROSOFT',
-          oauthId: msId,
-        },
-      });
-    }
-
-    const payload = { id: user.id, role: user.role, email: user.email };
-    const accessToken = signToken(payload);
-    const refreshToken = signRefreshToken(payload);
-    const redis = getRedis();
-    await redis.setex(`refresh:${user.id}`, 30 * 24 * 3600, refreshToken);
-
-    res.redirect(
-      `${process.env.FRONTEND_URL}/oauth-callback?accessToken=${accessToken}&refreshToken=${refreshToken}&role=${user.role}`
-    );
+    const result = await signInExisting(email, 'MICROSOFT', msId);
+    if (!result) return res.redirect(`${process.env.FRONTEND_URL}/login?error=no_account`);
+    redirectWithTokens(res, result);
   } catch (err) {
     console.error('MS OAuth error', err);
     res.redirect(`${process.env.FRONTEND_URL}/login?error=oauth_failed`);

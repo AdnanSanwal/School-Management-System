@@ -1,10 +1,12 @@
 import { Response, NextFunction } from 'express';
-import { Prisma } from '@prisma/client';
+import { Role } from '@prisma/client';
 import { AuthRequest } from '../../middleware/auth';
 import prisma from '../../config/database';
 import { sendSuccess } from '../../utils/apiResponse';
 import { getIO } from '../../config/socket';
 import { sendEmail, sendSMS } from '../../utils/email';
+import { schoolRoom } from '../../config/socket';
+import { currentSchoolId } from '../../config/tenancy';
 
 export async function list(req: AuthRequest, res: Response, next: NextFunction) {
   try {
@@ -14,41 +16,37 @@ export async function list(req: AuthRequest, res: Response, next: NextFunction) 
       take: 50,
     });
     return sendSuccess(res, notifications);
-  } catch (err) {
-    // Handle environments where migrations are pending to avoid hard dashboard failure.
-    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2021') {
-      return sendSuccess(res, []);
-    }
-    next(err);
-  }
+  } catch (err) { next(err); }
 }
+
+const BROADCAST_ROLES = new Set<Role>(['OWNER', 'PRINCIPAL', 'ADMIN', 'ACCOUNTANT', 'TEACHER', 'PARENT', 'STUDENT']);
 
 export async function broadcast(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const { title, message, roles, channels } = req.body;
+    const { title, message, roles, channels } = req.body as {
+      title: string; message: string; roles?: Role[]; channels?: string[];
+    };
+    const targetRoles = (roles ?? []).filter((r) => BROADCAST_ROLES.has(r));
     const users = await prisma.user.findMany({
-      where: roles?.length ? { role: { in: roles } } : {},
+      where: { isActive: true, ...(targetRoles.length ? { role: { in: targetRoles } } : { role: { not: 'SUPER_ADMIN' } }) },
       select: { id: true, email: true, phone: true },
     });
 
-    // Create in-app notifications
     await prisma.notification.createMany({
-      data: users.map((u) => ({ userId: u.id, title, message })),
+      data: users.map((u) => ({ schoolId: currentSchoolId(), userId: u.id, type: 'BROADCAST', title, body: message })),
     });
 
-    // Push via Socket.IO
     if (channels?.includes('socket')) {
-      roles?.forEach((r: string) => getIO().to(`role:${r}`).emit('notification', { title, message }));
+      const io = getIO();
+      const schoolId = req.user!.schoolId!;
+      if (targetRoles.length) targetRoles.forEach((r) => io.to(schoolRoom(schoolId, r)).emit('notification', { title, message }));
+      else io.to(schoolRoom(schoolId)).emit('notification', { title, message });
     }
-
-    // Email
     if (channels?.includes('email')) {
       await Promise.allSettled(users.map((u) => sendEmail({ to: u.email, subject: title, html: `<p>${message}</p>` })));
     }
-
-    // SMS
     if (channels?.includes('sms')) {
-      await Promise.allSettled(users.filter(u => u.phone).map((u) => sendSMS(u.phone!, message)));
+      await Promise.allSettled(users.filter((u) => u.phone).map((u) => sendSMS(u.phone!, message)));
     }
 
     return sendSuccess(res, null, `Notification sent to ${users.length} users`);
@@ -57,14 +55,21 @@ export async function broadcast(req: AuthRequest, res: Response, next: NextFunct
 
 export async function markRead(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    await prisma.notification.update({ where: { id: req.params.id }, data: { read: true } });
+    // updateMany + userId filter: a user can only mark their own notifications.
+    await prisma.notification.updateMany({
+      where: { id: req.params.id, userId: req.user!.id },
+      data: { readAt: new Date() },
+    });
     return sendSuccess(res, null, 'Marked as read');
   } catch (err) { next(err); }
 }
 
 export async function markAllRead(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    await prisma.notification.updateMany({ where: { userId: req.user!.id, read: false }, data: { read: true } });
+    await prisma.notification.updateMany({
+      where: { userId: req.user!.id, readAt: null },
+      data: { readAt: new Date() },
+    });
     return sendSuccess(res, null, 'All notifications marked as read');
   } catch (err) { next(err); }
 }

@@ -2,11 +2,10 @@ import { Router } from 'express';
 import * as authController from './auth.controller';
 import { authenticate } from '../../middleware/auth';
 import { validate } from '../../middleware/validate';
-import { loginSchema, registerSchema, changePasswordSchema } from './auth.schema';
+import { loginSchema, changePasswordSchema } from './auth.schema';
 
 const router = Router();
 
-router.post('/register', validate(registerSchema), authController.register);
 router.post('/login', validate(loginSchema), authController.login);
 router.post('/refresh', authController.refreshToken);
 router.post('/logout', authenticate, authController.logout);

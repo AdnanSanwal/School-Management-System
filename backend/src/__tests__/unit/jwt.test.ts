@@ -5,7 +5,7 @@ process.env.REFRESH_TOKEN_SECRET = 'test-refresh-secret-32chars-min!!';
 process.env.JWT_EXPIRES_IN = '1h';
 process.env.REFRESH_TOKEN_EXPIRES_IN = '7d';
 
-const payload = { id: 'user-123', role: 'ADMIN', email: 'admin@test.com' };
+const payload = { id: 'user-123', role: 'ADMIN', email: 'admin@test.com', schoolId: 'school-1' };
 
 describe('JWT utilities', () => {
   it('signs and verifies an access token', () => {

@@ -4,7 +4,9 @@ import { ZodSchema, ZodError } from 'zod';
 export function validate(schema: ZodSchema) {
   return (req: Request, res: Response, next: NextFunction) => {
     try {
-      schema.parse({ body: req.body, query: req.query, params: req.params });
+      const parsed = schema.parse({ body: req.body, query: req.query, params: req.params }) as { body?: unknown };
+      // Keep zod's output (coerced dates/numbers, stripped unknown keys) for the handler.
+      if (parsed && parsed.body !== undefined) req.body = parsed.body;
       next();
     } catch (err) {
       if (err instanceof ZodError) {

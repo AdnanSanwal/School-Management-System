@@ -2,14 +2,6 @@ import { Request, Response, NextFunction } from 'express';
 import * as authService from './auth.service';
 import { AuthRequest } from '../../middleware/auth';
 import { sendSuccess, sendError } from '../../utils/apiResponse';
-import prisma from '../../config/database';
-
-export async function register(req: Request, res: Response, next: NextFunction) {
-  try {
-    const user = await authService.register(req.body);
-    return sendSuccess(res, user, 'Registration successful', 201);
-  } catch (err) { next(err); }
-}
 
 export async function login(req: Request, res: Response, next: NextFunction) {
   try {
@@ -80,10 +72,6 @@ export async function disableMFA(req: AuthRequest, res: Response, next: NextFunc
 
 export async function getMe(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const user = await prisma.user.findUniqueOrThrow({
-      where: { id: req.user!.id },
-      select: { id: true, name: true, email: true, role: true, phone: true, avatar: true, mfaEnabled: true, createdAt: true },
-    });
-    return sendSuccess(res, user);
+    return sendSuccess(res, await authService.getMe(req.user!.id));
   } catch (err) { next(err); }
 }

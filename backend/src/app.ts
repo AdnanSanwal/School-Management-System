@@ -11,28 +11,12 @@ import { metricsMiddleware, metricsHandler } from './utils/metrics';
 import { errorHandler } from './middleware/errorHandler';
 import { notFound } from './middleware/notFound';
 
-// Routes
+// Routes — ERP v2. Domain modules are added phase by phase (see docs/ERP_V2.md).
 import authRoutes from './modules/auth/auth.routes';
 import oauthRoutes from './modules/auth/oauth.routes';
-import studentRoutes from './modules/students/student.routes';
-import teacherRoutes from './modules/teachers/teacher.routes';
-import classRoutes from './modules/classes/class.routes';
-import attendanceRoutes from './modules/attendance/attendance.routes';
-import examRoutes from './modules/exams/exam.routes';
-import feeRoutes from './modules/fees/fee.routes';
-import assignmentRoutes from './modules/assignments/assignment.routes';
-import timetableRoutes from './modules/timetable/timetable.routes';
+import platformRoutes from './modules/platform/platform.routes';
 import notificationRoutes from './modules/notifications/notification.routes';
-import libraryRoutes from './modules/library/library.routes';
-import transportRoutes from './modules/transport/transport.routes';
-import reportRoutes from './modules/reports/report.routes';
-import messageRoutes from './modules/messages/message.routes';
-import dashboardRoutes from './modules/dashboard/dashboard.routes';
-import announcementRoutes from './modules/announcements/announcement.routes';
-import elearningRoutes from './modules/elearning/elearning.routes';
-import parentRoutes from './modules/parent/parent.routes';
 import pushRoutes from './modules/push/push.routes';
-import gdprRoutes from './modules/gdpr/gdpr.routes';
 
 const app = express();
 
@@ -92,25 +76,9 @@ app.get('/metrics', metricsHandler);
 const api = '/api/v1';
 app.use(`${api}/auth`, authRoutes);
 app.use(`${api}/auth/oauth`, oauthRoutes);
-app.use(`${api}/students`, studentRoutes);
-app.use(`${api}/teachers`, teacherRoutes);
-app.use(`${api}/classes`, classRoutes);
-app.use(`${api}/attendance`, attendanceRoutes);
-app.use(`${api}/exams`, examRoutes);
-app.use(`${api}/fees`, feeRoutes);
-app.use(`${api}/assignments`, assignmentRoutes);
-app.use(`${api}/timetable`, timetableRoutes);
+app.use(`${api}/platform`, platformRoutes);
 app.use(`${api}/notifications`, notificationRoutes);
 app.use(`${api}/push`, pushRoutes);
-app.use(`${api}/library`, libraryRoutes);
-app.use(`${api}/transport`, transportRoutes);
-app.use(`${api}/reports`, reportRoutes);
-app.use(`${api}/messages`, messageRoutes);
-app.use(`${api}/dashboard`, dashboardRoutes);
-app.use(`${api}/announcements`, announcementRoutes);
-app.use(`${api}/elearning`, elearningRoutes);
-app.use(`${api}/parent`, parentRoutes);
-app.use(`${api}/gdpr`, gdprRoutes);
 
 // Sentry v8 error handler (must be before custom error handler)
 setupSentryErrorHandler(app);

@@ -4,16 +4,22 @@ export interface JwtPayload {
   id: string;
   role: string;
   email: string;
+  /** null only for SUPER_ADMIN (platform operator). */
+  schoolId: string | null;
+}
+
+function clean({ id, role, email, schoolId }: JwtPayload): JwtPayload {
+  return { id, role, email, schoolId: schoolId ?? null };
 }
 
 export function signToken(payload: JwtPayload): string {
-  return jwt.sign(payload, process.env.JWT_SECRET!, {
+  return jwt.sign(clean(payload), process.env.JWT_SECRET!, {
     expiresIn: process.env.JWT_EXPIRES_IN || '7d',
   } as jwt.SignOptions);
 }
 
 export function signRefreshToken(payload: JwtPayload): string {
-  return jwt.sign(payload, process.env.REFRESH_TOKEN_SECRET!, {
+  return jwt.sign(clean(payload), process.env.REFRESH_TOKEN_SECRET!, {
     expiresIn: process.env.REFRESH_TOKEN_EXPIRES_IN || '30d',
   } as jwt.SignOptions);
 }

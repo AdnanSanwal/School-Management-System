@@ -11,8 +11,11 @@ export default function OAuthCallback() {
   const { setAuth } = useAuthStore();
 
   useEffect(() => {
-    const accessToken = params.get('accessToken');
-    const refreshToken = params.get('refreshToken');
+    // Backend sends tokens in the URL fragment (never reaches servers/logs); fall back to query for old links.
+    const hash = new URLSearchParams(window.location.hash.slice(1));
+    const accessToken = hash.get('accessToken') ?? params.get('accessToken');
+    const refreshToken = hash.get('refreshToken') ?? params.get('refreshToken');
+    if (window.location.hash) window.history.replaceState(null, '', window.location.pathname);
 
     if (!accessToken || !refreshToken) {
       router.replace('/login?error=oauth_failed');

@@ -5,6 +5,11 @@ import logger from '../utils/logger';
 
 let io: SocketServer;
 
+/** Rooms are per school so broadcasts never cross tenants. */
+export function schoolRoom(schoolId: string, role?: string) {
+  return role ? `school:${schoolId}:role:${role}` : `school:${schoolId}`;
+}
+
 export function initSocketIO(server: HttpServer) {
   io = new SocketServer(server, {
     cors: { origin: process.env.FRONTEND_URL, credentials: true },
@@ -26,7 +31,10 @@ export function initSocketIO(server: HttpServer) {
     const user = (socket as any).user;
     logger.info(`Socket connected: ${user.id}`);
     socket.join(`user:${user.id}`);
-    socket.join(`role:${user.role}`);
+    if (user.schoolId) {
+      socket.join(schoolRoom(user.schoolId));
+      socket.join(schoolRoom(user.schoolId, user.role));
+    }
 
     socket.on('disconnect', () => logger.info(`Socket disconnected: ${user.id}`));
   });

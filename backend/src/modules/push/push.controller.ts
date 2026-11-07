@@ -2,6 +2,7 @@ import { Response, NextFunction } from 'express';
 import webpush from 'web-push';
 import { AuthRequest } from '../../middleware/auth';
 import prisma from '../../config/database';
+import { currentSchoolId } from '../../config/tenancy';
 import { sendSuccess } from '../../utils/apiResponse';
 import logger from '../../utils/logger';
 
@@ -24,10 +25,11 @@ export async function getVapidKey(_req: AuthRequest, res: Response) {
 export async function subscribe(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const { endpoint, keys } = req.body;
+    // Endpoint is globally unique; scoped upsert means another school's row can't be hijacked.
     await prisma.pushSubscription.upsert({
       where: { endpoint },
-      update: { p256dh: keys.p256dh, auth: keys.auth },
-      create: { userId: req.user!.id, endpoint, p256dh: keys.p256dh, auth: keys.auth },
+      update: { userId: req.user!.id, p256dh: keys.p256dh, auth: keys.auth },
+      create: { schoolId: currentSchoolId(), userId: req.user!.id, endpoint, p256dh: keys.p256dh, auth: keys.auth },
     });
     return sendSuccess(res, null, 'Subscribed to push notifications', 201);
   } catch (err) { next(err); }

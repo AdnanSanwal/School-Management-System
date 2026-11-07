@@ -7,12 +7,13 @@ jest.mock('../../config/database', () => {
   const mockPrisma = {
     user: {
       findUnique: jest.fn(),
+      findUniqueOrThrow: jest.fn(),
       findFirst: jest.fn(),
-      create: jest.fn(),
       update: jest.fn(),
     },
+    school: { findUnique: jest.fn() },
   };
-  return { __esModule: true, default: mockPrisma };
+  return { __esModule: true, default: mockPrisma, basePrisma: mockPrisma };
 });
 
 jest.mock('../../config/redis', () => ({
@@ -36,6 +37,8 @@ describe('POST /api/v1/auth/login', () => {
     email: 'admin@test.com',
     password: hashedPassword,
     role: 'ADMIN',
+    schoolId: 'school-1',
+    isActive: true,
     mfaEnabled: false,
     avatar: null,
   };
@@ -43,6 +46,9 @@ describe('POST /api/v1/auth/login', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockPrisma.user.findUnique.mockResolvedValue(mockUser);
+    mockPrisma.user.findUniqueOrThrow.mockResolvedValue({ ...mockUser, school: { id: 'school-1', name: 'Test School' } });
+    mockPrisma.user.update.mockResolvedValue(mockUser);
+    mockPrisma.school.findUnique.mockResolvedValue({ isActive: true });
   });
 
   it('returns 200 with tokens on valid credentials', async () => {
@@ -84,44 +90,42 @@ describe('POST /api/v1/auth/login', () => {
 
     expect(res.status).toBe(401);
   });
+
+  it('returns 403 when the school is suspended', async () => {
+    mockPrisma.school.findUnique.mockResolvedValue({ isActive: false });
+    const res = await request(app)
+      .post('/api/v1/auth/login')
+      .send({ email: 'admin@test.com', password: 'ValidPass@1' });
+
+    expect(res.status).toBe(403);
+    expect(res.body.message).toMatch(/suspended/i);
+  });
+
+  it('returns 403 when the user is disabled', async () => {
+    mockPrisma.user.findUnique.mockResolvedValue({ ...mockUser, isActive: false });
+    const res = await request(app)
+      .post('/api/v1/auth/login')
+      .send({ email: 'admin@test.com', password: 'ValidPass@1' });
+
+    expect(res.status).toBe(403);
+  });
+
+  it('puts schoolId in the access token', async () => {
+    const res = await request(app)
+      .post('/api/v1/auth/login')
+      .send({ email: 'admin@test.com', password: 'ValidPass@1' });
+
+    const claims = JSON.parse(Buffer.from(res.body.data.accessToken.split('.')[1], 'base64url').toString());
+    expect(claims.schoolId).toBe('school-1');
+  });
 });
 
 describe('POST /api/v1/auth/register', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    mockPrisma.user.findUnique.mockResolvedValue(null);
-    mockPrisma.user.create.mockResolvedValue({
-      id: 'new-user',
-      name: 'New User',
-      email: 'new@test.com',
-      role: 'STUDENT',
-      createdAt: new Date(),
-    });
-  });
-
-  it('creates a user and returns 201', async () => {
+  it('is no longer public: accounts are created by school staff', async () => {
     const res = await request(app)
       .post('/api/v1/auth/register')
-      .send({ name: 'New User', email: 'new@test.com', password: 'ValidPass@1', role: 'STUDENT' });
+      .send({ name: 'X', email: 'x@test.com', password: 'ValidPass@1', role: 'ADMIN' });
 
-    expect(res.status).toBe(201);
-    expect(res.body.success).toBe(true);
-  });
-
-  it('returns 409 when email already exists', async () => {
-    mockPrisma.user.findUnique.mockResolvedValue({ id: 'existing' });
-    const res = await request(app)
-      .post('/api/v1/auth/register')
-      .send({ name: 'Dup', email: 'dup@test.com', password: 'ValidPass@1', role: 'STUDENT' });
-
-    expect(res.status).toBe(409);
-  });
-
-  it('rejects invalid role', async () => {
-    const res = await request(app)
-      .post('/api/v1/auth/register')
-      .send({ name: 'X', email: 'x@test.com', password: 'ValidPass@1', role: 'SUPERUSER' });
-
-    expect(res.status).toBe(422);
+    expect(res.status).toBe(404);
   });
 });
