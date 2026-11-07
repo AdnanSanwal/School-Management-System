@@ -33,7 +33,7 @@ export default function CollectionsPage() {
         <label><span className="label">Method</span>
           <select className="select" value={method} onChange={(e) => { setMethod(e.target.value); setPage(1); }}>
             <option value="">All</option><option value="CASH">Cash</option><option value="BANK_TRANSFER">Bank transfer</option>
-            <option value="JAZZCASH">JazzCash</option><option value="EASYPAISA">Easypaisa</option><option value="CHEQUE">Cheque</option><option value="CARD">Card</option>
+            <option value="JAZZCASH">JazzCash</option><option value="EASYPAISA">Easypaisa</option><option value="CHEQUE">Cheque</option><option value="CARD">Card</option><option value="ONLINE">Online</option>
           </select>
         </label>
       </div>

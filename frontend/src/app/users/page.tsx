@@ -18,13 +18,14 @@ export default function UsersPage() {
   const me = useAuthStore((s) => s.user);
   const [role, setRole] = useState('');
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
   const [adding, setAdding] = useState(false);
   const [issued, setIssued] = useState<{ email: string; password: string } | null>(null);
   const qc = useQueryClient();
   const { data, isLoading } = useQuery({
-    queryKey: ['users', role, search],
+    queryKey: ['users', role, search, page],
     meta: { quiet: !!search },
-    queryFn: () => usersAPI.list({ role: role || undefined, search: search || undefined, limit: 100 }),
+    queryFn: () => usersAPI.list({ role: role || undefined, search: search || undefined, page, limit: 50 }),
   });
   const toggle = useMutation({
     mutationFn: (u: any) => usersAPI.update(u.id, { isActive: !u.isActive }),
@@ -74,6 +75,13 @@ export default function UsersPage() {
                 })}
               </tbody>
             </table>
+            {data && (data.pagination?.pages ?? 1) > 1 && (
+              <div className="mt-3 flex items-center justify-end gap-2 text-sm">
+                <span className="text-gray-500">{data.pagination.total} users · page {page} of {data.pagination.pages}</span>
+                <button className="btn btn-ghost" disabled={page <= 1} onClick={() => setPage(page - 1)}>Previous</button>
+                <button className="btn btn-ghost" disabled={page >= data.pagination.pages} onClick={() => setPage(page + 1)}>Next</button>
+              </div>
+            )}
           </div>
         )}
       </div>

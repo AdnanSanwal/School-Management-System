@@ -99,12 +99,14 @@ export async function forgotPassword(email: string) {
     data: { resetToken: hashResetToken(token), resetTokenExpires: expires },
   });
 
-  const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${token}`;
+  const resetUrl = `${(process.env.FRONTEND_URL || '').split(',')[0]}/reset-password?token=${token}`;
+  // Never fail (or reveal anything) because email isn't configured; the office can still
+  // reset the password from Users & logins.
   await sendEmail({
     to: user.email,
     subject: 'Password Reset',
     html: `<p>Click <a href="${resetUrl}">here</a> to reset your password. Link expires in 1 hour.</p>`,
-  });
+  }).catch(() => {});
 }
 
 function hashResetToken(token: string) {
@@ -138,9 +140,15 @@ export async function getMe(userId: string) {
   return basePrisma.user.findUniqueOrThrow({ where: { id: userId }, select: publicUser });
 }
 
+export async function updateProfile(userId: string, body: { name: string; phone?: string | null }) {
+  return basePrisma.user.update({ where: { id: userId }, data: { name: body.name, phone: body.phone || null }, select: publicUser });
+}
+
 export async function enableMFA(userId: string) {
   const secret = authenticator.generateSecret();
   const user = await basePrisma.user.findUniqueOrThrow({ where: { id: userId } });
+  // Replacing the secret of an active 2FA would let a stolen session lock the owner out.
+  if (user.mfaEnabled) throw new AppError('Two-step login is already on. Turn it off first.', 409);
   const otpauth = authenticator.keyuri(user.email, process.env.MFA_ISSUER || 'School ERP', secret);
   const qrCodeUrl = await QRCode.toDataURL(otpauth);
 
@@ -158,6 +166,8 @@ export async function verifyMFA(userId: string, code: string) {
   await basePrisma.user.update({ where: { id: userId }, data: { mfaEnabled: true } });
 }
 
-export async function disableMFA(userId: string) {
+export async function disableMFA(userId: string, password: string) {
+  const user = await basePrisma.user.findUniqueOrThrow({ where: { id: userId } });
+  if (!(await verifyPassword(password, user.password))) throw new AppError('Password is incorrect', 400);
   await basePrisma.user.update({ where: { id: userId }, data: { mfaEnabled: false, mfaSecret: null } });
 }

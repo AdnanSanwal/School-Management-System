@@ -15,7 +15,7 @@ export default function LeavePage() {
   const role = useAuthStore((s) => s.user?.role);
   const qc = useQueryClient();
   const mine = useQuery({ queryKey: ['leave', 'mine'], queryFn: leaveAPI.mine });
-  const all = useQuery({ queryKey: ['leave', 'all'], queryFn: () => leaveAPI.list(), enabled: role === 'PRINCIPAL' || role === 'OWNER' });
+  const all = useQuery({ queryKey: ['leave', 'all'], queryFn: () => leaveAPI.list(), enabled: role === 'PRINCIPAL' });
   const [f, setF] = useState({ type: 'CASUAL', fromDate: todayIso(), toDate: todayIso(), reason: '' });
   const apply = useMutation({
     mutationFn: () => leaveAPI.apply(f),

@@ -2,13 +2,13 @@
 
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { Bell, Search, Settings, LogOut, ChevronRight, Check, X } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { notificationsAPI } from '@/lib/api';
+import { authAPI, notificationsAPI } from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
 import { cn } from '@/lib/utils';
-import { formatDate } from '@/lib/utils';
+import { formatDate, formatDateTime } from '@/lib/utils';
 
 interface HeaderProps {
   title: string;
@@ -95,7 +95,7 @@ function NotificationPanel({ onClose }: { onClose: () => void }) {
               <div className="flex-1 min-w-0">
                 <p className={cn('text-xs font-medium truncate', n.readAt ? 'text-gray-600' : 'text-gray-900')}>{n.title}</p>
                 <p className="text-xs text-gray-400 mt-0.5 line-clamp-1">{n.body}</p>
-                <p className="text-2xs text-gray-300 mt-1">{formatDate(n.createdAt, { dateStyle: 'medium', timeStyle: 'short' } as any)}</p>
+                <p className="text-2xs text-gray-300 mt-1">{formatDateTime(n.createdAt)}</p>
               </div>
             </div>
           </button>
@@ -115,6 +115,14 @@ function NotificationPanel({ onClose }: { onClose: () => void }) {
 
 function UserMenu({ onClose }: { onClose: () => void }) {
   const { user, clearAuth } = useAuthStore();
+  const queryClient = useQueryClient();
+  const router = useRouter();
+  const signOut = async () => {
+    await authAPI.logout().catch(() => {});
+    queryClient.clear();
+    clearAuth();
+    router.replace('/login');
+  };
   const roleMeta: Record<string, { color: string; bg: string }> = {
     ADMIN:   { color: 'text-violet-700', bg: 'bg-violet-50' },
     TEACHER: { color: 'text-blue-700',   bg: 'bg-blue-50'   },
@@ -147,7 +155,7 @@ function UserMenu({ onClose }: { onClose: () => void }) {
           className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors">
           <Settings className="w-4 h-4 text-gray-400" /> Settings
         </Link>
-        <button onClick={() => { clearAuth(); onClose(); }}
+        <button onClick={() => { onClose(); signOut(); }}
           className="flex items-center gap-3 w-full px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors">
           <LogOut className="w-4 h-4" /> Sign out
         </button>

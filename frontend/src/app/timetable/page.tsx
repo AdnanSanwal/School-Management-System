@@ -96,6 +96,9 @@ function Editor({ sectionId }: { sectionId: string }) {
   const q = useQuery({ queryKey: ['timetable', sectionId], queryFn: () => timetableAPI.section(sectionId) });
   const subjects = useQuery({ queryKey: ['subjects'], queryFn: academicsAPI.subjects });
   const teachers = useQuery({ queryKey: ['teachers'], queryFn: () => staffAPI.list({ teachers: 'true', limit: 200 }) });
+  // When each teacher is already in another class, and who teaches each subject in this section.
+  const busy = useQuery({ queryKey: ['timetable-busy', sectionId], queryFn: () => timetableAPI.busy(sectionId) });
+  const assigned = useQuery({ queryKey: ['section-subjects', sectionId], queryFn: () => academicsAPI.sectionSubjects(sectionId) });
   const [periods, setPeriods] = useState<Period[]>([]);
   const [cells, setCells] = useState<Record<string, Cell>>({});
   const [saturday, setSaturday] = useState(false);
@@ -118,11 +121,50 @@ function Editor({ sectionId }: { sectionId: string }) {
 
   const save = useMutation({
     mutationFn: () => timetableAPI.save(sectionId, slots),
-    onSuccess: () => { toast.success('Timetable saved'); qc.invalidateQueries({ queryKey: ['timetable'] }); },
+    onSuccess: () => { toast.success('Timetable saved'); qc.invalidateQueries({ queryKey: ['timetable'] }); qc.invalidateQueries({ queryKey: ['timetable-busy'] }); },
     onError: (e) => toast.error(apiError(e), { duration: 6000 }),
   });
-  const setCell = (k: string, patch: Partial<Cell>) => setCells({ ...cells, [k]: { ...(cells[k] ?? { subjectId: '', teacherId: '', room: '' }), ...patch } });
+  const setCell = (k: string, patch: Partial<Cell>) => setCells((all) => ({ ...all, [k]: { ...(all[k] ?? { subjectId: '', teacherId: '', room: '' }), ...patch } }));
   const teacherList: any[] = teachers.data?.data ?? [];
+  const nameOf = (id: string) => teacherList.find((t) => t.id === id)?.name ?? 'This teacher';
+
+  /** The other class a teacher is in at this day/period, or null when free. */
+  const busyIn = (teacherId: string, day: string, per?: Period) => {
+    if (!teacherId || !per) return null;
+    const hit = (busy.data ?? []).find((b) => b.teacherId === teacherId && b.dayOfWeek === day && b.startTime < per.endTime && per.startTime < b.endTime);
+    return hit ? `${hit.section} ${hit.startTime}–${hit.endTime}` : null;
+  };
+
+  const pickSubject = (k: string, day: string, per: Period, subjectId: string) => {
+    const current = cells[k]?.teacherId ?? '';
+    // Pre-fill this section's subject teacher when they're free; keep a manual choice otherwise.
+    const usual = (assigned.data ?? []).find((a: any) => a.subjectId === subjectId)?.teacherId as string | undefined;
+    let teacherId = current;
+    if (!subjectId) teacherId = '';
+    else if (usual && usual !== current) {
+      const clash = busyIn(usual, day, per);
+      if (clash) toast(`${nameOf(usual)} usually teaches this subject but is in ${clash}. Pick another teacher.`, { icon: '⚠️' });
+      else teacherId = usual;
+    }
+    setCell(k, { subjectId, teacherId });
+  };
+
+  // Changing a period's time can make a chosen teacher clash with another class: clear them and say why.
+  useEffect(() => {
+    if (!busy.data || !teacherList.length) return;
+    const cleared: string[] = [];
+    const next = { ...cells };
+    for (const [k, c] of Object.entries(cells)) {
+      const [day, p] = k.split(':');
+      const clash = busyIn(c.teacherId, day, periods.find((x) => x.period === Number(p)));
+      if (clash) { next[k] = { ...c, teacherId: '' }; cleared.push(`${nameOf(c.teacherId)} (${short(day)} period ${p}, in ${clash})`); }
+    }
+    if (cleared.length) {
+      setCells(next);
+      toast(`Removed teacher${cleared.length > 1 ? 's' : ''} already in another class: ${cleared.slice(0, 3).join('; ')}${cleared.length > 3 ? '…' : ''}`, { icon: '⚠️', duration: 7000 });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- re-check only when times or bookings change
+  }, [periods, busy.data, teacherList.length]);
 
   if (q.isLoading) return <Spinner />;
   return (
@@ -131,7 +173,7 @@ function Editor({ sectionId }: { sectionId: string }) {
         <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={saturday} onChange={(e) => setSaturday(e.target.checked)} /> Saturday is a school day</label>
         <button className="btn btn-primary" disabled={save.isPending} onClick={() => save.mutate()}><Save className="h-4 w-4" /> Save timetable</button>
       </div>
-      <p className="text-xs text-gray-500">Saving checks that no teacher is booked in two classes at the same time.</p>
+      <p className="text-xs text-gray-500">Teachers already teaching another class at that time are greyed out. The section’s subject teacher is filled in automatically when free.</p>
       <div className="table-container">
         <table className="table">
           <thead><tr><th>Period</th>{days.map((d) => <th key={d}>{short(d)}</th>)}</tr></thead>
@@ -153,14 +195,17 @@ function Editor({ sectionId }: { sectionId: string }) {
                   const c = cells[k] ?? { subjectId: '', teacherId: '', room: '' };
                   return (
                     <td key={d} className={cn('min-w-[140px] space-y-1 align-top', c.subjectId && 'bg-primary-50/40')}>
-                      <select className="select h-8 py-0 text-xs" value={c.subjectId} onChange={(e) => setCell(k, { subjectId: e.target.value })} aria-label={`${short(d)} period ${p.period} subject`}>
+                      <select className="select h-8 py-0 text-xs" value={c.subjectId} onChange={(e) => pickSubject(k, d, p, e.target.value)} aria-label={`${short(d)} period ${p.period} subject`}>
                         <option value="">—</option>
                         {(subjects.data ?? []).map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
                       </select>
                       {c.subjectId && (
-                        <select className="select h-8 py-0 text-xs" value={c.teacherId} onChange={(e) => setCell(k, { teacherId: e.target.value })} aria-label={`${short(d)} period ${p.period} teacher`}>
+                        <select className={cn('select h-8 py-0 text-xs', !c.teacherId && 'border-amber-300')} value={c.teacherId} onChange={(e) => setCell(k, { teacherId: e.target.value })} aria-label={`${short(d)} period ${p.period} teacher`}>
                           <option value="">Teacher…</option>
-                          {teacherList.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                          {teacherList.map((t) => {
+                            const clash = busyIn(t.id, d, p);
+                            return <option key={t.id} value={t.id} disabled={!!clash}>{t.name}{clash ? ` — busy (${clash})` : ''}</option>;
+                          })}
                         </select>
                       )}
                     </td>

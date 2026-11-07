@@ -5,6 +5,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useRouter } from 'next/navigation';
+import { useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { useAuthStore, HOME_BY_ROLE } from '@/store/authStore';
 import { api } from '@/lib/api';
@@ -55,6 +56,10 @@ export default function LoginPage() {
   const { setAuth } = useAuthStore();
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
+  // Two-step login: the server answers "MFA code required" and we ask for the 6-digit code.
+  const [needsCode, setNeedsCode] = useState(false);
+  const [mfaCode, setMfaCode] = useState('');
+  const queryClient = useQueryClient();
   const [role, setRole] = useState<LoginRole>('ADMIN');
   const cfg = ROLE_CONFIG[role];
   const Icon = cfg.icon;
@@ -63,17 +68,24 @@ export default function LoginPage() {
     resolver: zodResolver(schema),
   });
 
-  const switchRole = (r: LoginRole) => { setRole(r); reset(); };
+  const switchRole = (r: LoginRole) => { setRole(r); reset(); setNeedsCode(false); setMfaCode(''); };
 
   const onSubmit = async (data: FormData) => {
     setLoading(true);
     try {
-      const res = await api.post('/auth/login', data);
+      const res = await api.post('/auth/login', { ...data, ...(needsCode ? { mfaCode } : {}) });
       const { user, accessToken, refreshToken } = res.data.data;
+      queryClient.clear(); // never show a previous user's cached screens
       setAuth(user, accessToken, refreshToken);
       router.push(HOME_BY_ROLE[user.role] || '/dashboard');
     } catch (err: any) {
-      toast.error(err.response?.data?.message || 'Login failed');
+      const message = err.response?.data?.message || 'Login failed';
+      if (message === 'MFA code required') {
+        setNeedsCode(true);
+        toast('Enter the 6-digit code from your authenticator app', { icon: '🔐' });
+      } else {
+        toast.error(message === 'Invalid MFA code' ? 'That code is wrong or expired. Try the current one.' : message);
+      }
     } finally {
       setLoading(false);
     }
@@ -220,6 +232,14 @@ export default function LoginPage() {
                 </div>
                 {errors.password && <p className="text-red-500 text-xs mt-1">{errors.password.message}</p>}
               </div>
+
+              {needsCode && (
+                <div>
+                  <label className="label" htmlFor="mfa-code">Code from your authenticator app</label>
+                  <input id="mfa-code" className={`input tracking-[0.3em] focus-visible:ring-2 ${cfg.ring}`} inputMode="numeric" autoComplete="one-time-code"
+                    maxLength={6} placeholder="123456" autoFocus value={mfaCode} onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, ''))} />
+                </div>
+              )}
 
               <button
                 type="submit"

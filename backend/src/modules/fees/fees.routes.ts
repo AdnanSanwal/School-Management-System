@@ -54,7 +54,8 @@ router.get('/structure', can('fee.structure.view'), handler(async (_req, res) =>
   const year = await currentAcademicYear();
   const [classes, heads, rows] = await Promise.all([
     prisma.class.findMany({ orderBy: { level: 'asc' }, select: { id: true, name: true } }),
-    prisma.feeHead.findMany({ where: { isActive: true }, orderBy: { name: 'asc' } }),
+    // Transport is charged from each rider's route (modules/transport), so it isn't set per class.
+    prisma.feeHead.findMany({ where: { isActive: true, NOT: { name: 'Transport' } }, orderBy: { name: 'asc' } }),
     prisma.feeStructure.findMany({ where: { academicYearId: year.id } }),
   ]);
   return sendSuccess(res, {

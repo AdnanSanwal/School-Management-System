@@ -51,24 +51,27 @@ export default function FeeStructurePage() {
           <div className="table-container">
             <table className="table">
               <thead>
-                <tr><th>Class</th>{heads.map((h) => <th key={h.id} className="text-right">{h.name}<span className="block text-2xs font-normal text-gray-400">{h.frequency.replace('_', ' ').toLowerCase()}</span></th>)}<th className="text-right">Monthly total</th></tr>
+                <tr><th>Class</th>{heads.map((h) => <th key={h.id} className="text-right">{h.name}<span className="block text-2xs font-normal text-gray-400">{h.frequency.replace('_', ' ').toLowerCase()}</span></th>)}<th className="text-right">Monthly total</th><th className="text-right">Yearly total<span className="block text-2xs font-normal text-gray-400">12 months + annual</span></th></tr>
               </thead>
               <tbody>
                 {data.classes.map((c: any) => {
-                  const monthly = heads.filter((h) => h.frequency === 'MONTHLY').reduce((s, h) => s + Number(grid[c.id]?.[h.id] || 0), 0);
+                  const sum = (freq: string) => heads.filter((h) => h.frequency === freq).reduce((s, h) => s + Number(grid[c.id]?.[h.id] || 0), 0);
+                  const monthly = sum('MONTHLY');
+                  const yearly = monthly * 12 + sum('ANNUAL');
                   return (
                     <tr key={c.id}>
                       <td className="font-medium">{c.name}</td>
                       {heads.map((h) => (
                         <td key={h.id} className="text-right">
                           {editable ? (
-                            <input type="number" min="0" step="1" className="input w-28 text-right" aria-label={`${c.name} ${h.name}`}
+                            <input type="number" min="0" step="1" className="input ml-auto w-28 text-right" aria-label={`${c.name} ${h.name}`}
                               value={grid[c.id]?.[h.id] ?? ''} placeholder="—"
                               onChange={(e) => { setGrid({ ...grid, [c.id]: { ...grid[c.id], [h.id]: e.target.value } }); setDirty(new Set(dirty).add(c.id)); }} />
                           ) : grid[c.id]?.[h.id] ? formatMoney(grid[c.id][h.id], currency) : '—'}
                         </td>
                       ))}
-                      <td className="text-right font-semibold">{formatMoney(monthly, currency)}</td>
+                      <td className="text-right font-semibold">{monthly ? formatMoney(monthly, currency) : <span className="text-gray-300">—</span>}</td>
+                      <td className="text-right font-semibold text-gray-900">{yearly ? formatMoney(yearly, currency) : <span className="text-gray-300">—</span>}</td>
                     </tr>
                   );
                 })}

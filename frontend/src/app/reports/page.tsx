@@ -38,7 +38,8 @@ export default function ReportsPage() {
 function ReportCard({ type }: { type: string }) {
   const meta = META[type];
   const today = todayIso();
-  const [p, setP] = useState({ from: today, to: today, month: today.slice(0, 7), sectionId: '', classId: '', minDaysOverdue: '0' });
+  // The leave report covers the whole academic year unless dates are picked.
+  const [p, setP] = useState({ from: type === 'leave' ? '' : today, to: type === 'leave' ? '' : today, month: today.slice(0, 7), sectionId: '', classId: '', minDaysOverdue: '0' });
   const [busy, setBusy] = useState<string | null>(null);
   const classes = useQuery({ queryKey: ['classes'], queryFn: academicsAPI.classes, enabled: meta.params.includes('class') });
 
@@ -48,7 +49,7 @@ function ReportCard({ type }: { type: string }) {
     try {
       await reportsAPI.download(type, {
         format,
-        ...(meta.params.includes('dateRange') ? { from: p.from, to: p.to } : {}),
+        ...(meta.params.includes('dateRange') ? { ...(p.from ? { from: p.from } : {}), ...(p.to ? { to: p.to } : {}) } : {}),
         ...(meta.params.includes('month') ? { month: p.month } : {}),
         ...(meta.params.includes('section') ? { sectionId: p.sectionId } : {}),
         ...(meta.params.includes('class') && p.classId ? { classId: p.classId } : {}),
@@ -72,7 +73,7 @@ function ReportCard({ type }: { type: string }) {
       </div>
       <div className="flex flex-wrap gap-3">
         {meta.params.includes('dateRange') && <>
-          <Field label="From"><input type="date" className="input" value={p.from} onChange={(e) => setP({ ...p, from: e.target.value, to: e.target.value > p.to ? e.target.value : p.to })} /></Field>
+          <Field label="From"><input type="date" className="input" value={p.from} onChange={(e) => setP({ ...p, from: e.target.value, to: p.to && e.target.value > p.to ? e.target.value : p.to })} /></Field>
           <Field label="To"><input type="date" className="input" min={p.from} value={p.to} onChange={(e) => setP({ ...p, to: e.target.value })} /></Field>
         </>}
         {meta.params.includes('month') && <Field label="Month"><input type="month" className="input" value={p.month} onChange={(e) => setP({ ...p, month: e.target.value })} /></Field>}

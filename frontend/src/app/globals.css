@@ -150,11 +150,14 @@
   .table thead {
     @apply bg-slate-50/80 backdrop-blur-sm sticky top-0 z-10;
   }
-  .table th {
+  /* :where() keeps these at class-level specificity, so classes on a cell
+     (text-right, px-2, …) win. `.table th` used to override them, which left
+     right-aligned columns with left-aligned headers. */
+  .table :where(th) {
     @apply px-4 py-3 text-left text-2xs font-semibold text-slate-500
            uppercase tracking-wider border-b border-gray-100;
   }
-  .table td {
+  .table :where(td) {
     @apply px-4 py-3.5 border-b border-gray-50 text-gray-700;
   }
   .table tbody tr:last-child td {

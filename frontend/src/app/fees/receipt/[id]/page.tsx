@@ -1,7 +1,8 @@
 'use client';
 
-import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
+import { can } from '@/lib/roles';
+import { useAuthStore } from '@/store/authStore';
 import { useQuery } from '@tanstack/react-query';
 import { Printer, ArrowLeft } from 'lucide-react';
 import { Spinner } from '@/components/ui/kit';
@@ -11,6 +12,8 @@ import { formatDateTime, formatMoney, formatPeriod, sectionLabel } from '@/lib/u
 // Printable fee receipt. Standalone page (no sidebar) so it prints cleanly.
 export default function ReceiptPage() {
   const { id } = useParams<{ id: string }>();
+  const router = useRouter();
+  const role = useAuthStore((s) => s.user?.role);
   const { data: r, isLoading, error } = useQuery({ queryKey: ['receipt', id], queryFn: () => feesAPI.receipt(id) });
   if (isLoading) return <Spinner />;
   if (error || !r) return <p className="p-8 text-red-600">{apiError(error, 'Receipt not found')}</p>;
@@ -19,7 +22,7 @@ export default function ReceiptPage() {
   return (
     <div className="min-h-screen bg-slate-100 py-8 print:bg-white print:py-0">
       <div className="mx-auto mb-4 flex max-w-xl justify-between print:hidden">
-        <Link href={`/fees?student=${r.student.id}`} className="btn btn-ghost"><ArrowLeft className="h-4 w-4" /> Back</Link>
+        <button className="btn btn-ghost" onClick={() => (window.history.length > 1 ? router.back() : router.push(can(role, 'collectFees') ? `/fees?student=${r.student.id}` : '/fees/payments'))}><ArrowLeft className="h-4 w-4" /> Back</button>
         <button className="btn btn-primary" onClick={() => window.print()}><Printer className="h-4 w-4" /> Print</button>
       </div>
       <article className="mx-auto max-w-xl rounded-2xl bg-white p-8 shadow-sm print:max-w-none print:rounded-none print:shadow-none">

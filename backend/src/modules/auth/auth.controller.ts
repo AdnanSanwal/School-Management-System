@@ -65,7 +65,7 @@ export async function verifyMFA(req: AuthRequest, res: Response, next: NextFunct
 
 export async function disableMFA(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    await authService.disableMFA(req.user!.id);
+    await authService.disableMFA(req.user!.id, req.body.password);
     return sendSuccess(res, null, 'MFA disabled');
   } catch (err) { next(err); }
 }
@@ -73,5 +73,12 @@ export async function disableMFA(req: AuthRequest, res: Response, next: NextFunc
 export async function getMe(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     return sendSuccess(res, await authService.getMe(req.user!.id));
+  } catch (err) { next(err); }
+}
+
+export async function updateProfile(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const user = await authService.updateProfile(req.user!.id, req.body);
+    return sendSuccess(res, user, 'Profile saved');
   } catch (err) { next(err); }
 }

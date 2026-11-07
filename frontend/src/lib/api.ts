@@ -81,6 +81,12 @@ export const authAPI = {
   logout: () => api.post('/auth/logout'),
   me: () => data(api.get('/auth/me')),
   changePassword: (body: { currentPassword: string; newPassword: string }) => api.post('/auth/change-password', body),
+  updateProfile: (body: { name: string; phone?: string | null }) => data(api.patch('/auth/profile', body)),
+  forgotPassword: (email: string) => api.post('/auth/forgot-password', { email }),
+  resetPassword: (token: string, newPassword: string) => api.post('/auth/reset-password', { token, newPassword }),
+  mfaSetup: () => data<{ secret: string; qrCodeUrl: string }>(api.post('/auth/mfa/enable')),
+  mfaVerify: (code: string) => api.post('/auth/mfa/verify', { code }),
+  mfaDisable: (password: string) => api.post('/auth/mfa/disable', { password }),
 };
 
 export const schoolAPI = {
@@ -225,6 +231,7 @@ export const timetableAPI = {
   section: (sectionId: string) => data<any[]>(api.get(`/timetable/section/${sectionId}`)),
   teacher: (staffId = 'me') => data<any[]>(api.get(`/timetable/teacher/${staffId}`)),
   save: (sectionId: string, slots: any[]) => data(api.put(`/timetable/section/${sectionId}`, { slots })),
+  busy: (excludeSectionId: string) => data<{ teacherId: string; dayOfWeek: string; startTime: string; endTime: string; section: string }[]>(api.get('/timetable/busy', { params: { excludeSectionId } })),
 };
 
 export const leaveAPI = {

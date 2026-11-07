@@ -16,17 +16,24 @@ export default function ApprovalsPage() {
   const currency = useAuthStore((s) => s.user?.school?.currency ?? 'PKR');
   const qc = useQueryClient();
   const { data, isLoading } = useQuery({ queryKey: ['approvals'], queryFn: approvalsAPI.inbox, refetchInterval: 60_000 });
-  const refresh = () => { qc.invalidateQueries({ queryKey: ['approvals'] }); qc.invalidateQueries({ queryKey: ['dashboard'] }); };
+  const refresh = () => {
+    for (const key of ['approvals', 'dashboard', 'concessions', 'leave', 'invoices', 'ledger', 'payments', 'staff-attendance']) qc.invalidateQueries({ queryKey: [key] });
+  };
 
   const decide = useMutation({
     mutationFn: async ({ kind, id, approve }: { kind: 'leave' | 'concession' | 'claim'; id: string; approve: boolean }) => {
-      const note = approve ? undefined : window.prompt('Reason (shown to the person)') ?? undefined;
+      let note: string | undefined;
+      if (!approve) {
+        const reason = window.prompt('Reason (shown to the person)');
+        if (reason === null) throw new Error('cancelled'); // pressed Cancel: don't reject
+        note = reason.trim() || undefined;
+      }
       if (kind === 'leave') return leaveAPI.decide(id, approve, note);
       if (kind === 'concession') return feesAPI.decideConcession(id, approve);
       return paymentsAPI.decideClaim(id, approve, note);
     },
     onSuccess: (_r, v) => { toast.success(v.approve ? 'Approved' : 'Rejected'); refresh(); },
-    onError: (e) => toast.error(apiError(e)),
+    onError: (e) => { if ((e as Error).message !== 'cancelled') toast.error(apiError(e)); },
   });
   const Buttons = ({ kind, id }: { kind: 'leave' | 'concession' | 'claim'; id: string }) => (
     <div className="flex gap-1">

@@ -71,6 +71,25 @@ router.get('/today', can('timetable.view'), handler(async (req, res) => {
   return sendSuccess(res, { day, date: dayInTimezone(tz), slots: slots.sort(order).map(present) });
 }));
 
+/**
+ * When each teacher is already teaching in other sections, so the editor can grey out
+ * busy teachers while picking instead of failing on save.
+ */
+router.get('/busy', can('timetable.manage'), handler(async (req, res) => {
+  const excludeSectionId = typeof req.query.excludeSectionId === 'string' ? req.query.excludeSectionId : undefined;
+  const slots = await prisma.timetableSlot.findMany({
+    where: excludeSectionId ? { sectionId: { not: excludeSectionId } } : {},
+    select: {
+      teacherId: true, dayOfWeek: true, startTime: true, endTime: true,
+      section: { select: { name: true, class: { select: { name: true } } } },
+    },
+  });
+  return sendSuccess(res, slots.map((s) => ({
+    teacherId: s.teacherId, dayOfWeek: s.dayOfWeek, startTime: s.startTime, endTime: s.endTime,
+    section: `${s.section.class.name}-${s.section.name}`,
+  })));
+}));
+
 const slotSchema = z.object({
   dayOfWeek: z.nativeEnum(DayOfWeek),
   period: z.coerce.number().int().min(1).max(15),

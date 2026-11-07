@@ -24,7 +24,12 @@ export async function getVapidKey(_req: AuthRequest, res: Response) {
 
 export async function subscribe(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const { endpoint, keys } = req.body;
+    // Browsers' PushSubscription.toJSON() nests the keys; accept flat fields too.
+    const { endpoint } = req.body;
+    const keys = req.body.keys ?? { p256dh: req.body.p256dh, auth: req.body.auth };
+    if (typeof endpoint !== 'string' || !endpoint || !keys?.p256dh || !keys?.auth) {
+      return res.status(422).json({ success: false, message: 'endpoint and keys.p256dh / keys.auth are required' });
+    }
     // Endpoint is globally unique; scoped upsert means another school's row can't be hijacked.
     await prisma.pushSubscription.upsert({
       where: { endpoint },
@@ -37,7 +42,9 @@ export async function subscribe(req: AuthRequest, res: Response, next: NextFunct
 
 export async function unsubscribe(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    await prisma.pushSubscription.deleteMany({ where: { userId: req.user!.id } });
+    // Only this browser's subscription; the user's other devices keep receiving pushes.
+    const endpoint = req.body?.endpoint ?? req.query.endpoint;
+    await prisma.pushSubscription.deleteMany({ where: { userId: req.user!.id, ...(endpoint ? { endpoint: String(endpoint) } : {}) } });
     return sendSuccess(res, null, 'Unsubscribed');
   } catch (err) { next(err); }
 }

@@ -53,6 +53,8 @@ export default function PromotionsPage() {
     }),
     onSuccess: (r: any) => {
       toast.success(`Done: ${Object.entries(r.counts).map(([k, v]) => `${v} ${String(k).toLowerCase()}`).join(', ')}. Current year: ${r.currentYear}`, { duration: 8000 });
+      setToYear('');
+      setDecisions({});
       qc.invalidateQueries();
     },
     onError: (e) => toast.error(apiError(e)),

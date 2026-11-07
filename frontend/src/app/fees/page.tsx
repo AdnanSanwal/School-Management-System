@@ -10,7 +10,7 @@ import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Field, Spinner, StatusBadge, Empty } from '@/components/ui/kit';
 import { studentsAPI, feesAPI, apiError } from '@/lib/api';
 import { CAN } from '@/lib/roles';
-import { formatDate, formatMoney, formatPeriod, sectionLabel } from '@/lib/utils';
+import { formatDate, formatDateTime, formatMoney, formatPeriod, sectionLabel } from '@/lib/utils';
 import { useAuthStore } from '@/store/authStore';
 
 export default function CollectFeePage() {
@@ -62,6 +62,7 @@ function CollectFee() {
       qc.invalidateQueries({ queryKey: ['ledger', studentId] });
       qc.invalidateQueries({ queryKey: ['dashboard'] });
       qc.invalidateQueries({ queryKey: ['payments'] });
+      for (const key of ['invoices', 'defaulters', 'student', 'students', 'fee-search']) qc.invalidateQueries({ queryKey: [key] });
       router.push(`/fees/receipt/${r.payment.id}`);
     },
     onError: (e) => toast.error(apiError(e)),
@@ -158,7 +159,7 @@ function CollectFee() {
                 <ul className="divide-y divide-slate-100">
                   {L.payments.slice(0, 6).map((p: any) => (
                     <li key={p.id} className="flex items-center justify-between py-2 text-sm">
-                      <span>{formatDate(p.paidAt)} · {p.method.replace('_', ' ').toLowerCase()} · {p.allocations.map((a: any) => formatPeriod(a.invoice.period)).join(', ')}</span>
+                      <span>{formatDateTime(p.paidAt)} · {p.method.replace('_', ' ').toLowerCase()} · {p.allocations.map((a: any) => formatPeriod(a.invoice.period)).join(', ')}</span>
                       <span className="flex items-center gap-3">
                         <span className="font-medium">{formatMoney(p.amount, currency)}</span>
                         <Link href={`/fees/receipt/${p.id}`} className="btn-icon btn-ghost" aria-label={`Receipt ${p.receiptNo}`}><Printer className="h-4 w-4" /></Link>

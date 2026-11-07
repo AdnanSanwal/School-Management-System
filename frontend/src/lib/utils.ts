@@ -21,6 +21,11 @@ export function formatDate(date: string | Date, options?: Intl.DateTimeFormatOpt
   return new Intl.DateTimeFormat('en-GB', { timeZone: 'UTC', ...(options || { dateStyle: 'medium' }) }).format(new Date(date));
 }
 
+/** A moment (timestamp) shown as a date in the viewer's own time zone. */
+export function formatLocalDate(date: string | Date) {
+  return new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium' }).format(new Date(date));
+}
+
 export function formatDateTime(date: string | Date) {
   return new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(date));
 }

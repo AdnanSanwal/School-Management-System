@@ -55,7 +55,7 @@ const navGroups: NavGroup[] = [
       { label: 'Attendance today', href: '/attendance/summary', icon: ClipboardCheck, cap: 'viewAttendanceSummary' },
       { label: 'Staff attendance', href: '/attendance/staff', icon: UserCheck, cap: 'staffAttendance' },
       { label: 'Exams & results', href: '/exams', icon: GraduationCap, cap: 'viewExams' },
-      { label: 'Marks entry', href: '/marks', icon: PenLine, roles: ['TEACHER'] },
+      { label: 'Marks entry', href: '/marks', icon: PenLine, cap: 'enterMarks' },
       { label: 'Timetable', href: '/timetable', icon: Clock, cap: 'viewTimetable' },
       { label: 'Year-end promotion', href: '/promotions', icon: ArrowUpCircle, cap: 'promotion' },
     ],

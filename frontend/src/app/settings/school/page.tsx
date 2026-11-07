@@ -6,10 +6,12 @@ import toast from 'react-hot-toast';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Field, Spinner } from '@/components/ui/kit';
 import { schoolAPI, paymentsAPI, messagingAPI, apiError } from '@/lib/api';
-import { CAN } from '@/lib/roles';
+import { CAN, can } from '@/lib/roles';
+import { useAuthStore } from '@/store/authStore';
 import { formatDate, formatDateTime } from '@/lib/utils';
 
 export default function SchoolSettingsPage() {
+  const role = useAuthStore((s) => s.user?.role);
   const qc = useQueryClient();
   const school = useQuery({ queryKey: ['school'], queryFn: schoolAPI.get });
   const years = useQuery({ queryKey: ['years'], queryFn: schoolAPI.years });
@@ -87,7 +89,7 @@ export default function SchoolSettingsPage() {
               <button className="btn btn-secondary col-span-3" disabled={addYear.isPending}>Add academic year</button>
             </form>
           </div>
-          <PaymentAccounts />
+          {can(role, 'manageFeeStructure') && <PaymentAccounts />}
           <Messaging />
         </div>
       )}

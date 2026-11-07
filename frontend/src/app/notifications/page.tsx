@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { notificationsAPI } from '@/lib/api';
 import { Bell, CheckCheck, BellRing, BellOff } from 'lucide-react';
-import { formatDate } from '@/lib/utils';
+import { formatDate, formatDateTime } from '@/lib/utils';
 import { usePushSubscription } from '@/hooks/usePushSubscription';
 import toast from 'react-hot-toast';
 
@@ -100,7 +100,7 @@ export default function NotificationsPage() {
                     <p className={`font-medium ${!n.readAt ? 'text-gray-900' : 'text-gray-700'}`}>{n.title}</p>
                     <p className="text-sm text-gray-500 mt-0.5">{n.body}</p>
                     <p className="text-xs text-gray-400 mt-2">
-                      {formatDate(n.createdAt, { dateStyle: 'medium', timeStyle: 'short' })}
+                      {formatDateTime(n.createdAt)}
                     </p>
                   </div>
                 </div>

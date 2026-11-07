@@ -8,7 +8,7 @@ import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Field, Modal, Spinner, Empty, Stat } from '@/components/ui/kit';
 import { platformAPI, apiError } from '@/lib/api';
 import { CAN } from '@/lib/roles';
-import { formatDate, formatDateTime } from '@/lib/utils';
+import { formatDateTime, formatLocalDate } from '@/lib/utils';
 
 export default function PlatformPage() {
   const qc = useQueryClient();
@@ -44,7 +44,7 @@ export default function PlatformPage() {
                     ))}</td>
                     <td>{s.activeStudents}</td>
                     <td>{s._count.users}</td>
-                    <td className="text-sm">{formatDate(s.createdAt)}</td>
+                    <td className="text-sm">{formatLocalDate(s.createdAt)}</td>
                     <td>{s.isActive ? <span className="badge badge-green">active</span> : <span className="badge badge-red">suspended</span>}</td>
                     <td>
                       <button className="btn btn-ghost px-2 py-1 text-xs" disabled={toggle.isPending}

@@ -57,7 +57,7 @@ function Loans({ manage, currency }: { manage: boolean; currency: string }) {
     onError: (e) => toast.error(apiError(e)),
   });
   const rows: any[] = data?.data ?? [];
-  const pages = data?.pagination?.totalPages ?? 1;
+  const pages = data?.pagination?.pages ?? 1;
 
   return (
     <div className="card">
@@ -119,7 +119,7 @@ function Books({ manage }: { manage: boolean }) {
   const [edit, setEdit] = useState<any | null>(null);
   const { data, isLoading } = useQuery({ queryKey: ['library', 'books', search, page], meta: { quiet: !!search }, queryFn: () => libraryAPI.books({ search: search || undefined, page, limit: 25 }) });
   const rows: any[] = data?.data ?? [];
-  const pages = data?.pagination?.totalPages ?? 1;
+  const pages = data?.pagination?.pages ?? 1;
   return (
     <div className="card">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">

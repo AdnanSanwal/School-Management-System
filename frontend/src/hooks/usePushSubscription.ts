@@ -36,6 +36,7 @@ export function usePushSubscription() {
     try {
       const { data } = await api.get('/push/vapid-key');
       const vapidKey = data.data.publicKey;
+      if (!vapidKey) throw new Error('Pop-up alerts are not set up on the server yet (VAPID keys).');
 
       const reg = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
       await navigator.serviceWorker.ready;
@@ -46,15 +47,17 @@ export function usePushSubscription() {
       });
 
       const json = sub.toJSON();
-      await api.post('/push/subscribe', {
-        endpoint: json.endpoint,
-        p256dh: json.keys?.p256dh,
-        auth: json.keys?.auth,
-      });
+      try {
+        await api.post('/push/subscribe', { endpoint: json.endpoint, keys: json.keys });
+      } catch (e) {
+        // Server didn't save it: undo the browser subscription so the toggle stays truthful.
+        await sub.unsubscribe().catch(() => {});
+        throw e;
+      }
 
       setIsSubscribed(true);
     } catch (err: any) {
-      setError(err?.message || 'Failed to subscribe');
+      setError(err?.response?.data?.message || err?.message || 'Failed to subscribe');
     } finally {
       setIsLoading(false);
     }
@@ -68,8 +71,8 @@ export function usePushSubscription() {
       if (!reg) return;
       const sub = await reg.pushManager.getSubscription();
       if (sub) {
-        await api.post('/push/unsubscribe', { endpoint: sub.endpoint });
         await sub.unsubscribe();
+        await api.delete('/push/unsubscribe', { data: { endpoint: sub.endpoint } }).catch(() => {});
       }
       setIsSubscribed(false);
     } catch (err: any) {

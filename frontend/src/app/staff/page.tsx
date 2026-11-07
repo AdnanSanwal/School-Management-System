@@ -26,7 +26,7 @@ export default function StaffPage() {
   });
   const markLeft = useMutation({
     mutationFn: (id: string) => staffAPI.update(id, { status: 'LEFT' }),
-    onSuccess: () => { toast.success('Marked as left; login disabled'); qc.invalidateQueries({ queryKey: ['staff'] }); },
+    onSuccess: () => { toast.success('Marked as left; login disabled'); for (const key of ['staff', 'teachers', 'classes', 'users']) qc.invalidateQueries({ queryKey: [key] }); },
     onError: (e) => toast.error(apiError(e)),
   });
   const rows: any[] = data?.data ?? [];
@@ -73,7 +73,13 @@ export default function StaffPage() {
   );
 }
 
-const loginRoles = [['TEACHER', 'Teacher'], ['ACCOUNTANT', 'Accountant'], ['ADMIN', 'Office admin'], ['PRINCIPAL', 'Principal']];
+const ALL_LOGIN_ROLES = [['TEACHER', 'Teacher'], ['ACCOUNTANT', 'Accountant'], ['ADMIN', 'Office admin'], ['PRINCIPAL', 'Principal']];
+const RANK: Record<string, number> = { OWNER: 50, PRINCIPAL: 40, ADMIN: 30, ACCOUNTANT: 20, TEACHER: 20 };
+/** Roles this user may give out: strictly below their own rank (the owner may give any). */
+function useLoginRoles() {
+  const me = useAuthStore((s) => s.user?.role) ?? '';
+  return ALL_LOGIN_ROLES.filter(([r]) => me === 'OWNER' || (RANK[me] ?? 0) > RANK[r]);
+}
 
 function AddStaffModal({ onClose, onIssued }: { onClose: () => void; onIssued: (r: any) => void }) {
   const qc = useQueryClient();
@@ -102,7 +108,7 @@ function AddStaffModal({ onClose, onIssued }: { onClose: () => void; onIssued: (
           <p className="mb-2 text-sm font-medium">App login (optional)</p>
           <div className="grid gap-3 md:grid-cols-2">
             <Field label="Login email"><input type="email" className="input" value={f.loginEmail} onChange={set('loginEmail')} /></Field>
-            <Field label="Role"><select className="select" value={f.loginRole} onChange={set('loginRole')}>{loginRoles.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></Field>
+            <Field label="Role"><select className="select" value={f.loginRole} onChange={set('loginRole')}>{useLoginRoles().map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></Field>
           </div>
         </div>
         <button className="btn btn-primary md:col-span-2" disabled={m.isPending}>Add</button>
@@ -123,7 +129,7 @@ function LoginModal({ staff, onClose, onIssued }: { staff: any; onClose: () => v
     <Modal open onClose={onClose} title={`App access for ${staff.name}`}>
       <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); m.mutate(); }}>
         <Field label="Login email"><input type="email" required className="input" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} /></Field>
-        <Field label="Role"><select className="select" value={f.role} onChange={(e) => setF({ ...f, role: e.target.value })}>{loginRoles.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></Field>
+        <Field label="Role"><select className="select" value={f.role} onChange={(e) => setF({ ...f, role: e.target.value })}>{useLoginRoles().map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></Field>
         <button className="btn btn-primary w-full" disabled={m.isPending}>Create login</button>
       </form>
     </Modal>

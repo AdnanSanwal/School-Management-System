@@ -88,10 +88,11 @@ router.get('/:id', can('student.view'), handler(async (req, res) => {
   if (hasPermission(user.role, 'fee.view')) {
     const open = await prisma.feeInvoice.aggregate({
       where: { studentId: student.id, status: { in: ['UNPAID', 'PARTIAL'] } },
-      _sum: { netAmount: true, paidAmount: true },
+      _sum: { netAmount: true, fineAmount: true, paidAmount: true },
       _min: { dueDate: true },
     });
-    const pending = (open._sum.netAmount ?? new Prisma.Decimal(0)).minus(open._sum.paidAmount ?? 0);
+    // Same as the fee ledger: net + late fee − paid.
+    const pending = (open._sum.netAmount ?? new Prisma.Decimal(0)).plus(open._sum.fineAmount ?? 0).minus(open._sum.paidAmount ?? 0);
     extras.fees = { pending, oldestDueDate: open._min.dueDate };
   }
   // Guardian contact details are office data; parents/teachers see names only.
