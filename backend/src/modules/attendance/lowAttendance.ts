@@ -3,6 +3,7 @@ import { currentSchoolId } from '../../config/tenancy';
 import { attendanceSummary } from '../../utils/attendanceStats';
 import { schoolTimezone, schoolToday, toIso, zonedDayStart } from '../../utils/dates';
 import { guardiansOf, notify, notifyEach } from '../../utils/notify';
+import { messageFamilies } from '../../utils/messaging';
 
 /**
  * Spec §12 "Low Attendance Alert → Parent + Principal".
@@ -37,6 +38,9 @@ export async function sendLowAttendanceAlerts(minDays = 5) {
     body: `${p.studentName}'s attendance this month is ${pct.get(p.studentId)}% (school minimum ${threshold}%).`,
     data: { studentId: p.studentId },
   })));
+
+  const names = await prisma.student.findMany({ where: { id: { in: low.map((s) => s.studentId) } }, select: { id: true, name: true } });
+  await messageFamilies('LOW_ATTENDANCE', names.map((n) => ({ studentId: n.id, body: `${n.name}'s attendance this month is ${pct.get(n.id)}%, below the school minimum of ${threshold}%.` })), { oncePerDays: 28 });
 
   let principalsNotified = 0;
   if (fresh.length) {

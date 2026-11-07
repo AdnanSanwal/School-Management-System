@@ -43,10 +43,10 @@ describe('role permissions follow the ERP spec', () => {
     expect(hasPermission('TEACHER', 'fee.view')).toBe(false);
   });
 
-  it('parent and student are read-only (parents may also submit fee payments)', () => {
+  it('parent and student are read-only (apart from paying fees and ticking homework)', () => {
     for (const role of ['PARENT', 'STUDENT']) {
       for (const p of ROLE_PERMISSIONS[role as 'PARENT']) {
-        expect(p.endsWith('.view') || p === 'fee.pay').toBe(true);
+        expect(p.endsWith('.view') || p === 'fee.pay' || p === 'homework.mark').toBe(true);
       }
     }
     expect(hasPermission('PARENT', 'fee.view')).toBe(true);

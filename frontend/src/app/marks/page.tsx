@@ -22,7 +22,7 @@ export default function MarksPage() {
   return (
     <DashboardLayout title="Marks entry" allowedRoles={CAN.enterMarks} subtitle="Papers you teach in exams that are open for marks">
       {isLoading ? <Spinner /> : tasks.length === 0 ? (
-        <div className="card"><Empty title="Nothing to enter">Marks open once the principal approves an exam's schedule.</Empty></div>
+        <div className="card"><Empty title="Nothing to enter">Marks open once the principal approves an exam’s schedule.</Empty></div>
       ) : (
         <div className="grid gap-4 lg:grid-cols-3">
           <ul className="card h-fit space-y-1 p-2">

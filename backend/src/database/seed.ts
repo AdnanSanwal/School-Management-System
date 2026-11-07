@@ -41,11 +41,16 @@ async function seedGreenfield(hash: string) {
   const user = (role: Role, name: string, email: string) =>
     prisma.user.create({ data: { schoolId, role, name, email, password: hash, phone: '0300' + Math.floor(1e6 + rand() * 9e6) } });
 
-  // ─── Office users ───
+  // ─── Office users (principal/admin/accountant are also staff) ───
   await user('OWNER', 'Tariq Mehmood', 'owner@school.com');
-  await user('PRINCIPAL', 'Dr. Saima Sharif', 'principal@school.com');
-  await user('ADMIN', 'Imran Office', 'admin@school.com');
-  await user('ACCOUNTANT', 'Kashif Accounts', 'accountant@school.com');
+  for (const [i, [role, name, email, designation]] of ([
+    ['PRINCIPAL', 'Dr. Saima Sharif', 'principal@school.com', 'Principal'],
+    ['ADMIN', 'Imran Office', 'admin@school.com', 'Office administrator'],
+    ['ACCOUNTANT', 'Kashif Accounts', 'accountant@school.com', 'Accountant'],
+  ] as const).entries()) {
+    const u = await user(role, name, email);
+    await prisma.staff.create({ data: { schoolId, userId: u.id, employeeNo: `EMP-0${i + 1}`, name, designation, department: 'Administration', isTeacher: false } });
+  }
 
   // ─── Staff (teachers + support) ───
   const teacherSpecs = [

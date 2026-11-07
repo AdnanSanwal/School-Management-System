@@ -13,8 +13,10 @@ and owners.
 | Fees | Class-wise fee structure, monthly invoices, concessions (principal approves), counter collection with printable receipts, defaulters, late fees, reminders |
 | Online payment | Parent pays to a school JazzCash/Easypaisa/bank account and submits proof → accountant verifies; pluggable payment-gateway checkout |
 | Academics | Exams with date sheet → principal approves → marks entry → publish; grades, positions, PDF report cards; timetable with clash checks |
-| Communication | Daily diary/homework with attachments, notices by audience, holidays calendar, push notifications |
-| Office | Owner dashboard, approvals inbox, leave management, PDF/Excel reports, daily automation |
+| Communication | Daily diary/homework with attachments (parents tick homework done), notices by audience, holidays calendar, push notifications, WhatsApp/SMS alerts |
+| Facilities | Transport routes, stops and riders (fee added to the invoice), library catalogue, issue/return and late fines |
+| Office | Owner dashboard, approvals inbox, leave management, PDF/Excel reports, year-end promotion, daily automation |
+| Platform | Platform admin screen to onboard, list and suspend schools |
 
 **Stack:** Node 20 + Express + Prisma (MySQL) · Next.js 14 web panel · Expo (React Native) mobile app · Redis (optional in development).
 
@@ -28,6 +30,7 @@ and owners.
 - [Run with Docker](#run-with-docker)
 - [Configuration](#configuration)
 - [Adding a real school](#adding-a-real-school)
+- [Deploy to a server](#deploy-to-a-server)
 - [Tests](#tests)
 - [Troubleshooting](#troubleshooting)
 - [Project layout](#project-layout)
@@ -131,7 +134,7 @@ Every demo account uses the password **`Admin@123`**.
 | `parent@school.com` | Parent of two children (8-A and 6-B) | Mobile app / "My children" |
 | `student@school.com` | Student (8-A) | Mobile app |
 | `owner@riverside.com` | Owner of a second school | Used to check that schools can't see each other's data |
-| `superadmin@platform.com` | Platform admin | Onboards new schools (API only) |
+| `superadmin@platform.com` | Platform admin | Schools (onboard / suspend schools) |
 
 The demo school "Greenfield Public School" has 48 students in Classes 6–8, a month of attendance,
 fee invoices from August, notices, diary entries and a timetable for 8-A.
@@ -183,10 +186,9 @@ cp .env.example backend/.env       # then set JWT_SECRET, REFRESH_TOKEN_SECRET, 
 docker compose up -d --build mysql redis backend frontend
 ```
 
-The first time only, create the tables and (optionally) load the demo data:
+The backend applies database migrations every time it starts. To load the demo data (first time only):
 
 ```bash
-docker compose exec backend npx prisma migrate deploy
 docker compose exec backend node dist/database/seed.js
 ```
 
@@ -208,6 +210,8 @@ docker compose logs -f backend      # follow API logs
 docker compose down                 # stop
 docker compose down -v              # stop and DELETE the database and uploads
 ```
+
+This compose file is for trying things out. For a real server use `docker-compose.prod.yml` (HTTPS, backups) — see [Deploy to a server](#deploy-to-a-server).
 
 > The Kubernetes manifests in `k8s/` were written for the earlier PostgreSQL version and have not been updated yet.
 
@@ -234,24 +238,30 @@ Backend settings live in `backend/.env` (template: `.env.example`).
 | `PUSH_DISABLED` | | `true` skips sending push (notifications are still saved in the app) |
 | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` | | Browser push. Generate with `npx web-push generate-vapid-keys` |
 | `SENDGRID_API_KEY`, `EMAIL_FROM` | | Password-reset and broadcast emails |
-| `TWILIO_*` | | SMS for broadcasts |
+| `MESSAGING_PROVIDER` | | WhatsApp/SMS alerts to parents: `twilio`, `test` (logs only, for development) or empty (off). Each school then turns alerts on in **School settings** |
+| `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_PHONE_NUMBER`, `TWILIO_WHATSAPP_FROM` | | Twilio account; `TWILIO_WHATSAPP_FROM` like `whatsapp:+14155238886` for WhatsApp |
+| `DEFAULT_COUNTRY_CODE` | | Turns local numbers like `0300…` into international ones. Default `92` (Pakistan) |
+| `TRUST_PROXY` | behind a proxy | Number of reverse proxies in front of the API (`1` with Caddy/nginx) so rate limits see real client IPs |
+| `RATE_LIMIT_MAX` | | Requests per IP per 15 minutes. Default `1000` |
 | `GOOGLE_CLIENT_*`, `MS_CLIENT_*` | | "Sign in with Google/Microsoft" for accounts the school already created |
 | `SENTRY_DSN` | | Error tracking |
 
 Web panel (`frontend/.env.local`, optional): `NEXT_PUBLIC_API_URL`, default `http://localhost:5000/api/v1`.
 Mobile (`mobile/.env`): `EXPO_PUBLIC_API_URL`, `EXPO_PUBLIC_PROJECT_ID`.
 
-**School-level settings** (late fee amount and grace days, low-attendance threshold, payment accounts,
-academic years, timezone) are set in the web panel under **School settings**, not in `.env`.
+**School-level settings** (late fee amount and grace days, low-attendance threshold, library fine, payment accounts,
+WhatsApp/SMS alerts, academic years, timezone) are set in the web panel under **School settings**, not in `.env`.
 
 ---
 
 ## Adding a real school
 
-Schools are created by the platform admin through the API. There is no screen for this yet.
+Schools are created by the platform admin.
 
-1. Create a platform admin. The demo seed creates `superadmin@platform.com`. For a clean install, run the seed once and change that password, or insert a `SUPER_ADMIN` user yourself.
-2. Log in and create the school with its first academic year and owner:
+1. Create a platform admin. The demo seed creates `superadmin@platform.com`. For a clean install see
+   [docs/DEPLOY.md](docs/DEPLOY.md#4-first-login-the-platform-admin).
+2. Log in to the web panel as the platform admin → **Schools → New school**: name, code, first academic
+   year and the owner's login. (Or through the API:)
 
 ```bash
 TOKEN=$(curl -s -X POST http://localhost:5000/api/v1/auth/login -H "Content-Type: application/json" \
@@ -270,6 +280,27 @@ curl -X POST http://localhost:5000/api/v1/platform/schools \
    accountant) → **School settings** (contact details, late fee, payment accounts) → **Classes**
    (classes, sections, subjects) → **Staff** (teachers, with app logins) → **Fee structure** →
    **Students → New admission** (guardian logins give parents the app) → **Invoices → Generate month**.
+
+---
+
+## Deploy to a server
+
+`docker-compose.prod.yml` runs everything on one Linux VPS: Caddy (automatic HTTPS), MySQL, Redis, the API,
+the web panel and a nightly backup of the database and uploaded files.
+
+```bash
+cp .env.production.example .env.production      # set DOMAIN, passwords, secrets
+docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+```
+
+Step-by-step guide, backups, restore and updates: **[docs/DEPLOY.md](docs/DEPLOY.md)**.
+
+### End of the school year
+
+**Year-end promotion** (principal/admin) moves every student into the next class for the new academic year.
+It can use an exam's results to keep failed students in their class, graduates the top class, copies subject
+teachers and the fee structure, and makes the new year current. Add the new academic year in **School
+settings** first.
 
 ---
 

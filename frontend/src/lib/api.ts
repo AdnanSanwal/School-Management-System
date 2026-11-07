@@ -156,6 +156,7 @@ export const diaryAPI = {
   list: (params?: any) => page(api.get('/diary', { params })),
   post: (form: FormData) => data(api.post('/diary', form)),
   remove: (id: string) => api.delete(`/diary/${id}`),
+  completion: (id: string) => data(api.get(`/diary/${id}/completion`)),
 };
 
 export const noticesAPI = {
@@ -228,6 +229,46 @@ export const reportsAPI = {
     a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 10_000);
   },
+};
+
+export const platformAPI = {
+  schools: () => data<any[]>(api.get('/platform/schools')),
+  create: (body: any) => data(api.post('/platform/schools', body)),
+  setActive: (id: string, isActive: boolean) => data(api.patch(`/platform/schools/${id}/status`, { isActive })),
+};
+
+export const promotionsAPI = {
+  preview: (toAcademicYearId: string, examId?: string) => data(api.get('/promotions/preview', { params: { toAcademicYearId, examId } })),
+  run: (body: any) => data(api.post('/promotions/run', body)),
+};
+
+export const transportAPI = {
+  routes: () => data<any[]>(api.get('/transport/routes')),
+  createRoute: (body: any) => data(api.post('/transport/routes', body)),
+  updateRoute: (id: string, body: any) => data(api.patch(`/transport/routes/${id}`, body)),
+  deleteRoute: (id: string) => api.delete(`/transport/routes/${id}`),
+  saveStops: (id: string, stops: any[]) => api.put(`/transport/routes/${id}/stops`, { stops }),
+  riders: (id: string) => data<any[]>(api.get(`/transport/routes/${id}/students`)),
+  student: (studentId: string) => data(api.get(`/transport/students/${studentId}`)),
+  assign: (studentId: string, routeId: string, stopId?: string | null) => data(api.put(`/transport/students/${studentId}`, { routeId, stopId })),
+  unassign: (studentId: string) => api.delete(`/transport/students/${studentId}`),
+};
+
+export const libraryAPI = {
+  books: (params?: any) => page(api.get('/library/books', { params })),
+  addBook: (body: any) => data(api.post('/library/books', body)),
+  updateBook: (id: string, body: any) => data(api.patch(`/library/books/${id}`, body)),
+  issues: (params?: any) => page(api.get('/library/issues', { params })),
+  issue: (body: any) => data(api.post('/library/issues', body)),
+  returnBook: (id: string) => data(api.post(`/library/issues/${id}/return`)),
+  fine: (id: string, action: 'paid' | 'waive') => api.post(`/library/issues/${id}/fine`, { action }),
+  student: (studentId: string) => data(api.get(`/library/students/${studentId}`)),
+};
+
+export const messagingAPI = {
+  get: () => data(api.get('/messaging')),
+  save: (body: any) => api.put('/messaging', body),
+  test: (phone: string) => data(api.post('/messaging/test', { phone })),
 };
 
 export const dashboardAPI = {

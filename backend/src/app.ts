@@ -34,10 +34,19 @@ import leaveRoutes from './modules/leave/leave.routes';
 import approvalRoutes from './modules/approvals/approvals.routes';
 import paymentRoutes from './modules/payments/payments.routes';
 import reportRoutes from './modules/reports/reports.routes';
+import promotionRoutes from './modules/promotions/promotions.routes';
+import transportRoutes from './modules/transport/transport.routes';
+import libraryRoutes from './modules/library/library.routes';
+import messagingRoutes from './modules/messaging/messaging.routes';
 import notificationRoutes from './modules/notifications/notification.routes';
 import pushRoutes from './modules/push/push.routes';
 
 const app = express();
+
+// Behind a reverse proxy (Caddy in production) the client IP is in X-Forwarded-For.
+// Without this every request looks like it comes from the proxy, so one busy school
+// would hit the rate limit for everybody. Set TRUST_PROXY to the number of proxies.
+if (process.env.TRUST_PROXY) app.set('trust proxy', Number(process.env.TRUST_PROXY) || process.env.TRUST_PROXY);
 
 // Sentry must be first
 initSentry(app);
@@ -68,7 +77,8 @@ app.use(cors({
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));
-app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 200, standardHeaders: true, legacyHeaders: false }));
+// Per client IP. A school office often shares one IP, so keep this generous.
+app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: Number(process.env.RATE_LIMIT_MAX) || 1000, standardHeaders: true, legacyHeaders: false }));
 
 // Body parsing & compression
 app.use(express.json({ limit: '10mb' }));
@@ -117,6 +127,10 @@ app.use(`${api}/leave`, leaveRoutes);
 app.use(`${api}/approvals`, approvalRoutes);
 app.use(`${api}/payments`, paymentRoutes);
 app.use(`${api}/reports`, reportRoutes);
+app.use(`${api}/promotions`, promotionRoutes);
+app.use(`${api}/transport`, transportRoutes);
+app.use(`${api}/library`, libraryRoutes);
+app.use(`${api}/messaging`, messagingRoutes);
 app.use(`${api}/report-cards`, reportCardPdfRouter);
 app.use(`${api}/notifications`, notificationRoutes);
 app.use(`${api}/push`, pushRoutes);

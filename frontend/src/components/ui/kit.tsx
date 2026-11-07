@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { X, Loader2 } from 'lucide-react';
-import { academicsAPI } from '@/lib/api';
+import { academicsAPI, studentsAPI } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
 export function Modal({ open, onClose, title, children, wide }: {
@@ -128,4 +128,43 @@ export function StatusBadge({ status }: { status: string }) {
     PENDING: 'badge-yellow', APPROVED: 'badge-green', REJECTED: 'badge-red',
   };
   return <span className={cn('badge', map[status] ?? 'badge-gray')}>{status.replace('_', ' ').toLowerCase()}</span>;
+}
+
+/** Type-ahead search for an active student. */
+export function StudentPicker({ value, onChange, placeholder = 'Search student by name or admission no.' }: {
+  value: { id: string; name: string; admissionNo?: string } | null; onChange: (s: any | null) => void; placeholder?: string;
+}) {
+  const [q, setQ] = useState('');
+  const { data, isFetching } = useQuery({
+    queryKey: ['student-pick', q],
+    queryFn: () => studentsAPI.list({ search: q, status: 'ACTIVE', limit: 8 }),
+    enabled: q.trim().length >= 2 && !value,
+  });
+  if (value) {
+    return (
+      <div className="flex items-center justify-between rounded-xl border border-slate-200 px-3 py-2 text-sm">
+        <span><b>{value.name}</b>{value.admissionNo ? <span className="text-gray-500"> · {value.admissionNo}</span> : null}</span>
+        <button type="button" className="text-xs text-primary-600 hover:underline" onClick={() => { onChange(null); setQ(''); }}>Change</button>
+      </div>
+    );
+  }
+  const rows: any[] = data?.data ?? [];
+  return (
+    <div className="relative">
+      <input className="input" placeholder={placeholder} value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search student" />
+      {q.trim().length >= 2 && (
+        <ul className="absolute z-20 mt-1 max-h-64 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-lg">
+          {isFetching && !rows.length && <li className="px-3 py-2 text-sm text-gray-400">Searching…</li>}
+          {!isFetching && !rows.length && <li className="px-3 py-2 text-sm text-gray-400">No student found</li>}
+          {rows.map((s) => (
+            <li key={s.id}>
+              <button type="button" className="w-full px-3 py-2 text-left text-sm hover:bg-slate-50" onClick={() => onChange(s)}>
+                <b>{s.name}</b> <span className="text-gray-500">· {s.admissionNo}{s.section ? ` · ${s.section.class?.name}-${s.section.name}` : ''}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
 }

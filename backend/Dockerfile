@@ -16,7 +16,7 @@ RUN apt-get update && apt-get install -y \
 COPY package.json package-lock.json ./
 COPY backend/package.json ./backend/package.json
 
-RUN npm ci
+RUN npm ci --fetch-retries=5 --fetch-retry-mintimeout=20000 --fetch-retry-maxtimeout=120000 --no-audit --no-fund
 
 
 # =========================
@@ -62,4 +62,7 @@ COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 
 EXPOSE 5000
 
-CMD ["node", "dist/index.js"]
+RUN mkdir -p /app/uploads
+
+# Apply pending migrations, then start. Safe to run on every start.
+CMD ["sh", "-c", "npx prisma migrate deploy && node dist/index.js"]

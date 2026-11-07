@@ -87,6 +87,9 @@ export default function RootLayout() {
           <Stack.Screen name="pay" options={{ title: 'Pay fee online' }} />
           <Stack.Screen name="leave" options={{ title: 'Leave' }} />
           <Stack.Screen name="approvals" options={{ title: 'Approvals' }} />
+          <Stack.Screen name="transport" options={{ title: 'School transport' }} />
+          <Stack.Screen name="library" options={{ title: 'Library' }} />
+          <Stack.Screen name="homework/[id]" options={{ title: 'Homework done' }} />
         </Stack>
       </QueryClientProvider>
     </SafeAreaProvider>

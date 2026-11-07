@@ -38,5 +38,5 @@ export const useAuthStore = create<AuthState>()(
 /** Where each role lands after login. */
 export const HOME_BY_ROLE: Record<string, string> = {
   OWNER: '/dashboard', PRINCIPAL: '/dashboard', ADMIN: '/dashboard', ACCOUNTANT: '/fees',
-  TEACHER: '/attendance', PARENT: '/family', STUDENT: '/family', SUPER_ADMIN: '/settings',
+  TEACHER: '/attendance', PARENT: '/family', STUDENT: '/family', SUPER_ADMIN: '/platform',
 };

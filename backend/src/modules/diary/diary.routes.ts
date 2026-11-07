@@ -79,8 +79,21 @@ router.get('/', can('diary.view', 'diary.post'), handler(async (req, res) => {
     prisma.diaryEntry.findMany({ where, include, orderBy: [{ date: 'desc' }, { createdAt: 'desc' }], ...paging(q) }),
     prisma.diaryEntry.count({ where }),
   ]);
+  // Homework progress: a family sees whether *their* child ticked it; staff see counts.
+  const homeworkIds = rows.filter((e) => e.isHomework).map((e) => e.id);
+  const doneForChild = q.studentId && homeworkIds.length
+    ? new Set((await prisma.homeworkStatus.findMany({ where: { studentId: q.studentId, diaryEntryId: { in: homeworkIds } }, select: { diaryEntryId: true } })).map((h) => h.diaryEntryId))
+    : null;
+  const doneCounts = staff && homeworkIds.length
+    ? new Map((await prisma.homeworkStatus.groupBy({ by: ['diaryEntryId'], where: { diaryEntryId: { in: homeworkIds } }, _count: true })).map((g) => [g.diaryEntryId, g._count]))
+    : null;
   // `mine` lets the apps show edit/delete only on the user's own entries.
-  return sendPaginated(res, rows.map((e) => ({ ...present(e), mine: !!staff && e.teacherId === staff.id })), total, q.page, q.limit);
+  return sendPaginated(res, rows.map((e) => ({
+    ...present(e),
+    mine: !!staff && e.teacherId === staff.id,
+    ...(e.isHomework && doneForChild ? { done: doneForChild.has(e.id) } : {}),
+    ...(e.isHomework && doneCounts ? { doneCount: doneCounts.get(e.id) ?? 0 } : {}),
+  })), total, q.page, q.limit);
 }));
 
 const entryBody = z.object({
@@ -169,6 +182,54 @@ router.delete('/:id', can('diary.post'), handler(async (req, res) => {
   await prisma.diaryEntry.delete({ where: { id: entry.id } });
   await Promise.all(entry.attachments.map((a) => deleteFile(a.url)));
   return sendSuccess(res, null, 'Diary entry deleted');
+}));
+
+// ─── Homework tracking (spec §10 "Homework: Pending / Completed") ───
+
+async function homeworkFor(user: JwtPayload, entryId: string, studentId: string) {
+  await assertStudentAccess(user, studentId);
+  const [entry, student] = await Promise.all([
+    prisma.diaryEntry.findFirst({ where: { id: entryId }, select: { id: true, isHomework: true, sectionId: true } }),
+    prisma.student.findFirst({ where: { id: studentId }, select: { sectionId: true } }),
+  ]);
+  if (!entry || !entry.isHomework) throw new AppError('Homework not found', 404);
+  if (student?.sectionId !== entry.sectionId) throw new AppError('This homework is for another class', 404);
+  return entry;
+}
+
+router.post('/:id/done', can('homework.mark'), handler(async (req, res) => {
+  const { studentId } = parseBody(z.object({ studentId: id }), req);
+  const entry = await homeworkFor(me(req), req.params.id, studentId);
+  await prisma.homeworkStatus.upsert({
+    where: { diaryEntryId_studentId: { diaryEntryId: entry.id, studentId } },
+    create: { schoolId: currentSchoolId(), diaryEntryId: entry.id, studentId, markedById: me(req).id },
+    update: {},
+  });
+  return sendSuccess(res, { done: true }, 'Marked as done');
+}));
+
+router.delete('/:id/done', can('homework.mark'), handler(async (req, res) => {
+  const { studentId } = parseQuery(z.object({ studentId: id }), req);
+  const entry = await homeworkFor(me(req), req.params.id, studentId);
+  await prisma.homeworkStatus.deleteMany({ where: { diaryEntryId: entry.id, studentId } });
+  return sendSuccess(res, { done: false }, 'Marked as not done');
+}));
+
+// Teacher: who has / hasn't done a homework.
+router.get('/:id/completion', can('diary.post', 'diary.view'), handler(async (req, res) => {
+  const entry = await prisma.diaryEntry.findFirst({ where: { id: req.params.id }, select: { id: true, isHomework: true, sectionId: true } });
+  if (!entry || !entry.isHomework) throw new AppError('Homework not found', 404);
+  const sections = await readableSections(me(req));
+  if (sections && !sections.includes(entry.sectionId)) throw new AppError('Homework not found', 404);
+  const [students, done] = await Promise.all([
+    prisma.student.findMany({ where: { sectionId: entry.sectionId, status: 'ACTIVE' }, select: { id: true, name: true, rollNo: true }, orderBy: [{ rollNo: 'asc' }, { name: 'asc' }] }),
+    prisma.homeworkStatus.findMany({ where: { diaryEntryId: entry.id }, select: { studentId: true, markedAt: true } }),
+  ]);
+  const at = new Map(done.map((d) => [d.studentId, d.markedAt]));
+  return sendSuccess(res, {
+    done: done.length, total: students.length,
+    students: students.map((s) => ({ ...s, done: at.has(s.id), markedAt: at.get(s.id) ?? null })),
+  });
 }));
 
 export default router;

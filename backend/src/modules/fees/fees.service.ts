@@ -5,6 +5,7 @@ import { AppError } from '../../middleware/errorHandler';
 import { formatNumber, nextNumber } from '../../utils/counter';
 import { addDays, periodRange, schoolTimezone, schoolToday, toDate, toIso, zonedDayStart } from '../../utils/dates';
 import { guardiansOf, notifyEach } from '../../utils/notify';
+import { messageFamilies } from '../../utils/messaging';
 import { currentAcademicYear } from '../../utils/scope';
 import { allocate, applyConcessions, outstanding, totals, D } from './fees.calc';
 
@@ -38,7 +39,7 @@ export async function generateInvoices(opts: GenerateOptions) {
       ...(opts.studentIds?.length ? { id: { in: opts.studentIds } } : {}),
       invoices: { none: { period: opts.period } },
     },
-    select: { id: true, section: { select: { classId: true } } },
+    select: { id: true, section: { select: { classId: true } }, transport: { select: { route: { select: { monthlyFee: true, isActive: true } } } } },
   });
   const skipped = await prisma.feeInvoice.count({
     where: {
@@ -48,6 +49,10 @@ export async function generateInvoices(opts: GenerateOptions) {
     },
   });
 
+  // Monthly runs also bill transport for students on a school route.
+  const transportHeadId = opts.frequencies.includes('MONTHLY')
+    ? (await prisma.feeHead.findFirst({ where: { name: 'Transport' }, select: { id: true } }))?.id ?? null
+    : null;
   const [structures, concessions] = await Promise.all([
     prisma.feeStructure.findMany({
       where: { academicYearId: year.id, feeHead: { isActive: true, frequency: { in: opts.frequencies } } },
@@ -69,7 +74,11 @@ export async function generateInvoices(opts: GenerateOptions) {
   const noStructure = new Set<string>();
   for (const s of students) {
     const classId = s.section!.classId;
-    const lines = structures.filter((f) => f.classId === classId).map((f) => ({ feeHeadId: f.feeHeadId, amount: f.amount }));
+    // Transport is billed from the student's route, never from the class structure.
+    const lines = structures.filter((f) => f.classId === classId && f.feeHeadId !== transportHeadId)
+      .map((f) => ({ feeHeadId: f.feeHeadId, amount: f.amount }));
+    const route = s.transport?.route;
+    if (transportHeadId && route?.isActive && D(route.monthlyFee).gt(0)) lines.push({ feeHeadId: transportHeadId, amount: route.monthlyFee });
     if (!lines.length) { noStructure.add(classId); continue; }
     const items = applyConcessions(lines, concessions.filter((c) => c.studentId === s.id));
     const t = totals(items);
@@ -271,7 +280,13 @@ export async function sendFeeReminders(body: { daysAhead: number; classId?: stri
       data: { studentId: p.studentId },
     };
   }));
-  return { students: byStudent.size, parentsReminded: notified, skippedAlreadyRemindedToday: parents.length - fresh.length };
+  // WhatsApp/SMS reaches families without the app too (at most once a day per phone).
+  const names = await prisma.student.findMany({ where: { id: { in: [...byStudent.keys()] } }, select: { id: true, name: true } });
+  const texted = await messageFamilies('FEE_DUE', names.map((n) => {
+    const r = byStudent.get(n.id)!;
+    return { studentId: n.id, body: `Fee of ${school.currency} ${r.due.toFixed(0)} for ${n.name} ${r.earliest < today ? 'was due on' : 'is due by'} ${toIso(r.earliest)}.` };
+  }), { oncePerDays: 1 });
+  return { students: byStudent.size, parentsReminded: notified, skippedAlreadyRemindedToday: parents.length - fresh.length, texted };
 }
 
 /**

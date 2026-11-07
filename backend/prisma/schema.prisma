@@ -32,6 +32,12 @@ model School {
   lateFeeGraceDays       Int      @default(7)
   // Monthly attendance % below which parents and the principal are alerted.
   lowAttendanceThreshold Int      @default(75)
+  // Library late fine per day (0 = no fines).
+  libraryFinePerDay      Decimal  @default(0) @db.Decimal(12, 2)
+  // WhatsApp/SMS alerts to guardians' phones (see utils/messaging.ts).
+  messagingEnabled       Boolean          @default(false)
+  messagingChannel       MessagingChannel @default(SMS)
+  messagingTypes         Json? // notification types also sent by SMS/WhatsApp, e.g. ["ATTENDANCE_ABSENT"]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -189,6 +195,10 @@ model Student {
   payments    Payment[]
   paymentClaims  PaymentClaim[]
   paymentIntents PaymentIntent[]
+  promotions     PromotionRecord[]
+  transport      StudentTransport?
+  bookIssues     BookIssue[]
+  homework       HomeworkStatus[]
 
   @@unique([schoolId, admissionNo])
   @@index([schoolId, status])
@@ -509,6 +519,7 @@ model DiaryEntry {
   subject     Subject?          @relation(fields: [subjectId], references: [id])
   teacher     Staff             @relation(fields: [teacherId], references: [id])
   attachments DiaryAttachment[]
+  completions HomeworkStatus[]
 
   @@index([schoolId])
   @@index([sectionId, date])
@@ -801,6 +812,163 @@ model PaymentIntent {
   @@map("payment_intents")
 }
 
+// ─── Year-end promotion ───
+
+// One row per student per promotion run: where they were and what happened.
+model PromotionRecord {
+  id                 String           @id @default(uuid())
+  schoolId           String
+  studentId          String
+  fromAcademicYearId String
+  toAcademicYearId   String
+  fromSectionId      String?
+  toSectionId        String?
+  outcome            PromotionOutcome
+  createdById        String
+  createdAt          DateTime         @default(now())
+
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, toAcademicYearId])
+  @@index([schoolId, toAcademicYearId])
+  @@map("promotion_records")
+}
+
+// ─── Transport ───
+
+model TransportRoute {
+  id          String   @id @default(uuid())
+  schoolId    String
+  name        String // "Route 1 — Model Town"
+  vehicleNo   String?
+  driverName  String?
+  driverPhone String?  @db.VarChar(32)
+  capacity    Int?
+  monthlyFee  Decimal  @default(0) @db.Decimal(12, 2)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  stops    TransportStop[]
+  students StudentTransport[]
+
+  @@unique([schoolId, name])
+  @@index([schoolId])
+  @@map("transport_routes")
+}
+
+model TransportStop {
+  id         String  @id @default(uuid())
+  schoolId   String
+  routeId    String
+  name       String
+  pickupTime String? @db.VarChar(5) // "07:10"
+  dropTime   String? @db.VarChar(5)
+  sortOrder  Int     @default(0)
+
+  route    TransportRoute     @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  students StudentTransport[]
+
+  @@index([schoolId])
+  @@index([routeId])
+  @@map("transport_stops")
+}
+
+model StudentTransport {
+  id        String   @id @default(uuid())
+  schoolId  String
+  studentId String   @unique
+  routeId   String
+  stopId    String?
+  since     DateTime @db.Date
+
+  student Student        @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  route   TransportRoute @relation(fields: [routeId], references: [id])
+  stop    TransportStop? @relation(fields: [stopId], references: [id], onDelete: SetNull)
+
+  @@index([schoolId])
+  @@index([routeId])
+  @@map("student_transport")
+}
+
+// ─── Library ───
+
+model Book {
+  id        String   @id @default(uuid())
+  schoolId  String
+  title     String
+  author    String?
+  isbn      String?  @db.VarChar(20)
+  category  String?
+  shelf     String?
+  copies    Int      @default(1)
+  createdAt DateTime @default(now())
+
+  issues BookIssue[]
+
+  @@index([schoolId])
+  @@index([schoolId, title])
+  @@map("books")
+}
+
+model BookIssue {
+  id         String    @id @default(uuid())
+  schoolId   String
+  bookId     String
+  studentId  String
+  issuedAt   DateTime  @db.Date
+  dueDate    DateTime  @db.Date
+  returnedAt DateTime? @db.Date
+  fine       Decimal   @default(0) @db.Decimal(12, 2)
+  finePaid   Boolean   @default(false)
+  issuedById String
+
+  book    Book    @relation(fields: [bookId], references: [id])
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([schoolId, returnedAt])
+  @@index([bookId])
+  @@index([studentId])
+  @@map("book_issues")
+}
+
+// ─── Homework tracking ───
+
+model HomeworkStatus {
+  id           String   @id @default(uuid())
+  schoolId     String
+  diaryEntryId String
+  studentId    String
+  markedById   String
+  markedAt     DateTime @default(now())
+
+  diaryEntry DiaryEntry @relation(fields: [diaryEntryId], references: [id], onDelete: Cascade)
+  student    Student    @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([diaryEntryId, studentId])
+  @@index([schoolId])
+  @@map("homework_status")
+}
+
+// ─── WhatsApp / SMS log ───
+
+model OutboundMessage {
+  id          String           @id @default(uuid())
+  schoolId    String
+  type        String
+  channel     MessagingChannel
+  to          String           @db.VarChar(32)
+  body        String           @db.Text
+  provider    String           @db.VarChar(20)
+  status      MessageStatus    @default(QUEUED)
+  providerRef String?
+  error       String?          @db.Text
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@index([schoolId, createdAt])
+  @@map("outbound_messages")
+}
+
 // ─── Notifications & audit ───────────────────────────────────────────────────
 
 model Notification {
@@ -986,6 +1154,24 @@ enum PaymentMethod {
   JAZZCASH
   EASYPAISA
   ONLINE
+}
+
+enum PromotionOutcome {
+  PROMOTED
+  RETAINED
+  GRADUATED
+  LEFT
+}
+
+enum MessagingChannel {
+  SMS
+  WHATSAPP
+}
+
+enum MessageStatus {
+  QUEUED
+  SENT
+  FAILED
 }
 
 enum PaymentIntentStatus {

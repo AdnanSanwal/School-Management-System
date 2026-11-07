@@ -3,9 +3,9 @@
 import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { Paperclip, Send, Trash2 } from 'lucide-react';
+import { Paperclip, Send, Trash2, CheckCircle2 } from 'lucide-react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { Field, SectionSelect, Spinner, Empty, useSections } from '@/components/ui/kit';
+import { Field, Modal, SectionSelect, Spinner, Empty, useSections } from '@/components/ui/kit';
 import { diaryAPI, academicsAPI, apiError } from '@/lib/api';
 import { CAN, can } from '@/lib/roles';
 import { formatDate, formatDateTime, sectionLabel, todayIso } from '@/lib/utils';
@@ -49,6 +49,7 @@ export default function DiaryPage() {
               </div>
               <div className="mt-2 flex items-center justify-between text-xs text-gray-400">
                 <span>{e.teacher.name} · {formatDateTime(e.createdAt)}</span>
+                {e.isHomework && poster && <HomeworkDone entry={e} />}
                 {poster && e.mine && <button className="btn-icon btn-ghost h-7 w-7 text-red-500" aria-label="Delete entry" onClick={() => confirm('Delete this diary entry?') && remove.mutate(e.id)}><Trash2 className="h-3.5 w-3.5" /></button>}
               </div>
             </article>
@@ -102,5 +103,34 @@ function PostForm() {
       </Field>
       <button className="btn btn-primary w-full" disabled={m.isPending || !f.sectionId}><Send className="h-4 w-4" /> {m.isPending ? 'Posting…' : 'Post'}</button>
     </form>
+  );
+}
+
+function HomeworkDone({ entry }: { entry: any }) {
+  const [open, setOpen] = useState(false);
+  const q = useQuery({ queryKey: ['diary-completion', entry.id], queryFn: () => diaryAPI.completion(entry.id), enabled: open });
+  return (
+    <>
+      <button className="btn btn-ghost ml-auto mr-1 px-2 py-1 text-xs" onClick={() => setOpen(true)}>
+        <CheckCircle2 className="h-3.5 w-3.5" /> {entry.doneCount ?? 0} marked done
+      </button>
+      {open && (
+        <Modal open onClose={() => setOpen(false)} title={`Homework done — ${entry.title ?? entry.subject?.name ?? 'diary'}`}>
+          {q.isLoading ? <Spinner /> : q.error ? <p className="text-sm text-red-600">{apiError(q.error)}</p> : q.data && (
+            <>
+              <p className="mb-2 text-sm text-gray-600">{q.data.done} of {q.data.total} marked done by parents/students.</p>
+              <ul className="max-h-96 divide-y divide-slate-100 overflow-y-auto text-sm">
+                {q.data.students.map((s: any) => (
+                  <li key={s.id} className="flex items-center justify-between py-1.5">
+                    <span>{s.rollNo ? <span className="mr-2 text-gray-400">{s.rollNo}</span> : null}{s.name}</span>
+                    {s.done ? <span className="badge badge-green">done</span> : <span className="badge badge-gray">not yet</span>}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </Modal>
+      )}
+    </>
   );
 }

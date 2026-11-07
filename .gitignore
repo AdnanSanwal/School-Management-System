@@ -49,3 +49,7 @@ mobile/.expo/
 
 # Uploaded files (local storage driver)
 backend/uploads/
+
+# Production secrets and backups
+.env.production
+backups/

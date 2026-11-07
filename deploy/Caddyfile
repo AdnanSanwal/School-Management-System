@@ -1,0 +1,33 @@
+# Caddy gets and renews the HTTPS certificate for {$DOMAIN} by itself (Let's Encrypt).
+# For "localhost" it uses its own local certificate authority instead.
+
+{$DOMAIN} {
+	encode zstd gzip
+
+	# Internal endpoints stay private.
+	@internal path /metrics /metrics/*
+	respond @internal 404
+
+	# API, health check and live updates go to the backend.
+	@backend path /api/* /socket.io/* /health
+	handle @backend {
+		reverse_proxy backend:5000
+	}
+
+	# Everything else is the web app.
+	handle {
+		reverse_proxy frontend:3000
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+
+	# Uploads (photos, attachments, payment proofs) are limited in the app; allow some headroom.
+	request_body {
+		max_size 25MB
+	}
+}

@@ -1,4 +1,4 @@
-import { Alert, Platform, Text } from 'react-native';
+import { Alert, Platform, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { API, apiError } from '../../lib/api';
@@ -26,7 +26,14 @@ export default function TeacherDiary() {
       {q.error && <ErrorBox message={apiError(q.error)} />}
       {q.data && (
         <DiaryList entries={q.data.data} showSection footer={(e) => (
-          <Text onPress={() => confirmDelete(e.id)} style={{ color: colors.bad, fontWeight: '600', marginTop: 8 }} accessibilityRole="button">Delete</Text>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 }}>
+            {e.isHomework ? (
+              <Text onPress={() => router.push(`/homework/${e.id}`)} style={{ color: colors.primary, fontWeight: '600' }} accessibilityRole="link">
+                ✅ {e.doneCount ?? 0} marked done
+              </Text>
+            ) : <View />}
+            <Text onPress={() => confirmDelete(e.id)} style={{ color: colors.bad, fontWeight: '600' }} accessibilityRole="button">Delete</Text>
+          </View>
         )} />
       )}
     </Screen>

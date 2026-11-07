@@ -12,6 +12,7 @@ import { handler, parseBody, parseQuery, id, money, me } from '../../utils/http'
 import { assertStudentAccess, isSchoolWide, studentScope } from '../../utils/scope';
 import { assertKind, deleteFile, saveFile, signedUrl } from '../../utils/storage';
 import { guardiansOf, notify, notifyEach } from '../../utils/notify';
+import { messageFamilies } from '../../utils/messaging';
 import { uploadOne } from '../files/files.routes';
 import { collectPayment } from '../fees/fees.service';
 import { D, outstanding } from '../fees/fees.calc';
@@ -110,6 +111,7 @@ async function completeIntent(intentId: string, cb: { success: boolean; provider
       body: `${D(intent.amount).toFixed(2)} paid for ${p.studentName}. Receipt ${result.payment.receiptNo}.`,
       data: { paymentId: result.payment.id, studentId: intent.studentId },
     })));
+    await messageFamilies('FEE_PAID', [{ studentId: intent.studentId, body: `Online payment of ${D(intent.amount).toFixed(0)} received. Receipt ${result.payment.receiptNo}.` }]);
     return 'SUCCEEDED';
   } catch (err) {
     // Money was taken but the invoices changed meanwhile (e.g. paid at the counter): flag for the office.
@@ -245,6 +247,7 @@ router.post('/claims/:id/decision', can('fee.collect'), handler(async (req, res)
       body: `${D(claim.amount).toFixed(2)} received for ${p.studentName}. Receipt ${result.payment.receiptNo}.`,
       data: { paymentId: result.payment.id, studentId: claim.studentId },
     })));
+    await messageFamilies('FEE_PAID', [{ studentId: claim.studentId, body: `Your payment of ${D(claim.amount).toFixed(0)} (ref ${claim.reference}) is verified. Receipt ${result.payment.receiptNo}.` }]);
     return sendSuccess(res, { receiptNo: result.payment.receiptNo, paymentId: result.payment.id }, `Verified — receipt ${result.payment.receiptNo}`);
   } catch (err) {
     // Couldn't apply (e.g. months already paid at the counter): put it back for review.

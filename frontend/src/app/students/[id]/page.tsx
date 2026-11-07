@@ -8,7 +8,7 @@ import toast from 'react-hot-toast';
 import { KeyRound, FileText, Plus, Wallet, BadgePercent, Trash2, Camera, Link2 } from 'lucide-react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Field, Modal, PasswordNotice, Spinner, StatusBadge, SectionSelect } from '@/components/ui/kit';
-import { studentsAPI, feesAPI, apiError } from '@/lib/api';
+import { studentsAPI, feesAPI, transportAPI, libraryAPI, apiError } from '@/lib/api';
 import { CAN, can } from '@/lib/roles';
 import { formatDate, formatMoney, sectionLabel, todayIso } from '@/lib/utils';
 import { useAuthStore } from '@/store/authStore';
@@ -80,6 +80,8 @@ export default function StudentProfilePage() {
                 )}
               </div>
             )}
+            {can(role, 'viewTransport') && <TransportCard studentId={s.id} active={s.status === 'ACTIVE'} currency={currency} />}
+            {can(role, 'viewLibrary') && <LibraryCard studentId={s.id} currency={currency} />}
           </div>
 
           <div className="card lg:col-span-2">
@@ -314,5 +316,99 @@ function ConcessionModal({ id, onClose }: { id: string; onClose: () => void }) {
         <button className="btn btn-primary col-span-2" disabled={m.isPending}>Send for approval</button>
       </form>
     </Modal>
+  );
+}
+
+function TransportCard({ studentId, active, currency }: { studentId: string; active: boolean; currency: string }) {
+  const role = useAuthStore((s) => s.user?.role);
+  const manage = can(role, 'manageTransport') && active;
+  const qc = useQueryClient();
+  const t = useQuery({ queryKey: ['transport', 'student', studentId], queryFn: () => transportAPI.student(studentId) });
+  const routes = useQuery({ queryKey: ['transport', 'routes'], queryFn: transportAPI.routes, enabled: manage });
+  const [editing, setEditing] = useState(false);
+  const [routeId, setRouteId] = useState('');
+  const [stopId, setStopId] = useState('');
+  const refresh = () => qc.invalidateQueries({ queryKey: ['transport'] });
+  const assign = useMutation({
+    mutationFn: () => transportAPI.assign(studentId, routeId, stopId || null),
+    onSuccess: () => { toast.success('Transport saved'); setEditing(false); refresh(); },
+    onError: (e) => toast.error(apiError(e)),
+  });
+  const remove = useMutation({
+    mutationFn: () => transportAPI.unassign(studentId),
+    onSuccess: () => { toast.success('Removed from transport'); refresh(); },
+    onError: (e) => toast.error(apiError(e)),
+  });
+  const cur: any = t.data;
+  const route = (routes.data ?? []).find((r: any) => r.id === routeId);
+
+  return (
+    <div className="card">
+      <h3 className="section-title mb-2">Transport</h3>
+      {t.isLoading ? <Spinner /> : editing ? (
+        <form className="space-y-2" onSubmit={(e) => { e.preventDefault(); assign.mutate(); }}>
+          <select className="select" required value={routeId} onChange={(e) => { setRouteId(e.target.value); setStopId(''); }} aria-label="Route">
+            <option value="" disabled>Choose route…</option>
+            {(routes.data ?? []).filter((r: any) => r.isActive).map((r: any) => (
+              <option key={r.id} value={r.id}>{r.name} · {formatMoney(r.monthlyFee, currency)}{r.capacity ? ` · ${r.riders}/${r.capacity}` : ''}</option>
+            ))}
+          </select>
+          {route?.stops.length > 0 && (
+            <select className="select" value={stopId} onChange={(e) => setStopId(e.target.value)} aria-label="Stop">
+              <option value="">No particular stop</option>
+              {route.stops.map((s: any) => <option key={s.id} value={s.id}>{s.name}{s.pickupTime ? ` (${s.pickupTime})` : ''}</option>)}
+            </select>
+          )}
+          <div className="flex gap-2">
+            <button type="button" className="btn btn-ghost flex-1" onClick={() => setEditing(false)}>Cancel</button>
+            <button className="btn btn-primary flex-1" disabled={assign.isPending}>Save</button>
+          </div>
+        </form>
+      ) : cur ? (
+        <>
+          <Line k="Route" v={cur.route.name} />
+          {cur.stop && <Line k="Stop" v={`${cur.stop.name}${cur.stop.pickupTime ? ` · ${cur.stop.pickupTime}` : ''}`} />}
+          {cur.route.vehicleNo && <Line k="Vehicle" v={cur.route.vehicleNo} />}
+          <Line k="Monthly fee" v={formatMoney(cur.route.monthlyFee, currency)} />
+          {manage && (
+            <div className="mt-2 flex gap-2">
+              <button className="btn btn-ghost flex-1" onClick={() => { setRouteId(cur.route.id); setEditing(true); }}>Change</button>
+              <button className="btn btn-ghost flex-1 text-red-600" onClick={() => confirm('Remove from school transport? The fee stops from the next invoice.') && remove.mutate()}>Remove</button>
+            </div>
+          )}
+        </>
+      ) : (
+        <>
+          <p className="text-sm text-gray-500">Does not use school transport.</p>
+          {manage && <button className="btn btn-ghost mt-2 w-full" onClick={() => setEditing(true)}>Assign a route</button>}
+        </>
+      )}
+    </div>
+  );
+}
+
+function LibraryCard({ studentId, currency }: { studentId: string; currency: string }) {
+  const q = useQuery({ queryKey: ['library', 'student', studentId], queryFn: () => libraryAPI.student(studentId) });
+  const d: any = q.data;
+  return (
+    <div className="card">
+      <h3 className="section-title mb-2">Library</h3>
+      {q.isLoading ? <Spinner /> : !d ? null : (
+        <>
+          {!d.current.length ? <p className="text-sm text-gray-500">No books issued.</p> : (
+            <ul className="space-y-1 text-sm">
+              {d.current.map((l: any) => (
+                <li key={l.id} className="flex justify-between gap-2">
+                  <span className="truncate">{l.book.title}</span>
+                  <span className={l.overdue ? 'whitespace-nowrap text-red-600' : 'whitespace-nowrap text-gray-500'}>due {formatDate(l.dueDate)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+          {d.unpaidFines > 0 && <Line k="Unpaid fines" v={<span className="text-red-600">{formatMoney(d.unpaidFines, currency)}</span>} />}
+          <p className="mt-1 text-xs text-gray-400">{d.history.length} book(s) returned before</p>
+        </>
+      )}
+    </div>
   );
 }

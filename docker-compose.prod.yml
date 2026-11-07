@@ -1,0 +1,160 @@
+# Production stack for one VPS.
+#
+#   cp .env.production.example .env.production   # fill in DOMAIN, passwords, secrets
+#   docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+#
+# Caddy is the only service with public ports. It gets HTTPS certificates
+# from Let's Encrypt for $DOMAIN and sends /api and /socket.io to the backend,
+# and everything else to the web app. See docs/DEPLOY.md.
+
+name: school-erp
+
+x-restart: &restart
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options: { max-size: '10m', max-file: '5' }
+
+services:
+  mysql:
+    <<: *restart
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: school_db
+      MYSQL_USER: sms_user
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?set MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?set MYSQL_ROOT_PASSWORD}
+      TZ: ${TZ:-Asia/Karachi}
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ['CMD-SHELL', 'mysqladmin ping -h 127.0.0.1 -u root -p$$MYSQL_ROOT_PASSWORD --silent']
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+
+  redis:
+    <<: *restart
+    image: redis:7-alpine
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  backend:
+    <<: *restart
+    build:
+      context: .
+      dockerfile: ./backend/Dockerfile
+      target: runner
+    depends_on:
+      mysql: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    environment:
+      NODE_ENV: production
+      PORT: '5000'
+      DATABASE_URL: mysql://sms_user:${MYSQL_PASSWORD}@mysql:3306/school_db
+      REDIS_URL: redis://redis:6379
+      FRONTEND_URL: https://${DOMAIN:?set DOMAIN}
+      BACKEND_URL: https://${DOMAIN}
+      UPLOAD_DIR: /app/uploads
+      TRUST_PROXY: '1'
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET}
+      REFRESH_TOKEN_SECRET: ${REFRESH_TOKEN_SECRET:?set REFRESH_TOKEN_SECRET}
+      AES_SECRET_KEY: ${AES_SECRET_KEY:?set AES_SECRET_KEY (64 hex chars)}
+      FILE_URL_SECRET: ${FILE_URL_SECRET:?set FILE_URL_SECRET}
+      JOBS_ENABLED: ${JOBS_ENABLED:-true}
+      JOBS_RUN_HOUR: ${JOBS_RUN_HOUR:-7}
+      PAYMENT_GATEWAY: ${PAYMENT_GATEWAY:-}
+      PAYMENT_GATEWAY_SECRET: ${PAYMENT_GATEWAY_SECRET:-}
+      MESSAGING_PROVIDER: ${MESSAGING_PROVIDER:-}
+      DEFAULT_COUNTRY_CODE: ${DEFAULT_COUNTRY_CODE:-92}
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
+      TWILIO_PHONE_NUMBER: ${TWILIO_PHONE_NUMBER:-}
+      TWILIO_WHATSAPP_FROM: ${TWILIO_WHATSAPP_FROM:-}
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+      VAPID_SUBJECT: ${VAPID_SUBJECT:-}
+      SENDGRID_API_KEY: ${SENDGRID_API_KEY:-}
+      MOBILE_ORIGIN: ${MOBILE_ORIGIN:-}
+      EMAIL_FROM: ${EMAIL_FROM:-}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+    volumes:
+      - uploads_data:/app/uploads
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -qO- http://localhost:5000/health || exit 1']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  frontend:
+    <<: *restart
+    build:
+      context: .
+      dockerfile: ./frontend/Dockerfile
+      target: runner
+      args:
+        NEXT_PUBLIC_API_URL: /api/v1
+        API_PROXY_URL: http://backend:5000/api
+    depends_on:
+      backend: { condition: service_healthy }
+    environment:
+      NODE_ENV: production
+    healthcheck:
+      test: ['CMD-SHELL', "node -e \"fetch('http://127.0.0.1:3000/login').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  caddy:
+    <<: *restart
+    image: caddy:2.8-alpine
+    depends_on:
+      - backend
+      - frontend
+    ports:
+      - '80:80'
+      - '443:443'
+      - '443:443/udp'
+    environment:
+      DOMAIN: ${DOMAIN}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+  # Nightly database dump + uploads archive into ./backups (kept BACKUP_KEEP_DAYS).
+  # Copy that folder off the server too — see docs/DEPLOY.md.
+  backup:
+    <<: *restart
+    image: mysql:8.4
+    depends_on:
+      mysql: { condition: service_healthy }
+    entrypoint: ['bash', '/scripts/backup.sh']
+    command: ['loop']   # `run --rm backup once` takes a backup immediately
+    environment:
+      MYSQL_HOST: mysql
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: school_db
+      BACKUP_HOUR: ${BACKUP_HOUR:-2}
+      BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-14}
+      TZ: ${TZ:-Asia/Karachi}
+    volumes:
+      - ./deploy/backup.sh:/scripts/backup.sh:ro
+      - ${BACKUP_DIR:-./backups}:/backups
+      - uploads_data:/uploads:ro
+
+volumes:
+  mysql_data:
+  redis_data:
+  uploads_data:
+  caddy_data:
+  caddy_config:

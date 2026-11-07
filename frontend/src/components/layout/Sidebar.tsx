@@ -9,6 +9,7 @@ import {
   LayoutDashboard, Users, GraduationCap, Bell, Settings, LogOut, ChevronLeft, ChevronRight,
   UserCheck, Layers, Wallet, Receipt, AlertTriangle, BadgePercent, FileSpreadsheet, ClipboardCheck,
   KeyRound, School, Home, Megaphone, BookOpen, CalendarDays, PenLine, Clock, Inbox, FileBarChart, Plane,
+  Building2, ArrowUpCircle, Bus, Library,
 } from 'lucide-react';
 import { can, Capability, ROLE_LABEL } from '@/lib/roles';
 
@@ -32,6 +33,7 @@ const navGroups: NavGroup[] = [
     items: [
       { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, cap: 'dashboard' },
       { label: 'My children', href: '/family', icon: Home, roles: ['PARENT', 'STUDENT'] },
+      { label: 'Schools', href: '/platform', icon: Building2, cap: 'platform' },
       { label: 'Approvals', href: '/approvals', icon: Inbox, cap: 'approvals' },
       { label: 'Reports', href: '/reports', icon: FileBarChart, cap: 'reports' },
     ],
@@ -53,6 +55,7 @@ const navGroups: NavGroup[] = [
       { label: 'Exams & results', href: '/exams', icon: GraduationCap, cap: 'viewExams' },
       { label: 'Marks entry', href: '/marks', icon: PenLine, roles: ['TEACHER'] },
       { label: 'Timetable', href: '/timetable', icon: Clock, cap: 'viewTimetable' },
+      { label: 'Year-end promotion', href: '/promotions', icon: ArrowUpCircle, cap: 'promotion' },
     ],
   },
   {
@@ -73,6 +76,13 @@ const navGroups: NavGroup[] = [
       { label: 'Invoices', href: '/fees/invoices', icon: FileSpreadsheet, cap: 'viewFees' },
       { label: 'Concessions', href: '/fees/concessions', icon: BadgePercent, cap: 'viewFees' },
       { label: 'Fee structure', href: '/fees/structure', icon: Layers, cap: 'viewFees' },
+    ],
+  },
+  {
+    title: 'Facilities',
+    items: [
+      { label: 'Transport', href: '/transport', icon: Bus, cap: 'viewTransport' },
+      { label: 'Library', href: '/library', icon: Library, cap: 'viewLibrary' },
     ],
   },
   {

@@ -5,21 +5,22 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Field, Spinner } from '@/components/ui/kit';
-import { schoolAPI, paymentsAPI, apiError } from '@/lib/api';
+import { schoolAPI, paymentsAPI, messagingAPI, apiError } from '@/lib/api';
 import { CAN } from '@/lib/roles';
-import { formatDate } from '@/lib/utils';
+import { formatDate, formatDateTime } from '@/lib/utils';
 
 export default function SchoolSettingsPage() {
   const qc = useQueryClient();
   const school = useQuery({ queryKey: ['school'], queryFn: schoolAPI.get });
   const years = useQuery({ queryKey: ['years'], queryFn: schoolAPI.years });
-  const [f, setF] = useState({ name: '', address: '', phone: '', email: '', timezone: '', lateFeeAmount: '0', lateFeeGraceDays: '7', lowAttendanceThreshold: '75' });
+  const [f, setF] = useState({ name: '', address: '', phone: '', email: '', timezone: '', lateFeeAmount: '0', lateFeeGraceDays: '7', lowAttendanceThreshold: '75', libraryFinePerDay: '0' });
   const [y, setY] = useState({ name: '', startDate: '', endDate: '' });
 
   useEffect(() => {
     if (school.data) setF({
       name: school.data.name, address: school.data.address ?? '', phone: school.data.phone ?? '', email: school.data.email ?? '', timezone: school.data.timezone,
       lateFeeAmount: String(Number(school.data.lateFeeAmount)), lateFeeGraceDays: String(school.data.lateFeeGraceDays), lowAttendanceThreshold: String(school.data.lowAttendanceThreshold),
+      libraryFinePerDay: String(Number(school.data.libraryFinePerDay ?? 0)),
     });
   }, [school.data]);
 
@@ -27,6 +28,7 @@ export default function SchoolSettingsPage() {
     mutationFn: () => schoolAPI.update({
       name: f.name, address: f.address || null, phone: f.phone || null, email: f.email || null, timezone: f.timezone,
       lateFeeAmount: Number(f.lateFeeAmount), lateFeeGraceDays: Number(f.lateFeeGraceDays), lowAttendanceThreshold: Number(f.lowAttendanceThreshold),
+      libraryFinePerDay: Number(f.libraryFinePerDay),
     }),
     onSuccess: () => { toast.success('Saved'); qc.invalidateQueries({ queryKey: ['school'] }); },
     onError: (e) => toast.error(apiError(e)),
@@ -60,6 +62,7 @@ export default function SchoolSettingsPage() {
               <Field label="Grace days" hint="after the due date"><input type="number" min="0" max="90" className="input" value={f.lateFeeGraceDays} onChange={(e) => setF({ ...f, lateFeeGraceDays: e.target.value })} /></Field>
               <Field label="Low attendance %" hint="alert below this"><input type="number" min="0" max="100" className="input" value={f.lowAttendanceThreshold} onChange={(e) => setF({ ...f, lowAttendanceThreshold: e.target.value })} /></Field>
             </div>
+            <Field label="Library fine per day" hint="charged for each day a book is returned late; 0 = none"><input type="number" min="0" className="input" value={f.libraryFinePerDay} onChange={(e) => setF({ ...f, libraryFinePerDay: e.target.value })} /></Field>
             <p className="text-xs text-gray-500">Late fees are added automatically every morning; fee reminders and low-attendance alerts go out on Mondays.</p>
             <p className="text-xs text-gray-500">School code: <code>{school.data?.code}</code> · Currency: {school.data?.currency}</p>
             <button className="btn btn-primary" disabled={save.isPending}>Save</button>
@@ -85,6 +88,7 @@ export default function SchoolSettingsPage() {
             </form>
           </div>
           <PaymentAccounts />
+          <Messaging />
         </div>
       )}
     </DashboardLayout>
@@ -131,6 +135,94 @@ function PaymentAccounts() {
         <input className="input" placeholder="IBAN (optional)" value={a.iban} onChange={(e) => setA({ ...a, iban: e.target.value })} aria-label="IBAN" />
         <button className="btn btn-secondary" disabled={add.isPending}>Add</button>
       </form>
+    </div>
+  );
+}
+
+const TYPE_LABEL: Record<string, string> = {
+  ATTENDANCE_ABSENT: 'Child marked absent',
+  FEE_DUE: 'Fee reminders',
+  FEE_PAID: 'Fee received',
+  RESULT_PUBLISHED: 'Results published',
+  LOW_ATTENDANCE: 'Low attendance alert',
+};
+
+function Messaging() {
+  const qc = useQueryClient();
+  const { data } = useQuery({ queryKey: ['messaging'], queryFn: messagingAPI.get });
+  const [f, setF] = useState<{ messagingEnabled: boolean; messagingChannel: string; messagingTypes: string[] }>({ messagingEnabled: false, messagingChannel: 'SMS', messagingTypes: [] });
+  const [phone, setPhone] = useState('');
+  useEffect(() => {
+    if (data) setF({ messagingEnabled: data.messagingEnabled, messagingChannel: data.messagingChannel, messagingTypes: data.messagingTypes });
+  }, [data]);
+  const save = useMutation({
+    mutationFn: () => messagingAPI.save(f),
+    onSuccess: () => { toast.success(f.messagingEnabled ? 'WhatsApp/SMS alerts on' : 'WhatsApp/SMS alerts off'); qc.invalidateQueries({ queryKey: ['messaging'] }); },
+    onError: (e) => toast.error(apiError(e)),
+  });
+  const test = useMutation({
+    mutationFn: () => messagingAPI.test(phone),
+    onSuccess: (r: any) => {
+      if (r.status === 'SENT') toast.success(`Sent to ${r.to}`); else toast.error(`Failed: ${r.error}`);
+      qc.invalidateQueries({ queryKey: ['messaging'] });
+    },
+    onError: (e) => toast.error(apiError(e)),
+  });
+  if (!data) return null;
+  const toggleType = (t: string) => setF({ ...f, messagingTypes: f.messagingTypes.includes(t) ? f.messagingTypes.filter((x) => x !== t) : [...f.messagingTypes, t] });
+
+  return (
+    <div className="card space-y-3 lg:col-span-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="section-title">WhatsApp / SMS alerts</h3>
+        <span className="text-xs text-gray-500">
+          Provider: {data.provider ?? <span className="text-red-600">not configured on the server</span>}
+          {' · '}last 30 days: {data.last30Days.SENT ?? 0} sent, {data.last30Days.FAILED ?? 0} failed
+        </span>
+      </div>
+      <p className="text-sm text-gray-500">Sent to the primary guardian’s phone, on top of the app notification. Each message may cost money with your provider.</p>
+      <div className="grid gap-4 md:grid-cols-3">
+        <div className="space-y-2 text-sm">
+          <label className="flex items-center gap-2 font-medium"><input type="checkbox" checked={f.messagingEnabled} onChange={(e) => setF({ ...f, messagingEnabled: e.target.checked })} /> Send alerts</label>
+          <Field label="Channel">
+            <select className="select" value={f.messagingChannel} onChange={(e) => setF({ ...f, messagingChannel: e.target.value })}>
+              <option value="SMS">SMS</option><option value="WHATSAPP">WhatsApp</option>
+            </select>
+          </Field>
+        </div>
+        <div className="space-y-1.5 text-sm">
+          <span className="label">Send for</span>
+          {data.availableTypes.map((t: string) => (
+            <label key={t} className="flex items-center gap-2"><input type="checkbox" checked={f.messagingTypes.includes(t)} onChange={() => toggleType(t)} /> {TYPE_LABEL[t] ?? t}</label>
+          ))}
+        </div>
+        <form className="space-y-2" onSubmit={(e) => { e.preventDefault(); test.mutate(); }}>
+          <Field label="Send a test message" hint="e.g. 0300 1234567"><input className="input" required value={phone} onChange={(e) => setPhone(e.target.value)} /></Field>
+          <button className="btn btn-secondary w-full" disabled={test.isPending || !data.provider}>Send test</button>
+        </form>
+      </div>
+      <button className="btn btn-primary" disabled={save.isPending} onClick={() => save.mutate()}>Save alert settings</button>
+      {data.recent.length > 0 && (
+        <details className="text-sm">
+          <summary className="cursor-pointer text-gray-600">Recent messages ({data.recent.length})</summary>
+          <div className="mt-2 overflow-x-auto">
+            <table className="table">
+              <thead><tr><th>When</th><th>To</th><th>Type</th><th>Message</th><th>Status</th></tr></thead>
+              <tbody>
+                {data.recent.map((m: any) => (
+                  <tr key={m.id}>
+                    <td className="whitespace-nowrap text-xs">{formatDateTime(m.createdAt)}</td>
+                    <td className="text-xs">{m.to}</td>
+                    <td className="text-xs">{TYPE_LABEL[m.type] ?? m.type.toLowerCase()}</td>
+                    <td className="max-w-md text-xs text-gray-600">{m.body}</td>
+                    <td><span className={`badge ${m.status === 'SENT' ? 'badge-green' : m.status === 'FAILED' ? 'badge-red' : 'badge-yellow'}`} title={m.error ?? undefined}>{m.status.toLowerCase()}</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </details>
+      )}
     </div>
   );
 }

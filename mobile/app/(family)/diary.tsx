@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
-import { useQuery } from '@tanstack/react-query';
+import { Alert, Pressable, Text, View } from 'react-native';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { API, apiError } from '../../lib/api';
 import { ErrorBox, Loading, Screen } from '../../components/ui';
 import { ChildSwitcher, useChildren } from '../../components/ChildSwitcher';
@@ -10,6 +10,12 @@ import { colors } from '../../lib/theme';
 // Spec §10 Daily Diary + Homework (date-wise posts by teachers, attachments viewable).
 export default function FamilyDiary() {
   const { childId } = useChildren();
+  const qc = useQueryClient();
+  const mark = useMutation({
+    mutationFn: ({ id, done }: { id: string; done: boolean }) => API.markHomework(id, childId!, done),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['diary'] }),
+    onError: (e) => Alert.alert('Could not update', apiError(e)),
+  });
   const [homeworkOnly, setHomeworkOnly] = useState(false);
   const q = useQuery({
     queryKey: ['diary', childId, homeworkOnly],
@@ -30,7 +36,16 @@ export default function FamilyDiary() {
       </View>
       {q.isLoading && <Loading />}
       {q.error && <ErrorBox message={apiError(q.error)} onRetry={() => q.refetch()} />}
-      {q.data && <DiaryList entries={q.data.data} />}
+      {q.data && (
+        <DiaryList entries={q.data.data} footer={(e) => e.isHomework && (
+          <Pressable onPress={() => mark.mutate({ id: e.id, done: !e.done })} disabled={mark.isPending} accessibilityRole="checkbox" accessibilityState={{ checked: !!e.done }}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 10, alignSelf: 'flex-start',
+              backgroundColor: e.done ? colors.goodSoft : colors.primarySoft }}>
+            <Text style={{ fontSize: 16 }}>{e.done ? '✅' : '⬜'}</Text>
+            <Text style={{ color: e.done ? colors.good : colors.primary, fontWeight: '700' }}>{e.done ? 'Homework done' : 'Mark homework done'}</Text>
+          </Pressable>
+        )} />
+      )}
     </Screen>
   );
 }

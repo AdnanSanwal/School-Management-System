@@ -45,6 +45,12 @@ export const CAN = {
   waiveFine: ['PRINCIPAL'],
   applyFines: ['ADMIN', 'ACCOUNTANT'],
   lowAttendanceAlerts: ['PRINCIPAL', 'ADMIN'],
+  promotion: ['PRINCIPAL', 'ADMIN'],
+  viewTransport: ['OWNER', 'PRINCIPAL', 'ADMIN', 'ACCOUNTANT'],
+  manageTransport: ['PRINCIPAL', 'ADMIN'],
+  viewLibrary: ['OWNER', 'PRINCIPAL', 'ADMIN'],
+  manageLibrary: ['PRINCIPAL', 'ADMIN'],
+  platform: ['SUPER_ADMIN'],
 } satisfies Record<string, Role[]>;
 
 export type Capability = keyof typeof CAN;

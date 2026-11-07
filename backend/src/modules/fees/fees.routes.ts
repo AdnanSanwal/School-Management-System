@@ -13,6 +13,7 @@ import { assertStudentAccess, currentAcademicYear, ensureInSchool, isSchoolWide,
 import { applyLateFines, collectPayment, defaulters, generateInvoices, receipt, sendFeeReminders } from './fees.service';
 import { D } from './fees.calc';
 import { guardiansOf, notifyEach } from '../../utils/notify';
+import { messageFamilies } from '../../utils/messaging';
 
 // Fee heads, class fee structure, monthly invoices, collection & receipts,
 // concessions and defaulters (spec: Fee Management, Accountant).
@@ -189,6 +190,7 @@ router.post('/payments', can('fee.collect'), handler(async (req, res) => {
     body: `Payment of ${D(body.amount).toFixed(2)} received for ${p.studentName}. Receipt ${result.payment.receiptNo}.`,
     data: { paymentId: result.payment.id, studentId: p.studentId },
   })));
+  await messageFamilies('FEE_PAID', [{ studentId: body.studentId, body: `Fee of ${D(body.amount).toFixed(0)} received. Receipt ${result.payment.receiptNo}. Thank you.` }]);
   return sendSuccess(res, result, `Payment recorded — receipt ${result.payment.receiptNo}`, 201);
 }));
 

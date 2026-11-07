@@ -12,6 +12,7 @@ import { toDate, toIso } from '../../utils/dates';
 import { assertSectionAccess, assertStudentAccess, currentAcademicYear, ensureInSchool, isSchoolWide, staffForUser } from '../../utils/scope';
 import { signedLink, verifySignature } from '../../utils/storage';
 import { familiesOfSections, notify } from '../../utils/notify';
+import { messageFamilies } from '../../utils/messaging';
 import { validateScale } from './exams.calc';
 import { assertCanEnterMarks, loadExam, reportCard, sectionResults } from './exams.service';
 import { renderReportCard } from './exams.pdf';
@@ -203,6 +204,8 @@ router.post('/:id/publish', can('exam.approve'), handler(async (req, res) => {
     type: 'RESULT_PUBLISHED', title: `${exam.name} results are out`, body: 'Open the app to see marks and download the report card.',
     data: { examId: exam.id },
   });
+  const students = await prisma.student.findMany({ where: { status: 'ACTIVE', sectionId: { in: sections.map((s) => s.id) } }, select: { id: true, name: true } });
+  await messageFamilies('RESULT_PUBLISHED', students.map((s) => ({ studentId: s.id, body: `${exam.name} results for ${s.name} are out. See the school app or ask the office for the report card.` })));
   return sendSuccess(res, { notified }, `Results published — ${notified} families notified`);
 }));
 

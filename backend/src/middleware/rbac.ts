@@ -30,6 +30,10 @@ export const PERMISSIONS = [
   'calendar.view', 'calendar.manage',
   'notice.view', 'notice.publish', 'message.broadcast',
   'reports.finance', 'reports.attendance', 'reports.academic',
+  'promotion.run',
+  'transport.view', 'transport.manage',
+  'library.view', 'library.manage',
+  'homework.mark',
   'platform.manage',
 ] as const;
 
@@ -50,6 +54,7 @@ export const ROLE_PERMISSIONS: Record<Role, ReadonlySet<Permission>> = {
     ...EVERYONE_IN_SCHOOL, ...READ_ALL,
     'school.manage', 'users.manage', 'dashboard.owner',
     'reports.finance', 'reports.attendance', 'reports.academic',
+    'transport.view', 'library.view',
   ]),
 
   // Academic + administrative head; approvals. No fee collection or fee-structure edits.
@@ -65,6 +70,7 @@ export const ROLE_PERMISSIONS: Record<Role, ReadonlySet<Permission>> = {
     'timetable.manage', 'timetable.approve', 'calendar.manage',
     'notice.publish', 'message.broadcast',
     'reports.finance', 'reports.attendance', 'reports.academic',
+    'promotion.run', 'transport.view', 'transport.manage', 'library.view', 'library.manage',
   ]),
 
   // Office staff: admissions, records, fee entry, notices.
@@ -79,6 +85,7 @@ export const ROLE_PERMISSIONS: Record<Role, ReadonlySet<Permission>> = {
     'fee.concession.request',
     'exam.manage', 'timetable.manage', 'calendar.manage', 'notice.publish',
     'reports.finance', 'reports.attendance', 'leave.apply',
+    'promotion.run', 'transport.view', 'transport.manage', 'library.view', 'library.manage',
   ]),
 
   // Finance only.
@@ -86,7 +93,7 @@ export const ROLE_PERMISSIONS: Record<Role, ReadonlySet<Permission>> = {
     ...EVERYONE_IN_SCHOOL,
     'school.view', 'dashboard.accountant', 'student.view', 'class.view',
     'fee.view', 'fee.structure.view', 'fee.invoice.generate', 'fee.collect', 'fee.concession.request',
-    'reports.finance', 'leave.apply',
+    'reports.finance', 'leave.apply', 'transport.view',
   ]),
 
   // Class-level; scoped to own sections.
@@ -101,12 +108,14 @@ export const ROLE_PERMISSIONS: Record<Role, ReadonlySet<Permission>> = {
   PARENT: new Set<Permission>([
     ...EVERYONE_IN_SCHOOL,
     'school.view', 'student.view', 'attendance.student.view', 'fee.view', 'fee.pay', 'marks.view', 'diary.view',
+    'transport.view', 'library.view', 'homework.mark',
   ]),
 
   // Scoped to self.
   STUDENT: new Set<Permission>([
     ...EVERYONE_IN_SCHOOL,
     'school.view', 'student.view', 'attendance.student.view', 'marks.view', 'diary.view',
+    'transport.view', 'library.view', 'homework.mark',
   ]),
 };
 

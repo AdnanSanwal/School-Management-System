@@ -19,47 +19,20 @@ export async function createTestSchool(prefix = 'test') {
     return { ...u, token: signToken({ id: u.id, role: u.role, email: u.email, schoolId: school.id }) };
   }
 
+  /**
+   * Deletes every row of this school from every table that has a schoolId column
+   * (found from the database itself, so new tables are covered automatically).
+   */
   async function destroy() {
-    const where = { schoolId: school.id };
-    // Children before parents.
-    await basePrisma.paymentAllocation.deleteMany({ where });
-    await basePrisma.payment.deleteMany({ where });
-    await basePrisma.feeInvoiceItem.deleteMany({ where });
-    await basePrisma.feeInvoice.deleteMany({ where });
-    await basePrisma.concession.deleteMany({ where });
-    await basePrisma.feeStructure.deleteMany({ where });
-    await basePrisma.feeHead.deleteMany({ where });
-    await basePrisma.notification.deleteMany({ where });
-    await basePrisma.studentAttendance.deleteMany({ where });
-    await basePrisma.staffAttendance.deleteMany({ where });
-    await basePrisma.leaveRequest.deleteMany({ where });
-    await basePrisma.mark.deleteMany({ where });
-    await basePrisma.examSubject.deleteMany({ where });
-    await basePrisma.exam.deleteMany({ where });
-    await basePrisma.gradeScale.deleteMany({ where });
-    await basePrisma.diaryAttachment.deleteMany({ where });
-    await basePrisma.diaryEntry.deleteMany({ where });
-    await basePrisma.noticeRead.deleteMany({ where });
-    await basePrisma.noticeTarget.deleteMany({ where });
-    await basePrisma.notice.deleteMany({ where });
-    await basePrisma.calendarEvent.deleteMany({ where });
-    await basePrisma.timetableSlot.deleteMany({ where });
-    await basePrisma.subjectAssignment.deleteMany({ where });
-    await basePrisma.studentDocument.deleteMany({ where });
-    await basePrisma.studentGuardian.deleteMany({ where });
-    await basePrisma.student.deleteMany({ where });
-    await basePrisma.guardian.deleteMany({ where });
-    await basePrisma.staff.deleteMany({ where });
-    await basePrisma.section.deleteMany({ where });
-    await basePrisma.subject.deleteMany({ where });
-    await basePrisma.class.deleteMany({ where });
-    await basePrisma.counter.deleteMany({ where });
-    await basePrisma.pushSubscription.deleteMany({ where });
-    await basePrisma.deviceToken.deleteMany({ where });
-    await basePrisma.auditLog.deleteMany({ where });
-    await basePrisma.user.deleteMany({ where });
-    await basePrisma.academicYear.deleteMany({ where });
-    await basePrisma.school.delete({ where: { id: school.id } });
+    const tables = await basePrisma.$queryRawUnsafe<{ t: string }[]>(
+      "SELECT TABLE_NAME AS t FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND COLUMN_NAME = 'schoolId'",
+    );
+    await basePrisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS = 0');
+      for (const { t } of tables) await tx.$executeRawUnsafe(`DELETE FROM \`${t}\` WHERE schoolId = ?`, school.id);
+      await tx.$executeRawUnsafe('DELETE FROM `schools` WHERE id = ?', school.id);
+      await tx.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS = 1');
+    }, { timeout: 30_000 });
   }
 
   return { school, year, code, user, destroy };

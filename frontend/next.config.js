@@ -15,13 +15,12 @@ const nextConfig = {
       { protocol: 'https', hostname: 'school-management-files.s3.amazonaws.com' },
     ],
   },
+  // When the browser calls a relative API URL (NEXT_PUBLIC_API_URL=/api/v1) and no
+  // reverse proxy sits in front, Next forwards /api/* to the backend. In production
+  // Caddy sends /api/* straight to the backend, so this is only a fallback.
   async rewrites() {
-    return [
-      {
-        source: '/api/:path*',
-        destination: `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}/:path*`,
-      },
-    ];
+    const target = process.env.API_PROXY_URL || 'http://localhost:5000/api';
+    return [{ source: '/api/:path*', destination: `${target.replace(/\/$/, '')}/:path*` }];
   },
 };
 

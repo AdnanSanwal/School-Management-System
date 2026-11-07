@@ -29,6 +29,8 @@ export default function FamilyMore() {
       <MoreMenu extra={<>
         <Item icon="school-outline" label="Exams & results" onPress={() => router.push('/exams')} />
         <Item icon="time-outline" label="Timetable" onPress={() => router.push('/timetable')} />
+        <Item icon="bus-outline" label="School transport" onPress={() => router.push('/transport')} />
+        <Item icon="library-outline" label="Library" onPress={() => router.push('/library')} />
       </>} />
     </Screen>
   );

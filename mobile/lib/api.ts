@@ -64,6 +64,11 @@ export const API = {
   diary: (params: Record<string, any>) => api.get('/diary', { params }).then((r) => r.data),
   postDiary: (form: FormData) => data(api.post('/diary', form, { headers: { 'Content-Type': 'multipart/form-data' } })),
   deleteDiary: (id: string) => api.delete(`/diary/${id}`),
+  markHomework: (id: string, studentId: string, done: boolean) =>
+    done ? api.post(`/diary/${id}/done`, { studentId }) : api.delete(`/diary/${id}/done`, { params: { studentId } }),
+  homeworkCompletion: (id: string) => data(api.get(`/diary/${id}/completion`)),
+  transport: (studentId: string) => data(api.get(`/transport/students/${studentId}`)),
+  library: (studentId: string) => data(api.get(`/library/students/${studentId}`)),
 
   // Notices & notifications
   notices: (page = 1) => api.get('/notices', { params: { page, limit: 30 } }).then((r) => r.data),

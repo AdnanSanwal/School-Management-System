@@ -10,6 +10,11 @@ import { AppError } from '../../middleware/errorHandler';
 import { sendSuccess, sendPaginated } from '../../utils/apiResponse';
 import { handler, parseBody, parseQuery, paginationSchema, paging, me } from '../../utils/http';
 import { assertCanManageRole, createAccount, temporaryPassword } from '../../utils/accounts';
+import { currentSchoolId } from '../../config/tenancy';
+import { formatNumber, nextNumber } from '../../utils/counter';
+
+const OFFICE_STAFF_ROLES = new Set<string>(['PRINCIPAL', 'ADMIN', 'ACCOUNTANT']);
+const ROLE_DESIGNATION: Record<string, string> = { PRINCIPAL: 'Principal', ADMIN: 'Office administrator', ACCOUNTANT: 'Accountant' };
 
 // Login accounts of the school (spec: Settings & Users → Roles).
 
@@ -55,7 +60,23 @@ const createBody = z.object({
 // their own screens (staff / admission), which also link the profile.
 router.post('/', handler(async (req, res) => {
   const body = parseBody(createBody, req);
-  const result = await transaction((tx) => createAccount(tx, me(req).role, body));
+  const result = await transaction(async (tx) => {
+    const account = await createAccount(tx, me(req).role, body);
+    // Office logins are staff: give them a staff record so leave, attendance and
+    // reports include them (e.g. an owner creating the principal).
+    let staff = null;
+    if (OFFICE_STAFF_ROLES.has(body.role)) {
+      staff = await tx.staff.create({
+        data: {
+          schoolId: currentSchoolId(), userId: account.user.id, name: body.name, phone: body.phone ?? null,
+          employeeNo: formatNumber('EMP', await nextNumber(tx, 'employee'), 4),
+          designation: ROLE_DESIGNATION[body.role], department: 'Administration', isTeacher: false,
+        },
+        select: { id: true, employeeNo: true },
+      });
+    }
+    return { ...account, staff };
+  });
   return sendSuccess(res, result, 'User created', 201);
 }));
 

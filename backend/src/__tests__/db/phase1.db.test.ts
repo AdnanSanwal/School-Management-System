@@ -185,7 +185,7 @@ d('Phase 1 API (database)', () => {
     expect((await api('TEACHER').put('/attendance/staff', body)).status).toBe(403);
     expect((await api('ADMIN').put('/attendance/staff', body)).status).toBe(200);
     const r = await api('OWNER').get('/attendance/staff');
-    expect(r.body.data.staff[0].status).toBe('PRESENT');
+    expect(r.body.data.staff.find((s: any) => s.id === ids.teacherStaff).status).toBe('PRESENT');
   });
 
   // ─── Fees ───

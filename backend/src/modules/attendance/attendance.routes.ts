@@ -12,6 +12,7 @@ import { toDate, toIso, schoolToday, periodRange } from '../../utils/dates';
 import { assertSectionAccess, assertStudentAccess } from '../../utils/scope';
 import { attendanceSummary, countStatuses } from '../../utils/attendanceStats';
 import { guardiansOf, notifyEach } from '../../utils/notify';
+import { messageFamilies } from '../../utils/messaging';
 import { sendLowAttendanceAlerts } from './lowAttendance';
 
 // Student and staff attendance (spec: Attendance; Teacher → Mark Attendance).
@@ -97,6 +98,8 @@ router.put('/students', can('attendance.student.mark', 'attendance.student.corre
       body: `${p.studentName} was marked absent on ${toIso(date)}.`,
       data: { studentId: p.studentId, date: toIso(date) },
     })));
+    const names = await prisma.student.findMany({ where: { id: { in: newlyAbsent } }, select: { id: true, name: true } });
+    await messageFamilies('ATTENDANCE_ABSENT', names.map((n) => ({ studentId: n.id, body: `${n.name} was marked absent today (${toIso(date)}).` })));
   }
 
   const counts = attendanceSummary(countStatuses(body.records));

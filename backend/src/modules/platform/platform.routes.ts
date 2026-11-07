@@ -36,11 +36,16 @@ const createSchoolSchema = z.object({
 
 router.get('/schools', async (_req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const schools = await basePrisma.school.findMany({
-      orderBy: { createdAt: 'desc' },
-      include: { _count: { select: { users: true } } },
-    });
-    return sendSuccess(res, schools);
+    const [schools, students, owners] = await Promise.all([
+      basePrisma.school.findMany({ orderBy: { createdAt: 'desc' }, include: { _count: { select: { users: true } } } }),
+      basePrisma.student.groupBy({ by: ['schoolId'], where: { status: 'ACTIVE' }, _count: true }),
+      basePrisma.user.findMany({ where: { role: 'OWNER' }, select: { schoolId: true, name: true, email: true, lastLoginAt: true } }),
+    ]);
+    return sendSuccess(res, schools.map((sc) => ({
+      ...sc,
+      activeStudents: students.find((x) => x.schoolId === sc.id)?._count ?? 0,
+      owners: owners.filter((o) => o.schoolId === sc.id),
+    })));
   } catch (err) { next(err); }
 });
 

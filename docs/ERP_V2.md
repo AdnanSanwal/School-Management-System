@@ -140,10 +140,33 @@ today's classes on Home, My timetable.
   student attendance register, staff attendance, class strength, leave. One renderer
   (`utils/tableReport.ts`) does both formats.
 
+## Phase 5 (done)
+
+- **Office users get staff records**: creating a principal/admin/accountant login also creates their
+  `Staff` row (staff attendance, leave). A migration backfilled existing office users.
+- **Year-end promotion** (`/promotions`, `promotion.run`): `GET /preview?toAcademicYearId&examId` proposes
+  next class (same-named section), RETAINED for students who failed the chosen exam, GRADUATED for the top
+  class. `POST /run` writes a `PromotionRecord` per student (unique per target year, so it can't run twice),
+  copies subject teachers and fee structure into the new year if empty, and can make it current.
+- **Transport** (`/transport`): routes (vehicle, driver, seats, monthly fee), ordered stops, riders with
+  capacity check. Invoice generation adds a "Transport" line from the rider's route fee.
+- **Library** (`/library`): catalogue with copies/available, issue (14 days default, max 3 open per student),
+  return with fine = days late × school `libraryFinePerDay`, mark fine paid / waive.
+- **Homework done**: parents/students tick a homework (`POST/DELETE /diary/:id/done`); teachers see
+  `doneCount` and `GET /diary/:id/completion`.
+- **WhatsApp/SMS** (`utils/messaging.ts`): pluggable driver (`MESSAGING_PROVIDER=twilio|test`), per-school
+  switch, channel and event types (`/messaging`). Hooks: absent, fee due, fee paid, result published, low
+  attendance. Every message is logged in `OutboundMessage`.
+- **Platform screen** (`/platform` in the web panel): list schools with student/user counts and owners,
+  create, suspend.
+- **Mobile**: transport and library screens for families, homework "mark done", teacher completion list.
+- **Production**: `docker-compose.prod.yml` + `deploy/` (Caddy HTTPS, nightly backups, restore) —
+  see `docs/DEPLOY.md`.
+
 ## Phases (from the spec)
 
 1. **MVP — done** (see above). Not yet: file uploads (documents are links), mobile screens.
 2. **Done** — parent app (child switcher, attendance calendar, fee status, notices), daily diary, push notifications.
 3. **Done** — exams, marks entry, grade scales, report-card PDFs, timetable.
 4. **Done** — reports (PDF/Excel), online payments (proof + gateway hook), leave + approvals, late fees, alerts, daily jobs.
-5. Transport, library, student app, WhatsApp/SMS.
+5. **Done** — transport, library, student app (shares the family app), WhatsApp/SMS, year-end promotion, platform screen, production deploy.

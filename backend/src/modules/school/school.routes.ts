@@ -30,6 +30,7 @@ const schoolUpdate = z.object({
   lateFeeAmount: z.coerce.number().min(0).max(100_000).optional(),
   lateFeeGraceDays: z.coerce.number().int().min(0).max(90).optional(),
   lowAttendanceThreshold: z.coerce.number().int().min(0).max(100).optional(),
+  libraryFinePerDay: z.coerce.number().min(0).max(10_000).optional(),
 }).strict();
 
 router.patch('/', can('school.manage'), handler(async (req, res) => {
