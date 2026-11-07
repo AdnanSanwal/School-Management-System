@@ -13,6 +13,8 @@ import { createAccount } from '../../utils/accounts';
 import { formatNumber, nextNumber } from '../../utils/counter';
 import { attendanceSummary } from '../../utils/attendanceStats';
 import { assertStudentAccess, ensureInSchool, studentScope, currentAcademicYear } from '../../utils/scope';
+import { assertKind, deleteFile, MIME, saveFile, signedUrl } from '../../utils/storage';
+import { uploadOne } from '../files/files.routes';
 
 // Students, admission, guardians/siblings and documents (spec: Student Management).
 
@@ -98,7 +100,8 @@ router.get('/:id', can('student.view'), handler(async (req, res) => {
     relation: g.relation, isPrimary: g.isPrimary,
     guardian: fullContacts ? g.guardian : { id: g.guardian.id, name: g.guardian.name },
   }));
-  return sendSuccess(res, { ...student, guardians, ...extras });
+  const { photoKey, documents, ...rest } = student;
+  return sendSuccess(res, { ...rest, photo: signedUrl(photoKey) ?? student.photoUrl, documents: documents.map(withFileUrl), guardians, ...extras });
 }));
 
 // ─── Admission ───
@@ -265,19 +268,66 @@ router.post('/guardians/:guardianId/login', can('users.manage'), handler(async (
   return sendSuccess(res, result, 'Parent login created', 201);
 }));
 
-// ─── Documents (URL-based until file storage lands) ───
+// ─── Documents & photo ───
+// A document is either an uploaded file (multipart field "file", PDF/JPEG/PNG/WebP)
+// or an external link (JSON { title, url }).
 
-router.post('/:id/documents', can('student.manage'), handler(async (req, res) => {
-  const body = parseBody(z.object({ title: z.string().min(1).max(120), url: z.string().url().max(1024) }), req);
+router.post('/:id/documents', can('student.manage'), uploadOne, handler(async (req, res) => {
+  const { title } = parseBody(z.object({ title: z.string().min(1).max(120), url: z.any().optional() }), req);
   await ensureInSchool(prisma.student, req.params.id, 'Student');
-  const doc = await prisma.studentDocument.create({ data: { schoolId: currentSchoolId(), studentId: req.params.id, ...body } });
-  return sendSuccess(res, doc, 'Document added', 201);
+  const schoolId = currentSchoolId();
+  const base = { schoolId, studentId: req.params.id, title };
+
+  let doc;
+  if (req.file) {
+    const kind = assertKind(req.file.buffer, ['pdf', 'jpg', 'png', 'webp']);
+    const storageKey = await saveFile(schoolId, 'documents', req.file.buffer, kind);
+    try {
+      doc = await prisma.studentDocument.create({
+        data: { ...base, storageKey, fileName: req.file.originalname.slice(0, 190), mimeType: MIME[kind], sizeBytes: req.file.size },
+      });
+    } catch (e) {
+      await deleteFile(storageKey);
+      throw e;
+    }
+  } else {
+    const { url } = parseBody(z.object({ url: z.string().url().max(1024).refine((u) => /^https?:\/\//i.test(u), 'must be http(s)') }), req);
+    doc = await prisma.studentDocument.create({ data: { ...base, url } });
+  }
+  return sendSuccess(res, withFileUrl(doc), 'Document added', 201);
 }));
 
 router.delete('/:id/documents/:docId', can('student.manage'), handler(async (req, res) => {
-  const { count } = await prisma.studentDocument.deleteMany({ where: { id: req.params.docId, studentId: req.params.id } });
-  if (!count) throw new AppError('Document not found', 404);
+  const doc = await prisma.studentDocument.findFirst({ where: { id: req.params.docId, studentId: req.params.id } });
+  if (!doc) throw new AppError('Document not found', 404);
+  await prisma.studentDocument.delete({ where: { id: doc.id } });
+  await deleteFile(doc.storageKey);
   return sendSuccess(res, null, 'Document removed');
 }));
+
+router.put('/:id/photo', can('student.manage'), uploadOne, handler(async (req, res) => {
+  if (!req.file) throw new AppError('Attach an image as "file"', 422);
+  const kind = assertKind(req.file.buffer, ['jpg', 'png', 'webp']);
+  const student = await prisma.student.findFirst({ where: { id: req.params.id }, select: { id: true, photoKey: true } });
+  if (!student) throw new AppError('Student not found', 404);
+  const photoKey = await saveFile(currentSchoolId(), 'photos', req.file.buffer, kind);
+  await prisma.student.update({ where: { id: student.id }, data: { photoKey } });
+  await deleteFile(student.photoKey);
+  return sendSuccess(res, { photo: signedUrl(photoKey) }, 'Photo updated');
+}));
+
+router.delete('/:id/photo', can('student.manage'), handler(async (req, res) => {
+  const student = await prisma.student.findFirst({ where: { id: req.params.id }, select: { id: true, photoKey: true } });
+  if (!student) throw new AppError('Student not found', 404);
+  await prisma.student.update({ where: { id: student.id }, data: { photoKey: null } });
+  await deleteFile(student.photoKey);
+  return sendSuccess(res, null, 'Photo removed');
+}));
+
+/** Swaps the private storage key for a short-lived download link. */
+function withFileUrl<T extends { storageKey: string | null; url: string | null }>(d: T) {
+  const { storageKey, ...rest } = d;
+  return { ...rest, uploaded: !!storageKey, href: storageKey ? signedUrl(storageKey) : d.url };
+}
 
 export default router;

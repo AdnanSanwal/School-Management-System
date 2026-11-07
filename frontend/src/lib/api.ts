@@ -104,7 +104,20 @@ export const studentsAPI = {
   linkGuardian: (id: string, body: any) => data(api.post(`/students/${id}/guardians`, body)),
   unlinkGuardian: (id: string, guardianId: string) => api.delete(`/students/${id}/guardians/${guardianId}`),
   guardianLogin: (guardianId: string, email: string) => data(api.post(`/students/guardians/${guardianId}/login`, { email })),
-  addDocument: (id: string, body: any) => data(api.post(`/students/${id}/documents`, body)),
+  addDocumentLink: (id: string, body: { title: string; url: string }) => data(api.post(`/students/${id}/documents`, body)),
+  uploadDocument: (id: string, title: string, file: File) => {
+    const fd = new FormData();
+    fd.append('title', title);
+    fd.append('file', file);
+    return data(api.post(`/students/${id}/documents`, fd));
+  },
+  deleteDocument: (id: string, docId: string) => api.delete(`/students/${id}/documents/${docId}`),
+  uploadPhoto: (id: string, file: File) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    return data<{ photo: string }>(api.put(`/students/${id}/photo`, fd));
+  },
+  deletePhoto: (id: string) => api.delete(`/students/${id}/photo`),
 };
 
 export const attendanceAPI = {

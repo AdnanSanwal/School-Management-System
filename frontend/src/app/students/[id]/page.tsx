@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { KeyRound, FileText, Plus, Wallet, BadgePercent } from 'lucide-react';
+import { KeyRound, FileText, Plus, Wallet, BadgePercent, Trash2, Camera, Link2 } from 'lucide-react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Field, Modal, PasswordNotice, Spinner, StatusBadge, SectionSelect } from '@/components/ui/kit';
 import { studentsAPI, feesAPI, apiError } from '@/lib/api';
@@ -42,7 +42,10 @@ export default function StudentProfilePage() {
         <div className="grid gap-4 lg:grid-cols-3">
           <div className="card space-y-2 lg:col-span-2">
             <div className="flex items-center justify-between">
-              <h3 className="section-title">Profile</h3>
+              <div className="flex items-center gap-3">
+                <Photo s={s} editable={manage} onDone={refresh} />
+                <h3 className="section-title">Profile</h3>
+              </div>
               <StatusBadge status={s.status} />
             </div>
             <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm sm:grid-cols-3">
@@ -109,7 +112,14 @@ export default function StudentProfilePage() {
             {s.documents.length === 0 && <p className="text-sm text-gray-500">None uploaded.</p>}
             <ul className="space-y-1.5">
               {s.documents.map((d: any) => (
-                <li key={d.id}><a href={d.url} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-sm text-primary-600 hover:underline"><FileText className="h-4 w-4" />{d.title}</a></li>
+                <li key={d.id} className="flex items-center justify-between gap-2">
+                  <a href={d.href} target="_blank" rel="noreferrer noopener" className="flex min-w-0 items-center gap-2 text-sm text-primary-600 hover:underline">
+                    {d.uploaded ? <FileText className="h-4 w-4 flex-shrink-0" /> : <Link2 className="h-4 w-4 flex-shrink-0" />}
+                    <span className="truncate">{d.title}</span>
+                    {d.sizeBytes && <span className="text-xs text-gray-400">{Math.max(1, Math.round(d.sizeBytes / 1024))} KB</span>}
+                  </a>
+                  {manage && <DeleteDoc studentId={s.id} doc={d} onDone={refresh} />}
+                </li>
               ))}
             </ul>
           </div>
@@ -185,22 +195,70 @@ function SectionModal({ s, onClose, onDone }: { s: any; onClose: () => void; onD
 }
 
 function DocModal({ id, onClose, onDone }: { id: string; onClose: () => void; onDone: () => void }) {
-  const [f, setF] = useState({ title: '', url: '' });
+  const [mode, setMode] = useState<'file' | 'link'>('file');
+  const [title, setTitle] = useState('');
+  const [file, setFile] = useState<File | null>(null);
+  const [url, setUrl] = useState('');
   const m = useMutation({
-    mutationFn: () => studentsAPI.addDocument(id, f),
+    mutationFn: () => (mode === 'file' ? studentsAPI.uploadDocument(id, title, file!) : studentsAPI.addDocumentLink(id, { title, url })),
     onSuccess: () => { toast.success('Document added'); onDone(); onClose(); },
     onError: (e) => toast.error(apiError(e)),
   });
   return (
     <Modal open onClose={onClose} title="Add document">
       <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); m.mutate(); }}>
-        <Field label="Title"><input className="input" required value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} placeholder="Birth certificate" /></Field>
-        <Field label="Link" hint="File uploads come later; paste a link to the scanned document for now">
-          <input type="url" className="input" required value={f.url} onChange={(e) => setF({ ...f, url: e.target.value })} />
-        </Field>
-        <button className="btn btn-primary w-full" disabled={m.isPending}>Add</button>
+        <Field label="Title"><input className="input" required value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Birth certificate" /></Field>
+        <div className="flex gap-2 text-sm" role="tablist">
+          <button type="button" role="tab" aria-selected={mode === 'file'} className={`btn ${mode === 'file' ? 'btn-secondary' : 'btn-ghost'}`} onClick={() => setMode('file')}>Upload file</button>
+          <button type="button" role="tab" aria-selected={mode === 'link'} className={`btn ${mode === 'link' ? 'btn-secondary' : 'btn-ghost'}`} onClick={() => setMode('link')}>Link</button>
+        </div>
+        {mode === 'file' ? (
+          <Field label="File" hint="PDF, JPEG, PNG or WebP, up to 5 MB">
+            <input type="file" required accept="application/pdf,image/jpeg,image/png,image/webp" className="input"
+              onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+          </Field>
+        ) : (
+          <Field label="Link"><input type="url" required pattern="https?://.*" className="input" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://…" /></Field>
+        )}
+        <button className="btn btn-primary w-full" disabled={m.isPending || (mode === 'file' && !file)}>{m.isPending ? 'Uploading…' : 'Add'}</button>
       </form>
     </Modal>
+  );
+}
+
+function DeleteDoc({ studentId, doc, onDone }: { studentId: string; doc: any; onDone: () => void }) {
+  const m = useMutation({
+    mutationFn: () => studentsAPI.deleteDocument(studentId, doc.id),
+    onSuccess: () => { toast.success('Document removed'); onDone(); },
+    onError: (e) => toast.error(apiError(e)),
+  });
+  return (
+    <button className="btn-icon btn-ghost h-7 w-7 text-red-500" aria-label={`Remove ${doc.title}`} disabled={m.isPending}
+      onClick={() => confirm(`Remove “${doc.title}”?`) && m.mutate()}><Trash2 className="h-3.5 w-3.5" /></button>
+  );
+}
+
+function Photo({ s, editable, onDone }: { s: any; editable: boolean; onDone: () => void }) {
+  const m = useMutation({
+    mutationFn: (file: File) => studentsAPI.uploadPhoto(s.id, file),
+    onSuccess: () => { toast.success('Photo updated'); onDone(); },
+    onError: (e) => toast.error(apiError(e)),
+  });
+  const img = s.photo
+    // Plain <img>: the photo is a short-lived signed URL; next/image would proxy and cache it past expiry.
+    // eslint-disable-next-line @next/next/no-img-element
+    ? <img src={s.photo} alt={s.name} className="h-14 w-14 rounded-xl object-cover" />
+    : <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-primary-100 text-lg font-bold text-primary-700">{s.name[0]}</div>;
+  if (!editable) return img;
+  return (
+    <label className="group relative cursor-pointer" title="Change photo">
+      {img}
+      <span className="absolute inset-0 flex items-center justify-center rounded-xl bg-black/40 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+        <Camera className="h-5 w-5 text-white" />
+      </span>
+      <input type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" aria-label="Upload student photo"
+        disabled={m.isPending} onChange={(e) => { const f = e.target.files?.[0]; if (f) m.mutate(f); e.target.value = ''; }} />
+    </label>
   );
 }
 

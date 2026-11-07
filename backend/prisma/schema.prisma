@@ -163,6 +163,7 @@ model Student {
   bloodGroup    String?       @db.VarChar(8)
   address       String?       @db.Text
   photoUrl      String?       @db.VarChar(1024)
+  photoKey      String?       @db.VarChar(512) // uploaded photo; served via signed URL
   admissionDate DateTime      @db.Date
   sectionId     String?
   status        StudentStatus @default(ACTIVE)
@@ -209,7 +210,11 @@ model StudentDocument {
   schoolId   String
   studentId  String
   title      String
-  url        String   @db.VarChar(1024)
+  url        String?  @db.VarChar(1024) // external link, or
+  storageKey String?  @db.VarChar(512) // uploaded file (see src/utils/storage.ts)
+  fileName   String?
+  mimeType   String?  @db.VarChar(100)
+  sizeBytes  Int?
   uploadedAt DateTime @default(now())
 
   student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)

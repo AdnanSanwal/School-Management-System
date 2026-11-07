@@ -252,7 +252,9 @@ router.get('/defaulters', can('fee.view'), handler(async (req, res) => {
 
 // ─── Concessions ───
 
-router.get('/concessions', can('fee.concession.request', 'fee.concession.approve'), handler(async (req, res) => {
+// Office roles with fee.view (incl. the owner) can see concessions read-only; parents cannot.
+router.get('/concessions', can('fee.concession.request', 'fee.concession.approve', 'fee.view'), handler(async (req, res) => {
+  requireSchoolWide(req);
   const q = parseQuery(z.object({ status: z.enum(['PENDING', 'APPROVED', 'REJECTED']).optional(), studentId: id.optional() }), req);
   const rows = await prisma.concession.findMany({
     where: { ...(q.status ? { status: q.status } : {}), ...(q.studentId ? { studentId: q.studentId } : {}) },

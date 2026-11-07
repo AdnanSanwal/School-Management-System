@@ -23,6 +23,7 @@ import studentRoutes from './modules/students/students.routes';
 import attendanceRoutes from './modules/attendance/attendance.routes';
 import feeRoutes from './modules/fees/fees.routes';
 import dashboardRoutes from './modules/dashboard/dashboard.routes';
+import fileRoutes from './modules/files/files.routes';
 import notificationRoutes from './modules/notifications/notification.routes';
 import pushRoutes from './modules/push/push.routes';
 
@@ -61,13 +62,12 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(compression());
 
-// HTTP cache headers — GET list/detail endpoints cache for 60s in browser, 2 min on CDN
-app.use((req, res, next) => {
-  if (req.method === 'GET' && !req.path.startsWith('/api/v1/auth')) {
-    res.setHeader('Cache-Control', 'private, max-age=60, stale-while-revalidate=120');
-  } else {
-    res.setHeader('Cache-Control', 'no-store');
-  }
+// API data is private and changes with every save (attendance, payments…). Browser
+// caching made screens show stale data after a mutation, so never cache API
+// responses; the web app caches client-side with React Query. Signed file
+// downloads set their own Cache-Control in modules/files.
+app.use((_req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store');
   next();
 });
 
@@ -93,6 +93,7 @@ app.use(`${api}/students`, studentRoutes);
 app.use(`${api}/attendance`, attendanceRoutes);
 app.use(`${api}/fees`, feeRoutes);
 app.use(`${api}/dashboard`, dashboardRoutes);
+app.use(`${api}/files`, fileRoutes);
 app.use(`${api}/notifications`, notificationRoutes);
 app.use(`${api}/push`, pushRoutes);
 

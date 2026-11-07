@@ -34,6 +34,14 @@ until their phase lands.
 6. **No nested writes for tenant children** (create them with their own top-level call),
    and no `$queryRaw` without an explicit `schoolId` filter.
 7. Use `basePrisma` only for trusted cross-school code: auth, platform, seed, jobs.
+8. **Middleware that resumes the request from a callback or stream event** (multer, busboy, some
+   rate limiters) loses the AsyncLocalStorage tenant context. Capture `tenantStorage.getStore()`
+   and call `next` inside `tenantStorage.run(ctx, …)` — see `uploadOne` in `modules/files`.
+   Symptom if you forget: a 403 "Forbidden" from the scoped client.
+9. **Uploads** go through `uploadOne` + `assertKind` (content sniffing, 5 MB) + `saveFile`;
+   never return a storage key, return `signedUrl(key)`. Files live in `UPLOAD_DIR`
+   (default `backend/uploads/<schoolId>/…`, gitignored). An S3 driver can replace the four
+   functions in `utils/storage.ts` without touching callers.
 
 ## Running
 

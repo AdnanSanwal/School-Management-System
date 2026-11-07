@@ -46,3 +46,6 @@ coverage/
 # Mobile
 mobile/node_modules/
 mobile/.expo/
+
+# Uploaded files (local storage driver)
+backend/uploads/
