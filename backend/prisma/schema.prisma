@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "mysql"
   url      = env("DATABASE_URL")
 }
 
@@ -13,10 +13,10 @@ model User {
   email             String                    @unique
   password          String
   role              Role
-  phone             String?
-  avatar            String?
+  phone             String?                   @db.VarChar(512)
+  avatar            String?                   @db.VarChar(1024)
   mfaEnabled        Boolean                   @default(false)
-  mfaSecret         String?
+  mfaSecret         String?                   @db.Text
   resetToken        String?
   resetTokenExpires DateTime?
   oauthProvider     OAuthProvider?
@@ -45,10 +45,10 @@ model Student {
   admissionNo      String                 @unique
   dateOfBirth      DateTime?
   gender           String?
-  address          String?
-  parentName       String?
-  parentEmail      String?
-  parentPhone      String?
+  address          String?                @db.Text
+  parentName       String?                @db.VarChar(512)
+  parentEmail      String?                @db.VarChar(512)
+  parentPhone      String?                @db.VarChar(512)
   classId          String?
   transportRouteId String?
   enrolledAt       DateTime               @default(now())
@@ -157,7 +157,7 @@ model Exam {
   duration    Int
   totalMarks  Int
   passMark    Int
-  description String?
+  description String?      @db.Text
   createdAt   DateTime     @default(now())
   results     ExamResult[]
   class       Class        @relation(fields: [classId], references: [id])
@@ -172,7 +172,7 @@ model ExamResult {
   studentId String
   score     Float
   grade     String?
-  remarks   String?
+  remarks   String?  @db.Text
   createdAt DateTime @default(now())
   exam      Exam     @relation(fields: [examId], references: [id])
   student   Student  @relation(fields: [studentId], references: [id])
@@ -184,13 +184,13 @@ model ExamResult {
 model Assignment {
   id          String                 @id @default(uuid())
   title       String
-  description String?
+  description String?                @db.Text
   subjectId   String
   classId     String
   createdById String
   dueDate     DateTime
   totalPoints Int                    @default(100)
-  fileUrl     String?
+  fileUrl     String?                @db.VarChar(1024)
   createdAt   DateTime               @default(now())
   submissions AssignmentSubmission[]
   class       Class                  @relation(fields: [classId], references: [id])
@@ -204,10 +204,10 @@ model AssignmentSubmission {
   id           String     @id @default(uuid())
   assignmentId String
   studentId    String
-  content      String?
-  fileUrl      String?
+  content      String?    @db.Text
+  fileUrl      String?    @db.VarChar(1024)
   score        Float?
-  feedback     String?
+  feedback     String?    @db.Text
   submittedAt  DateTime?
   gradedAt     DateTime?
   createdAt    DateTime   @default(now())
@@ -223,7 +223,7 @@ model Fee {
   name         String
   amount       Float
   dueDate      DateTime?
-  description  String?
+  description  String?      @db.Text
   academicYear String
   createdAt    DateTime     @default(now())
   payments     FeePayment[]
@@ -281,7 +281,7 @@ model BookBorrowing {
 model TransportRoute {
   id          String    @id @default(uuid())
   name        String
-  description String?
+  description String?   @db.Text
   driverName  String?
   driverPhone String?
   vehicleNo   String?
@@ -296,7 +296,7 @@ model Notification {
   id        String   @id @default(uuid())
   userId    String
   title     String
-  message   String
+  message   String   @db.Text
   read      Boolean  @default(false)
   createdAt DateTime @default(now())
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -329,7 +329,7 @@ model Message {
   id             String       @id @default(uuid())
   conversationId String
   senderId       String
-  content        String
+  content        String       @db.Text
   createdAt      DateTime     @default(now())
   conversation   Conversation @relation(fields: [conversationId], references: [id])
   sender         User         @relation("SentMessages", fields: [senderId], references: [id])
@@ -340,8 +340,8 @@ model Message {
 model Announcement {
   id        String    @id @default(uuid())
   title     String
-  content   String
-  audience  String[]
+  content   String    @db.Text
+  audience  Json
   pinned    Boolean   @default(false)
   authorId  String
   expiresAt DateTime?
@@ -355,8 +355,8 @@ model Announcement {
 model Course {
   id          String             @id @default(uuid())
   title       String
-  description String?
-  thumbnail   String?
+  description String?            @db.Text
+  thumbnail   String?            @db.VarChar(1024)
   status      CourseStatus       @default(DRAFT)
   authorId    String
   subjectId   String?
@@ -373,8 +373,8 @@ model Lesson {
   id        String           @id @default(uuid())
   courseId  String
   title     String
-  content   String?
-  videoUrl  String?
+  content   String?          @db.Text
+  videoUrl  String?          @db.VarChar(1024)
   duration  Int?
   order     Int              @default(0)
   createdAt DateTime         @default(now())
@@ -413,9 +413,9 @@ model LessonProgress {
 model PushSubscription {
   id        String   @id @default(uuid())
   userId    String
-  endpoint  String   @unique
-  p256dh    String
-  auth      String
+  endpoint  String   @unique @db.VarChar(512)
+  p256dh    String   @db.VarChar(1024)
+  auth      String   @db.VarChar(1024)
   createdAt DateTime @default(now())
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -429,7 +429,7 @@ model AuditLog {
   resource   String
   resourceId String?
   ipAddress  String?
-  userAgent  String?
+  userAgent  String?  @db.Text
   createdAt  DateTime @default(now())
   user       User?    @relation(fields: [userId], references: [id])
 

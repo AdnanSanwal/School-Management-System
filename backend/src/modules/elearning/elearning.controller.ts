@@ -10,7 +10,7 @@ export async function listCourses(req: AuthRequest, res: Response, next: NextFun
     const limit = Number(req.query.limit) || 20;
     const search = (req.query.search as string) || '';
     const where: any = { status: 'PUBLISHED' };
-    if (search) where.title = { contains: search, mode: 'insensitive' };
+    if (search) where.title = { contains: search };
 
     const [courses, total] = await Promise.all([
       prisma.course.findMany({

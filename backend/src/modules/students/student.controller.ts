@@ -13,7 +13,7 @@ export async function list(req: AuthRequest, res: Response, next: NextFunction) 
 
     const result = await withCache(`students:list:${page}:${limit}:${search}`, 120, async () => {
       const where = search
-        ? { OR: [{ user: { name: { contains: search, mode: 'insensitive' as const } } }, { admissionNo: { contains: search, mode: 'insensitive' as const } }] }
+        ? { OR: [{ user: { name: { contains: search } } }, { admissionNo: { contains: search } }] }
         : {};
       const [students, total] = await Promise.all([
         prisma.student.findMany({

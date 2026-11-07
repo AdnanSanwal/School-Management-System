@@ -42,7 +42,7 @@ export const resolvers = {
 
     students: async (_: any, { page = 1, limit = 20, search = '' }: any, ctx: any) => {
       requireRole(ctx, 'ADMIN', 'TEACHER');
-      const where = search ? { OR: [{ user: { name: { contains: search, mode: 'insensitive' as const } } }, { admissionNo: { contains: search } }] } : {};
+      const where = search ? { OR: [{ user: { name: { contains: search } } }, { admissionNo: { contains: search } }] } : {};
       const [data, total] = await Promise.all([
         prisma.student.findMany({ where, skip: (page - 1) * limit, take: limit, include: { user: true, class: true } }),
         prisma.student.count({ where }),
@@ -106,7 +106,7 @@ export const resolvers = {
     announcements: async (_: any, { audience }: any, ctx: any) => {
       requireAuth(ctx);
       const where: any = {};
-      if (audience) where.audience = { has: audience };
+      if (audience) where.audience = { array_contains: [audience] };
       return prisma.announcement.findMany({ where, include: { author: true }, orderBy: [{ pinned: 'desc' }, { createdAt: 'desc' }] });
     },
   },

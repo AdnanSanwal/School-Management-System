@@ -11,7 +11,7 @@ export async function list(req: AuthRequest, res: Response, next: NextFunction) 
     const audience = (req.query.audience as string) || '';
     const announcements = await withCache(`announcements:${audience}`, 60, async () => {
       const where: any = {};
-      if (audience) where.audience = { has: audience };
+      if (audience) where.audience = { array_contains: [audience] };
       where.OR = [{ expiresAt: null }, { expiresAt: { gt: new Date() } }];
       return prisma.announcement.findMany({
         where,

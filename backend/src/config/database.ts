@@ -7,7 +7,7 @@ const prisma = new PrismaClient({
 
 export async function connectDatabase() {
   await prisma.$connect();
-  logger.info('PostgreSQL connected via Prisma');
+  logger.info('MySQL connected via Prisma');
 }
 
 export default prisma;

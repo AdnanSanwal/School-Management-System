@@ -8,7 +8,7 @@ export async function listBooks(req: AuthRequest, res: Response, next: NextFunct
   try {
     const search = (req.query.search as string) || '';
     const books = await prisma.book.findMany({
-      where: search ? { OR: [{ title: { contains: search, mode: 'insensitive' } }, { author: { contains: search, mode: 'insensitive' } }] } : {},
+      where: search ? { OR: [{ title: { contains: search } }, { author: { contains: search } }] } : {},
       orderBy: { title: 'asc' },
     });
     return sendSuccess(res, books);

@@ -15,7 +15,7 @@
     "db:generate": "prisma generate"
   },
   "prisma": {
-    "seed": "node ./dist/database/seed.js"
+    "seed": "ts-node src/database/seed.ts"
   },
   "dependencies": {
     "@apollo/server": "^4.11.0",
