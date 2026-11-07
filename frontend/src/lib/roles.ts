@@ -1,0 +1,39 @@
+import type { Role } from '@/store/authStore';
+
+// Mirrors backend/src/middleware/rbac.ts for showing/hiding UI. The server is
+// the real gatekeeper; this only avoids showing buttons that would get a 403.
+
+export const OFFICE: Role[] = ['OWNER', 'PRINCIPAL', 'ADMIN', 'ACCOUNTANT'];
+
+export const CAN = {
+  dashboard: ['OWNER', 'PRINCIPAL', 'ADMIN', 'ACCOUNTANT'],
+  viewStudents: ['OWNER', 'PRINCIPAL', 'ADMIN', 'ACCOUNTANT', 'TEACHER'],
+  manageStudents: ['PRINCIPAL', 'ADMIN'],
+  viewStaff: ['OWNER', 'PRINCIPAL', 'ADMIN'],
+  manageStaff: ['PRINCIPAL', 'ADMIN'],
+  viewClasses: ['OWNER', 'PRINCIPAL', 'ADMIN', 'ACCOUNTANT', 'TEACHER'],
+  manageClasses: ['PRINCIPAL', 'ADMIN'],
+  markAttendance: ['TEACHER', 'PRINCIPAL', 'ADMIN'],
+  viewAttendanceSummary: ['OWNER', 'PRINCIPAL', 'ADMIN'],
+  staffAttendance: ['OWNER', 'PRINCIPAL', 'ADMIN'],
+  markStaffAttendance: ['PRINCIPAL', 'ADMIN'],
+  viewFees: ['OWNER', 'PRINCIPAL', 'ADMIN', 'ACCOUNTANT'],
+  collectFees: ['ADMIN', 'ACCOUNTANT'],
+  manageFeeStructure: ['ADMIN'],
+  generateInvoices: ['ADMIN', 'ACCOUNTANT'],
+  requestConcession: ['ADMIN', 'ACCOUNTANT'],
+  approveConcession: ['PRINCIPAL'],
+  manageUsers: ['OWNER', 'PRINCIPAL', 'ADMIN'],
+  manageSchool: ['OWNER', 'ADMIN'],
+} satisfies Record<string, Role[]>;
+
+export type Capability = keyof typeof CAN;
+
+export function can(role: string | undefined, cap: Capability) {
+  return !!role && (CAN[cap] as string[]).includes(role);
+}
+
+export const ROLE_LABEL: Record<string, string> = {
+  SUPER_ADMIN: 'Platform admin', OWNER: 'Owner', PRINCIPAL: 'Principal', ADMIN: 'Office admin',
+  ACCOUNTANT: 'Accountant', TEACHER: 'Teacher', PARENT: 'Parent', STUDENT: 'Student',
+};

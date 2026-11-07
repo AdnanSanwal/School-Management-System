@@ -29,7 +29,7 @@ export default function NotificationsPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['notifications'] }),
   });
 
-  const unread = (notifications || []).filter((n: any) => !n.read).length;
+  const unread = (notifications || []).filter((n: any) => !n.readAt).length;
   const push = usePushSubscription();
 
   return (
@@ -91,14 +91,14 @@ export default function NotificationsPage() {
             {(notifications || []).map((n: any) => (
               <div
                 key={n.id}
-                onClick={() => !n.read && markOneMutation.mutate(n.id)}
-                className={`card cursor-pointer transition-all hover:shadow-md ${!n.read ? 'border-primary-200 bg-blue-50/50' : ''}`}
+                onClick={() => !n.readAt && markOneMutation.mutate(n.id)}
+                className={`card cursor-pointer transition-all hover:shadow-md ${!n.readAt ? 'border-primary-200 bg-blue-50/50' : ''}`}
               >
                 <div className="flex items-start gap-3">
-                  <div className={`w-2 h-2 rounded-full mt-2 flex-shrink-0 ${!n.read ? 'bg-blue-500' : 'bg-gray-200'}`} />
+                  <div className={`w-2 h-2 rounded-full mt-2 flex-shrink-0 ${!n.readAt ? 'bg-blue-500' : 'bg-gray-200'}`} />
                   <div className="flex-1">
-                    <p className={`font-medium ${!n.read ? 'text-gray-900' : 'text-gray-700'}`}>{n.title}</p>
-                    <p className="text-sm text-gray-500 mt-0.5">{n.message}</p>
+                    <p className={`font-medium ${!n.readAt ? 'text-gray-900' : 'text-gray-700'}`}>{n.title}</p>
+                    <p className="text-sm text-gray-500 mt-0.5">{n.body}</p>
                     <p className="text-xs text-gray-400 mt-2">
                       {formatDate(n.createdAt, { dateStyle: 'medium', timeStyle: 'short' })}
                     </p>

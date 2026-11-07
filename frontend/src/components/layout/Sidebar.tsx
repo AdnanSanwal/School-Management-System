@@ -6,11 +6,11 @@ import { usePathname } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
 import { cn } from '@/lib/utils';
 import {
-  LayoutDashboard, Users, GraduationCap, BookOpen, CalendarDays,
-  ClipboardList, DollarSign, Library, Bus, Bell, MessageSquare,
-  BarChart3, Settings, LogOut, ChevronLeft, Megaphone,
-  BookMarked, UserCheck, Layers, ChevronRight,
+  LayoutDashboard, Users, GraduationCap, Bell, Settings, LogOut, ChevronLeft, ChevronRight,
+  UserCheck, Layers, Wallet, Receipt, AlertTriangle, BadgePercent, FileSpreadsheet, ClipboardCheck,
+  KeyRound, School, Home,
 } from 'lucide-react';
+import { can, Capability, ROLE_LABEL } from '@/lib/roles';
 
 interface NavGroup {
   title: string;
@@ -21,7 +21,8 @@ interface NavItem {
   label: string;
   href: string;
   icon: React.ElementType;
-  roles: string[];
+  cap?: Capability;      // shown when the role has this capability
+  roles?: string[];      // or when the role is listed
   badge?: string | number;
 }
 
@@ -29,65 +30,56 @@ const navGroups: NavGroup[] = [
   {
     title: 'Overview',
     items: [
-      { label: 'Dashboard',   href: '/admin/dashboard',   icon: LayoutDashboard, roles: ['ADMIN'] },
-      { label: 'Dashboard',   href: '/teacher/dashboard', icon: LayoutDashboard, roles: ['TEACHER'] },
-      { label: 'Dashboard',   href: '/student/dashboard', icon: LayoutDashboard, roles: ['STUDENT'] },
-      { label: 'Dashboard',   href: '/parent/dashboard',  icon: LayoutDashboard, roles: ['PARENT'] },
-      { label: 'Analytics',   href: '/admin/reports',     icon: BarChart3,       roles: ['ADMIN', 'TEACHER'] },
+      { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, cap: 'dashboard' },
+      { label: 'My children', href: '/family', icon: Home, roles: ['PARENT', 'STUDENT'] },
     ],
   },
   {
     title: 'People',
     items: [
-      { label: 'Students',    href: '/admin/students',    icon: GraduationCap,   roles: ['ADMIN', 'TEACHER'] },
-      { label: 'Teachers',    href: '/admin/teachers',    icon: Users,           roles: ['ADMIN'] },
+      { label: 'Students', href: '/students', icon: GraduationCap, cap: 'viewStudents' },
+      { label: 'Staff', href: '/staff', icon: Users, cap: 'viewStaff' },
     ],
   },
   {
     title: 'Academics',
     items: [
-      { label: 'Classes',     href: '/admin/classes',     icon: Layers,          roles: ['ADMIN', 'TEACHER'] },
-      { label: 'Timetable',   href: '/admin/timetable',   icon: CalendarDays,    roles: ['ADMIN', 'TEACHER', 'STUDENT'] },
-      { label: 'Attendance',  href: '/admin/attendance',  icon: UserCheck,       roles: ['ADMIN', 'TEACHER'] },
-      { label: 'Exams',       href: '/admin/exams',       icon: ClipboardList,   roles: ['ADMIN', 'TEACHER', 'STUDENT'] },
-      { label: 'Assignments', href: '/admin/assignments', icon: BookMarked,      roles: ['ADMIN', 'TEACHER', 'STUDENT'] },
+      { label: 'Classes', href: '/classes', icon: Layers, cap: 'viewClasses' },
+      { label: 'Attendance', href: '/attendance', icon: UserCheck, cap: 'markAttendance' },
+      { label: 'Attendance today', href: '/attendance/summary', icon: ClipboardCheck, cap: 'viewAttendanceSummary' },
+      { label: 'Staff attendance', href: '/attendance/staff', icon: UserCheck, cap: 'staffAttendance' },
     ],
   },
   {
     title: 'Finance',
     items: [
-      { label: 'Fees',        href: '/admin/fees',        icon: DollarSign,      roles: ['ADMIN', 'STUDENT'] },
-    ],
-  },
-  {
-    title: 'Resources',
-    items: [
-      { label: 'Library',     href: '/admin/library',     icon: Library,         roles: ['ADMIN', 'STUDENT'] },
-      { label: 'Transport',   href: '/admin/transport',   icon: Bus,             roles: ['ADMIN'] },
-      { label: 'E-Learning',  href: '/elearning',         icon: BookOpen,        roles: ['ADMIN', 'TEACHER', 'STUDENT'] },
-    ],
-  },
-  {
-    title: 'Communication',
-    items: [
-      { label: 'Announcements', href: '/announcements',  icon: Megaphone,       roles: ['ADMIN', 'TEACHER', 'STUDENT', 'PARENT'] },
-      { label: 'Messages',    href: '/messages',          icon: MessageSquare,   roles: ['ADMIN', 'TEACHER', 'STUDENT', 'PARENT'] },
-      { label: 'Notifications', href: '/notifications',  icon: Bell,            roles: ['ADMIN', 'TEACHER', 'STUDENT', 'PARENT'] },
+      { label: 'Collect fee', href: '/fees', icon: Wallet, cap: 'collectFees' },
+      { label: 'Collections', href: '/fees/payments', icon: Receipt, cap: 'viewFees' },
+      { label: 'Defaulters', href: '/fees/defaulters', icon: AlertTriangle, cap: 'viewFees' },
+      { label: 'Invoices', href: '/fees/invoices', icon: FileSpreadsheet, cap: 'viewFees' },
+      { label: 'Concessions', href: '/fees/concessions', icon: BadgePercent, cap: 'viewFees' },
+      { label: 'Fee structure', href: '/fees/structure', icon: Layers, cap: 'viewFees' },
     ],
   },
   {
     title: 'System',
     items: [
-      { label: 'Settings',    href: '/settings',          icon: Settings,        roles: ['ADMIN', 'TEACHER', 'STUDENT'] },
+      { label: 'Notifications', href: '/notifications', icon: Bell, roles: ['OWNER', 'PRINCIPAL', 'ADMIN', 'ACCOUNTANT', 'TEACHER', 'PARENT', 'STUDENT'] },
+      { label: 'Users & logins', href: '/users', icon: KeyRound, cap: 'manageUsers' },
+      { label: 'School settings', href: '/settings/school', icon: School, cap: 'manageSchool' },
+      { label: 'My account', href: '/settings', icon: Settings, roles: ['OWNER', 'PRINCIPAL', 'ADMIN', 'ACCOUNTANT', 'TEACHER', 'PARENT', 'STUDENT', 'SUPER_ADMIN'] },
     ],
   },
 ];
 
-const ROLE_META: Record<string, { label: string; color: string; bg: string }> = {
-  ADMIN:   { label: 'Administrator', color: 'text-violet-700', bg: 'bg-violet-50' },
-  TEACHER: { label: 'Teacher',       color: 'text-blue-700',   bg: 'bg-blue-50'   },
-  STUDENT: { label: 'Student',       color: 'text-green-700',  bg: 'bg-green-50'  },
-  PARENT:  { label: 'Parent',        color: 'text-orange-700', bg: 'bg-orange-50' },
+const ROLE_COLORS: Record<string, { color: string; bg: string }> = {
+  OWNER: { color: 'text-amber-700', bg: 'bg-amber-50' },
+  PRINCIPAL: { color: 'text-violet-700', bg: 'bg-violet-50' },
+  ADMIN: { color: 'text-indigo-700', bg: 'bg-indigo-50' },
+  ACCOUNTANT: { color: 'text-emerald-700', bg: 'bg-emerald-50' },
+  TEACHER: { color: 'text-blue-700', bg: 'bg-blue-50' },
+  STUDENT: { color: 'text-green-700', bg: 'bg-green-50' },
+  PARENT: { color: 'text-orange-700', bg: 'bg-orange-50' },
 };
 
 export function Sidebar() {
@@ -96,13 +88,14 @@ export function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
 
   const role = user?.role || '';
-  const roleMeta = ROLE_META[role] || { label: role, color: 'text-gray-600', bg: 'bg-gray-100' };
+  const roleMeta = { label: ROLE_LABEL[role] ?? role, ...(ROLE_COLORS[role] ?? { color: 'text-gray-600', bg: 'bg-gray-100' }) };
 
   const visibleGroups = navGroups
     .map(group => ({
       ...group,
       items: group.items.filter((item, idx, arr) => {
-        if (!user || !item.roles.includes(role)) return false;
+        if (!user) return false;
+        if (!(item.cap ? can(role, item.cap) : item.roles?.includes(role))) return false;
         return arr.findIndex(i => i.label === item.label) === idx;
       }),
     }))
@@ -119,6 +112,8 @@ export function Sidebar() {
     }),
   })).filter(g => g.items.length > 0);
 
+  const allHrefs = dedupedGroups.flatMap((g) => g.items.map((i) => i.href));
+
   return (
     <aside
       className={cn(
@@ -134,8 +129,8 @@ export function Sidebar() {
         </div>
         {!collapsed && (
           <div className="min-w-0">
-            <p className="font-bold text-sm text-gray-900 leading-tight">SchoolMS</p>
-            <p className="text-2xs text-slate-400 font-medium">Management System</p>
+            <p className="font-bold text-sm text-gray-900 leading-tight truncate">{user?.school?.name ?? 'School ERP'}</p>
+            <p className="text-2xs text-slate-400 font-medium">School ERP</p>
           </div>
         )}
       </div>
@@ -166,7 +161,7 @@ export function Sidebar() {
             )}
             <div className="space-y-0.5">
               {group.items.map((item) => {
-                const active = pathname === item.href || pathname.startsWith(item.href + '/');
+                const active = pathname === item.href || (pathname.startsWith(item.href + '/') && !allHrefs.some((h) => h !== item.href && h.startsWith(item.href + '/') && pathname.startsWith(h)));
                 const Icon = item.icon;
                 return (
                   <Link

@@ -48,11 +48,30 @@ Demo logins (password `Admin@123`): `superadmin@platform.com`, `owner@school.com
 `principal@school.com`, `admin@school.com`, `accountant@school.com`, `teacher@school.com`,
 `parent@school.com` (two children), `student@school.com`, `owner@riverside.com`.
 
+## Phase 1 API (done)
+
+| Area | Endpoints (`/api/v1/…`) |
+|---|---|
+| School | `school` (profile), `school/academic-years`, `…/:id/make-current` |
+| Users | `users` list/create, `users/:id` update, `users/:id/reset-password` (role hierarchy enforced) |
+| Classes | `academics/classes`, `academics/sections/:id`, `academics/subjects`, `academics/sections/:id/subjects` |
+| Staff | `staff`, `staff/:id`, `staff/:id/login` |
+| Students | `students` (scoped list), `students/:id` (profile + attendance % + fee balance), admission with guardians/siblings, `students/:id/status`, `…/guardians`, `students/guardians/search`, `students/guardians/:id/login`, `…/documents` |
+| Attendance | `attendance/students` (roster / bulk mark, parents notified on absence), `attendance/students/:id/calendar`, `attendance/summary`, `attendance/staff` |
+| Fees | `fees/heads`, `fees/structure/:classId`, `fees/invoices/generate`, `fees/invoices`, `fees/students/:id` (ledger), `fees/payments` (collect / daily report), `fees/payments/:id/receipt`, `fees/defaulters`, `fees/concessions` (+ `/:id/decision`) |
+| Dashboard | `dashboard/overview` (blocks shown per permission) |
+
+Web screens: `/dashboard`, `/students`, `/students/new`, `/students/[id]`, `/staff`, `/classes`,
+`/attendance`, `/attendance/summary`, `/attendance/staff`, `/fees` (collect), `/fees/receipt/[id]`,
+`/fees/payments`, `/fees/defaulters`, `/fees/invoices`, `/fees/concessions`, `/fees/structure`,
+`/users`, `/settings/school`, `/family` (minimal parent view until Phase 2).
+
+Money is `DECIMAL(12,2)` end to end (`Prisma.Decimal`, serialised as strings); pure fee maths lives in
+`modules/fees/fees.calc.ts`. "Today" is always the school's local day (`utils/dates.ts`).
+
 ## Phases (from the spec)
 
-1. **MVP** — school settings & academic year, users & roles, students (admission, guardians,
-   documents), staff, classes/sections, student + staff attendance, fee structure → invoices →
-   collection → receipts → defaulters, Owner dashboard.
+1. **MVP — done** (see above). Not yet: file uploads (documents are links), mobile screens.
 2. Parent app (child switcher, attendance calendar, fee status, notices), daily diary, push notifications.
 3. Exams, marks entry, grade scales, report-card PDFs, timetable.
 4. Reports (PDF/Excel), online payments (JazzCash/Easypaisa), leave + approvals, calendar.

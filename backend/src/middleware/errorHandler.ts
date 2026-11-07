@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import logger from '../utils/logger';
+import { ZodError } from 'zod';
 import { TenantViolationError } from '../config/tenancy';
 
 export class AppError extends Error {
@@ -12,6 +13,14 @@ export class AppError extends Error {
 export function errorHandler(err: Error, _req: Request, res: Response, _next: NextFunction) {
   if (err instanceof AppError) {
     return res.status(err.statusCode).json({ success: false, message: err.message });
+  }
+
+  if (err instanceof ZodError) {
+    return res.status(422).json({
+      success: false,
+      message: 'Validation error',
+      errors: err.errors.map((e) => ({ field: e.path.join('.'), message: e.message })),
+    });
   }
 
   if (err instanceof TenantViolationError) {

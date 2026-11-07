@@ -38,6 +38,8 @@ const prisma = basePrisma.$extends({
 });
 
 export type ScopedPrisma = typeof prisma;
+/** The `tx` handed to `prisma.$transaction(async (tx) => ...)` — still tenant-scoped. */
+export type ScopedTx = Parameters<Parameters<ScopedPrisma['$transaction']>[0]>[0];
 
 export async function connectDatabase() {
   await basePrisma.$connect();

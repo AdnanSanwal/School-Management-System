@@ -1,12 +1,15 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
+export type Role = 'SUPER_ADMIN' | 'OWNER' | 'PRINCIPAL' | 'ADMIN' | 'ACCOUNTANT' | 'TEACHER' | 'PARENT' | 'STUDENT';
+
 interface User {
   id: string;
   name: string;
   email: string;
-  role: string;
+  role: Role;
   avatar?: string;
+  school?: { id: string; name: string; code: string; logoUrl?: string | null; currency: string } | null;
 }
 
 interface AuthState {
@@ -31,3 +34,9 @@ export const useAuthStore = create<AuthState>()(
     { name: 'sms-auth' }
   )
 );
+
+/** Where each role lands after login. */
+export const HOME_BY_ROLE: Record<string, string> = {
+  OWNER: '/dashboard', PRINCIPAL: '/dashboard', ADMIN: '/dashboard', ACCOUNTANT: '/fees',
+  TEACHER: '/attendance', PARENT: '/family', STUDENT: '/family', SUPER_ADMIN: '/settings',
+};

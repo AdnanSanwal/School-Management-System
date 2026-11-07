@@ -15,7 +15,7 @@ api.interceptors.response.use(
   (res) => res,
   async (error) => {
     const original = error.config;
-    if (error.response?.status === 401 && !original._retry) {
+    if (error.response?.status === 401 && !original._retry && !original.url?.includes('/auth/login')) {
       original._retry = true;
       const refreshToken = useAuthStore.getState().refreshToken;
       if (!refreshToken) {
@@ -38,74 +38,110 @@ api.interceptors.response.use(
   }
 );
 
-// Typed API helpers
+/** Unwraps `{ success, data }` responses. */
+const data = <T = any>(p: Promise<{ data: { data: T } }>) => p.then((r) => r.data.data);
+/** Keeps pagination/totals for list endpoints. */
+const page = <T = any>(p: Promise<{ data: { data: T[]; pagination?: any; totals?: any } }>) => p.then((r) => r.data);
+
+export function apiError(err: any, fallback = 'Something went wrong') {
+  const d = err?.response?.data;
+  if (d?.errors?.length) return `${d.message}: ${d.errors.map((e: any) => `${e.field.replace(/^body\./, '')} ${e.message}`).join(', ')}`;
+  return d?.message || fallback;
+}
+
 export const authAPI = {
-  login: (data: any) => api.post('/auth/login', data),
+  login: (body: { email: string; password: string; mfaCode?: string }) => data(api.post('/auth/login', body)),
   logout: () => api.post('/auth/logout'),
-  me: () => api.get('/auth/me'),
+  me: () => data(api.get('/auth/me')),
+  changePassword: (body: { currentPassword: string; newPassword: string }) => api.post('/auth/change-password', body),
+};
+
+export const schoolAPI = {
+  get: () => data(api.get('/school')),
+  update: (body: any) => data(api.patch('/school', body)),
+  years: () => data<any[]>(api.get('/school/academic-years')),
+  createYear: (body: any) => data(api.post('/school/academic-years', body)),
+  makeCurrent: (id: string) => data(api.post(`/school/academic-years/${id}/make-current`)),
+};
+
+export const usersAPI = {
+  list: (params?: any) => page(api.get('/users', { params })),
+  create: (body: any) => data(api.post('/users', body)),
+  update: (id: string, body: any) => data(api.patch(`/users/${id}`, body)),
+  resetPassword: (id: string) => data<{ temporaryPassword: string }>(api.post(`/users/${id}/reset-password`)),
+};
+
+export const academicsAPI = {
+  classes: () => data<any[]>(api.get('/academics/classes')),
+  createClass: (body: any) => data(api.post('/academics/classes', body)),
+  updateClass: (id: string, body: any) => data(api.patch(`/academics/classes/${id}`, body)),
+  deleteClass: (id: string) => api.delete(`/academics/classes/${id}`),
+  addSection: (classId: string, body: any) => data(api.post(`/academics/classes/${classId}/sections`, body)),
+  updateSection: (id: string, body: any) => data(api.patch(`/academics/sections/${id}`, body)),
+  deleteSection: (id: string) => api.delete(`/academics/sections/${id}`),
+  subjects: () => data<any[]>(api.get('/academics/subjects')),
+  createSubject: (body: any) => data(api.post('/academics/subjects', body)),
+  sectionSubjects: (sectionId: string) => data<any[]>(api.get(`/academics/sections/${sectionId}/subjects`)),
+  setSectionSubjects: (sectionId: string, assignments: { subjectId: string; teacherId: string }[]) =>
+    api.put(`/academics/sections/${sectionId}/subjects`, { assignments }),
+};
+
+export const staffAPI = {
+  list: (params?: any) => page(api.get('/staff', { params })),
+  get: (id: string) => data(api.get(`/staff/${id}`)),
+  create: (body: any) => data(api.post('/staff', body)),
+  update: (id: string, body: any) => data(api.patch(`/staff/${id}`, body)),
+  createLogin: (id: string, body: any) => data(api.post(`/staff/${id}/login`, body)),
 };
 
 export const studentsAPI = {
-  list: (params?: any) => api.get('/students', { params }),
-  get: (id: string) => api.get(`/students/${id}`),
-  create: (data: any) => api.post('/students', data),
-  update: (id: string, data: any) => api.put(`/students/${id}`, data),
-  delete: (id: string) => api.delete(`/students/${id}`),
-  grades: (id: string) => api.get(`/students/${id}/grades`),
-  attendance: (id: string) => api.get(`/students/${id}/attendance`),
-};
-
-export const teachersAPI = {
-  list: (params?: any) => api.get('/teachers', { params }),
-  get: (id: string) => api.get(`/teachers/${id}`),
-};
-
-export const classesAPI = {
-  list: () => api.get('/classes'),
-  get: (id: string) => api.get(`/classes/${id}`),
-  timetable: (id: string) => api.get(`/classes/${id}/timetable`),
+  list: (params?: any) => page(api.get('/students', { params })),
+  get: (id: string) => data(api.get(`/students/${id}`)),
+  admit: (body: any) => data(api.post('/students', body)),
+  update: (id: string, body: any) => data(api.patch(`/students/${id}`, body)),
+  setStatus: (id: string, body: any) => data(api.post(`/students/${id}/status`, body)),
+  searchGuardians: (q: string) => data<any[]>(api.get('/students/guardians/search', { params: { q } })),
+  linkGuardian: (id: string, body: any) => data(api.post(`/students/${id}/guardians`, body)),
+  unlinkGuardian: (id: string, guardianId: string) => api.delete(`/students/${id}/guardians/${guardianId}`),
+  guardianLogin: (guardianId: string, email: string) => data(api.post(`/students/guardians/${guardianId}/login`, { email })),
+  addDocument: (id: string, body: any) => data(api.post(`/students/${id}/documents`, body)),
 };
 
 export const attendanceAPI = {
-  list: (params?: any) => api.get('/attendance', { params }),
-  markBulk: (data: any) => api.post('/attendance', data),
-  summary: (params?: any) => api.get('/attendance/summary', { params }),
-};
-
-export const examsAPI = {
-  list: (params?: any) => api.get('/exams', { params }),
-  create: (data: any) => api.post('/exams', data),
-  results: (id: string) => api.get(`/exams/${id}/results`),
-  addResults: (id: string, data: any) => api.post(`/exams/${id}/results`, data),
+  roster: (sectionId: string, date?: string) => data(api.get('/attendance/students', { params: { sectionId, date } })),
+  mark: (body: any) => data(api.put('/attendance/students', body)),
+  calendar: (studentId: string, month?: string) => data(api.get(`/attendance/students/${studentId}/calendar`, { params: { month } })),
+  summary: (date?: string) => data(api.get('/attendance/summary', { params: { date } })),
+  staff: (date?: string) => data(api.get('/attendance/staff', { params: { date } })),
+  markStaff: (body: any) => data(api.put('/attendance/staff', body)),
 };
 
 export const feesAPI = {
-  list: () => api.get('/fees'),
-  payments: () => api.get('/fees/payments'),
-  recordPayment: (data: any) => api.post('/fees/payments', data),
-  statement: (studentId: string) => api.get(`/fees/payments/${studentId}/statement`),
+  heads: () => data<any[]>(api.get('/fees/heads')),
+  createHead: (body: any) => data(api.post('/fees/heads', body)),
+  updateHead: (id: string, body: any) => data(api.patch(`/fees/heads/${id}`, body)),
+  structure: () => data(api.get('/fees/structure')),
+  saveStructure: (classId: string, items: { feeHeadId: string; amount: number }[]) => api.put(`/fees/structure/${classId}`, { items }),
+  generate: (body: any) => data(api.post('/fees/invoices/generate', body)),
+  invoices: (params?: any) => page(api.get('/fees/invoices', { params })),
+  cancelInvoice: (id: string) => api.post(`/fees/invoices/${id}/cancel`),
+  ledger: (studentId: string) => data(api.get(`/fees/students/${studentId}`)),
+  collect: (body: any) => data(api.post('/fees/payments', body)),
+  payments: (params?: any) => page(api.get('/fees/payments', { params })),
+  receipt: (paymentId: string) => data(api.get(`/fees/payments/${paymentId}/receipt`)),
+  defaulters: (params?: any) => data(api.get('/fees/defaulters', { params })),
+  concessions: (params?: any) => data<any[]>(api.get('/fees/concessions', { params })),
+  requestConcession: (body: any) => data(api.post('/fees/concessions', body)),
+  decideConcession: (id: string, approve: boolean) => api.post(`/fees/concessions/${id}/decision`, { approve }),
 };
 
-export const assignmentsAPI = {
-  list: (params?: any) => api.get('/assignments', { params }),
-  create: (data: any) => api.post('/assignments', data),
-  submit: (id: string, data: any) => api.post(`/assignments/${id}/submit`, data),
-  grade: (id: string, subId: string, data: any) => api.put(`/assignments/${id}/submissions/${subId}/grade`, data),
+export const dashboardAPI = {
+  overview: () => data(api.get('/dashboard/overview')),
 };
 
 export const notificationsAPI = {
   list: () => api.get('/notifications'),
-  broadcast: (data: any) => api.post('/notifications/broadcast', data),
+  broadcast: (body: any) => api.post('/notifications/broadcast', body),
   markRead: (id: string) => api.put(`/notifications/${id}/read`),
   markAllRead: () => api.put('/notifications/read-all'),
-};
-
-export const dashboardAPI = {
-  stats: () => api.get('/dashboard'),
-};
-
-export const reportsAPI = {
-  academic: (params?: any) => api.get('/reports/academic', { params }),
-  attendance: (params?: any) => api.get('/reports/attendance', { params }),
-  financial: (params?: any) => api.get('/reports/financial', { params }),
 };

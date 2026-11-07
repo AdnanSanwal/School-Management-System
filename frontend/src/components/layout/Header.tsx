@@ -55,7 +55,7 @@ function NotificationPanel({ onClose }: { onClose: () => void }) {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['notifications'] }),
   });
 
-  const unread = (notifications as any[]).filter((n: any) => !n.read).length;
+  const unread = (notifications as any[]).filter((n: any) => !n.readAt).length;
 
   return (
     <div className="absolute right-0 top-full mt-2 w-96 bg-white rounded-2xl shadow-card-lg border border-gray-100 overflow-hidden animate-slide-down z-50">
@@ -88,13 +88,13 @@ function NotificationPanel({ onClose }: { onClose: () => void }) {
             <p className="text-sm text-gray-400">All caught up!</p>
           </div>
         ) : (notifications as any[]).slice(0, 8).map((n: any) => (
-          <button key={n.id} onClick={() => !n.read && markOneMutation.mutate(n.id)}
-            className={cn('w-full text-left px-4 py-3 hover:bg-gray-50 transition-colors', !n.read && 'bg-primary-50/40')}>
+          <button key={n.id} onClick={() => !n.readAt && markOneMutation.mutate(n.id)}
+            className={cn('w-full text-left px-4 py-3 hover:bg-gray-50 transition-colors', !n.readAt && 'bg-primary-50/40')}>
             <div className="flex items-start gap-3">
-              <div className={cn('w-2 h-2 rounded-full mt-1.5 flex-shrink-0', n.read ? 'bg-gray-200' : 'bg-primary-500')} />
+              <div className={cn('w-2 h-2 rounded-full mt-1.5 flex-shrink-0', n.readAt ? 'bg-gray-200' : 'bg-primary-500')} />
               <div className="flex-1 min-w-0">
-                <p className={cn('text-xs font-medium truncate', n.read ? 'text-gray-600' : 'text-gray-900')}>{n.title}</p>
-                <p className="text-xs text-gray-400 mt-0.5 line-clamp-1">{n.message}</p>
+                <p className={cn('text-xs font-medium truncate', n.readAt ? 'text-gray-600' : 'text-gray-900')}>{n.title}</p>
+                <p className="text-xs text-gray-400 mt-0.5 line-clamp-1">{n.body}</p>
                 <p className="text-2xs text-gray-300 mt-1">{formatDate(n.createdAt, { dateStyle: 'medium', timeStyle: 'short' } as any)}</p>
               </div>
             </div>
@@ -169,7 +169,7 @@ export function Header({ title }: HeaderProps) {
     queryFn: () => notificationsAPI.list().then(r => r.data.data),
     refetchInterval: 30000,
   });
-  const unreadCount = (notifications as any[]).filter((n: any) => !n.read).length;
+  const unreadCount = (notifications as any[]).filter((n: any) => !n.readAt).length;
 
   // Close dropdowns on outside click
   useEffect(() => {

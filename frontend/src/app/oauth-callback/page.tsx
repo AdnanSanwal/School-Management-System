@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useAuthStore } from '@/store/authStore';
+import { useAuthStore, HOME_BY_ROLE } from '@/store/authStore';
 import { api } from '@/lib/api';
 
 export default function OAuthCallback() {
@@ -31,13 +31,7 @@ export default function OAuthCallback() {
         const user = data.data;
         setAuth(user, accessToken, refreshToken);
 
-        const dashMap: Record<string, string> = {
-          ADMIN: '/admin/dashboard',
-          TEACHER: '/teacher/dashboard',
-          STUDENT: '/student/dashboard',
-          PARENT: '/parent/dashboard',
-        };
-        router.replace(dashMap[user.role] || '/');
+        router.replace(HOME_BY_ROLE[user.role] || '/');
       } catch {
         router.replace('/login?error=oauth_failed');
       }

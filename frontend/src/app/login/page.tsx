@@ -6,7 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
-import { useAuthStore } from '@/store/authStore';
+import { useAuthStore, HOME_BY_ROLE } from '@/store/authStore';
 import { api } from '@/lib/api';
 import { Eye, EyeOff, GraduationCap, Shield, User } from 'lucide-react';
 
@@ -71,11 +71,7 @@ export default function LoginPage() {
       const res = await api.post('/auth/login', data);
       const { user, accessToken, refreshToken } = res.data.data;
       setAuth(user, accessToken, refreshToken);
-      const routes: Record<string, string> = {
-        ADMIN: '/admin/dashboard', TEACHER: '/teacher/dashboard',
-        STUDENT: '/student/dashboard', PARENT: '/parent/dashboard',
-      };
-      router.push(routes[user.role] || '/dashboard');
+      router.push(HOME_BY_ROLE[user.role] || '/dashboard');
     } catch (err: any) {
       toast.error(err.response?.data?.message || 'Login failed');
     } finally {
