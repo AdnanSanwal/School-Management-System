@@ -34,6 +34,17 @@ class MemoryRedis {
     return 'OK';
   }
 
+  async incr(key: string) {
+    const n = Number((await this.get(key)) ?? 0) + 1;
+    const e = this.alive(key);
+    this.store.set(key, { value: String(n), expiresAt: e?.expiresAt });
+    return n;
+  }
+
+  async mget(...keys: string[]) {
+    return Promise.all(keys.flat().map((k) => this.get(k)));
+  }
+
   async del(...keys: string[]) {
     let n = 0;
     for (const k of keys.flat()) if (this.store.delete(k)) n++;

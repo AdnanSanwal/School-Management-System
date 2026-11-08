@@ -65,4 +65,6 @@ EXPOSE 5000
 RUN mkdir -p /app/uploads
 
 # Apply pending migrations, then start. Safe to run on every start.
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/index.js"]
+# `exec` makes Node replace the shell, so Docker's SIGTERM reaches the app and it can
+# finish in-flight requests before stopping (graceful shutdown).
+CMD ["sh", "-c", "npx prisma migrate deploy && exec node dist/index.js"]

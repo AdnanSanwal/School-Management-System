@@ -27,16 +27,35 @@
     {
       "name": "backend-alt",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "--workspace=backend"],
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "--workspace=backend"
+      ],
       "port": 5001,
-      "env": { "PORT": "5001", "PAYMENT_GATEWAY": "test", "JOBS_ENABLED": "false" }
+      "env": {
+        "PORT": "5001",
+        "PAYMENT_GATEWAY": "test",
+        "JOBS_ENABLED": "false"
+      }
     },
     {
       "name": "frontend-alt",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "--workspace=frontend", "--", "-p", "3001"],
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "--workspace=frontend",
+        "--",
+        "-p",
+        "3001"
+      ],
       "port": 3001,
-      "env": { "NEXT_PUBLIC_API_URL": "http://localhost:5001/api/v1", "API_PROXY_URL": "http://localhost:5001/api", "NEXT_DIST_DIR": ".next-dev" }
+      "env": {
+        "NEXT_PUBLIC_API_URL": "http://localhost:5001/api/v1",
+        "API_PROXY_URL": "http://localhost:5001/api",
+        "NEXT_DIST_DIR": ".next-dev"
+      }
     },
     {
       "name": "mobile-web",

@@ -1,6 +1,8 @@
 import { Router } from 'express';
-import { Prisma } from '@prisma/client';
+import { Prisma, type Role } from '@prisma/client';
 import prisma from '../../config/database';
+import { currentSchoolId } from '../../config/tenancy';
+import { schoolDataVersion, withCache } from '../../utils/cache';
 import { authenticate } from '../../middleware/auth';
 import { can, hasPermission } from '../../middleware/rbac';
 import { sendSuccess } from '../../utils/apiResponse';
@@ -129,6 +131,15 @@ async function staffAttendance(today: Date) {
 
 router.get('/overview', can('dashboard.owner', 'dashboard.principal', 'dashboard.admin', 'dashboard.accountant'), handler(async (req, res) => {
   const role = me(req).role;
+  // Expensive (all open invoices, six months of payments) and polled every minute by every
+  // office screen: cache per school + role for up to 30 s. Any change in the school bumps
+  // its data version, so a fee just collected still shows straight away.
+  const schoolId = currentSchoolId();
+  const key = `dashboard:${schoolId}:${await schoolDataVersion(schoolId)}:${role}`;
+  return sendSuccess(res, await withCache(key, 30, () => overview(role as Role)));
+}));
+
+async function overview(role: Role) {
   const tz = await schoolTimezone();
   const today = await schoolToday();
 
@@ -159,7 +170,7 @@ router.get('/overview', can('dashboard.owner', 'dashboard.principal', 'dashboard
   if (pending[0]) alerts.push({ level: 'info', message: `${pending[0]} fee concession request(s) waiting for approval` });
   if (pending[1]) alerts.push({ level: 'info', message: `${pending[1]} leave request(s) pending` });
 
-  return sendSuccess(res, {
+  return {
     date: toIso(today),
     fees,
     studentAttendance: students,
@@ -167,7 +178,7 @@ router.get('/overview', can('dashboard.owner', 'dashboard.principal', 'dashboard
     classStrength: classes?.map((c) => ({ id: c.id, name: c.name, strength: c.sections.reduce((n, s) => n + s._count.students, 0) })) ?? null,
     pendingApprovals: { concessions: pending[0], leaves: pending[1] },
     alerts,
-  });
-}));
+  };
+}
 
 export default router;

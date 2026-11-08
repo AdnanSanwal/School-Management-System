@@ -11,6 +11,24 @@ function getClient() {
   }
 }
 
+const inflight = new Map<string, Promise<unknown>>();
+
+/**
+ * A school's data version. Bumped after every successful change in that school (see
+ * middleware/audit.ts), so caches keyed by it are invalidated instantly and cheaply.
+ */
+export async function schoolDataVersion(schoolId: string): Promise<string> {
+  const client = getClient();
+  if (!client) return '0';
+  try { return (await client.get(`data-version:${schoolId}`)) ?? '0'; } catch { return '0'; }
+}
+
+export async function bumpSchoolDataVersion(schoolId: string) {
+  const client = getClient() as any;
+  if (!client || typeof client.incr !== 'function') return;
+  try { await client.incr(`data-version:${schoolId}`); } catch { /* cache only */ }
+}
+
 /**
  * Cache-aside helper.
  * Returns cached value if present, otherwise calls `fn`, caches the result, and returns it.
@@ -35,7 +53,14 @@ export async function withCache<T>(
     }
   }
 
-  const result = await fn();
+  // Single-flight: identical requests arriving together share one computation instead of
+  // all hitting the database at once (e.g. every office PC refreshing the dashboard).
+  let pending = inflight.get(key) as Promise<T> | undefined;
+  if (!pending) {
+    pending = fn().finally(() => inflight.delete(key));
+    inflight.set(key, pending);
+  }
+  const result = await pending;
 
   if (client) {
     try {

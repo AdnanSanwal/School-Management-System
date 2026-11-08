@@ -21,6 +21,8 @@ ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 # Where the Next server forwards /api/* when nothing sits in front of it.
 ARG API_PROXY_URL=http://backend:5000/api
 ENV API_PROXY_URL=$API_PROXY_URL
+ARG NEXT_PUBLIC_SENTRY_DSN=
+ENV NEXT_PUBLIC_SENTRY_DSN=$NEXT_PUBLIC_SENTRY_DSN
 
 RUN npm run build
 

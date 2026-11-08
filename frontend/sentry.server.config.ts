@@ -1,12 +1,13 @@
 import * as Sentry from '@sentry/nextjs';
 
+// Off unless SENTRY_DSN (or NEXT_PUBLIC_SENTRY_DSN) points at your own Sentry project.
+const dsn = process.env.SENTRY_DSN || process.env.NEXT_PUBLIC_SENTRY_DSN;
+
 Sentry.init({
-  dsn: 'https://146bc222f76d737247dc83017a701ee9@o4509921943158784.ingest.us.sentry.io/4511287040540672',
-
+  dsn,
+  enabled: !!dsn,
   environment: process.env.NODE_ENV,
-
-  tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.2 : 1.0,
-
-  // Print useful info to console during development
+  tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 0,
+  sendDefaultPii: false,
   debug: false,
 });

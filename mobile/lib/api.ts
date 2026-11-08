@@ -65,6 +65,7 @@ api.interceptors.response.use(
 
 export function apiError(err: any, fallback = 'Something went wrong') {
   const d = err?.response?.data;
+  if (err?.code === 'ECONNABORTED') return 'The school server took too long to answer. Please try again.';
   if (!err?.response) return 'Cannot reach the school server. Check your internet connection.';
   if (d?.errors?.length) return d.errors.map((e: any) => `${e.field.replace(/^body\./, '')}: ${e.message}`).join('\n');
   return d?.message || fallback;

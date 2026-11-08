@@ -3,7 +3,7 @@ import { hashPassword } from '../../utils/password';
 import { z } from 'zod';
 import { Role } from '@prisma/client';
 import prisma, { transaction } from '../../config/database';
-import { getRedis } from '../../config/redis';
+import { endAllSessions } from '../../utils/sessions';
 import { authenticate } from '../../middleware/auth';
 import { can } from '../../middleware/rbac';
 import { AppError } from '../../middleware/errorHandler';
@@ -101,7 +101,7 @@ router.patch('/:id', handler(async (req, res) => {
   if (body.role) assertCanManageRole(me(req).role, body.role);
   const user = await prisma.user.update({ where: { id: target.id }, data: body, select: userSelect });
   // Deactivation or role change: end existing sessions so it takes effect now.
-  if (body.isActive === false || body.role) await getRedis().del(`refresh:${target.id}`);
+  if (body.isActive === false || body.role) await endAllSessions(target.id);
   return sendSuccess(res, user, 'User updated');
 }));
 
@@ -109,7 +109,7 @@ router.post('/:id/reset-password', handler(async (req, res) => {
   const target = await loadManageable(me(req), req.params.id);
   const password = temporaryPassword();
   await prisma.user.update({ where: { id: target.id }, data: { password: await hashPassword(password) } });
-  await getRedis().del(`refresh:${target.id}`);
+  await endAllSessions(target.id);
   return sendSuccess(res, { temporaryPassword: password }, 'Password reset — share the new password with the user');
 }));
 

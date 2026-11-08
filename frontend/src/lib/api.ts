@@ -11,7 +11,8 @@ declare module 'axios' {
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api/v1';
 
-export const api = axios.create({ baseURL: BASE_URL, withCredentials: true });
+// A request that hangs (lost Wi-Fi, server overloaded) fails after 30 s instead of spinning forever.
+export const api = axios.create({ baseURL: BASE_URL, withCredentials: true, timeout: 30_000 });
 
 api.interceptors.request.use((config) => {
   const token = useAuthStore.getState().accessToken;
@@ -71,6 +72,9 @@ const data = <T = any>(p: Promise<{ data: { data: T } }>) => p.then((r) => r.dat
 const page = <T = any>(p: Promise<{ data: { data: T[]; pagination?: any; totals?: any } }>) => p.then((r) => r.data);
 
 export function apiError(err: any, fallback = 'Something went wrong') {
+  if (err?.code === 'ECONNABORTED' || err?.code === 'ETIMEDOUT') return 'The server took too long to answer. Please try again.';
+  if (err && !err.response && err.isAxiosError) return 'Cannot reach the server. Check your internet connection.';
+  if (err?.response?.status === 429) return err.response.data?.message || 'Too many requests. Please wait a moment.';
   const d = err?.response?.data;
   if (d?.errors?.length) return `${d.message}: ${d.errors.map((e: any) => `${e.field.replace(/^body\./, '')} ${e.message}`).join(', ')}`;
   return d?.message || fallback;

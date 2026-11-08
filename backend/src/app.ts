@@ -1,16 +1,18 @@
-import logger from './utils/logger';
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
-import morgan from 'morgan';
 import compression from 'compression';
-import rateLimit from 'express-rate-limit';
 
 import { initSentry, setupSentryErrorHandler } from './utils/sentry';
 import { gdprHeaders, auditConsent } from './middleware/gdpr';
 import { metricsMiddleware, metricsHandler } from './utils/metrics';
 import { errorHandler } from './middleware/errorHandler';
 import { notFound } from './middleware/notFound';
+import { requestContext } from './middleware/requestContext';
+import { auditTrail } from './middleware/audit';
+import { apiLimiter, heavyLimiter } from './middleware/rateLimits';
+import { readiness } from './config/lifecycle';
+import auditRoutes from './modules/audit/audit.routes';
 
 // Routes — ERP v2. Domain modules are added phase by phase (see docs/ERP_V2.md).
 import authRoutes from './modules/auth/auth.routes';
@@ -43,6 +45,7 @@ import notificationRoutes from './modules/notifications/notification.routes';
 import pushRoutes from './modules/push/push.routes';
 
 const app = express();
+app.disable('x-powered-by');
 
 // Behind a reverse proxy (Caddy in production) the client IP is in X-Forwarded-For.
 // Without this every request looks like it comes from the proxy, so one busy school
@@ -51,6 +54,9 @@ if (process.env.TRUST_PROXY) app.set('trust proxy', Number(process.env.TRUST_PRO
 
 // Sentry must be first
 initSentry(app);
+
+// Request id + one structured access-log line per request (see middleware/requestContext).
+app.use(requestContext);
 
 // Security headers (GDPR + helmet)
 app.use(helmet({ contentSecurityPolicy: process.env.NODE_ENV === 'production' }));
@@ -76,14 +82,14 @@ app.use(cors({
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-Id'],
+  exposedHeaders: ['X-Request-Id', 'RateLimit', 'RateLimit-Policy', 'Retry-After'],
+  maxAge: 600,
 }));
-// Per client IP. A school office often shares one IP, so keep this generous.
-app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: Number(process.env.RATE_LIMIT_MAX) || 1000, standardHeaders: true, legacyHeaders: false }));
 
-// Body parsing & compression
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true }));
+// Body parsing & compression. JSON bodies are small; files go through multer (5 MB) instead.
+app.use(express.json({ limit: '1mb' }));
+app.use(express.urlencoded({ extended: true, limit: '1mb', parameterLimit: 200 }));
 app.use(compression());
 
 // API data is private and changes with every save (attendance, payments…). Browser
@@ -95,28 +101,32 @@ app.use((_req, res, next) => {
   next();
 });
 
-// Logging + metrics
-app.use(morgan(':remote-addr ":method :url" :status :res[content-length] - :response-time ms'));
-
-// Flag slow requests so real bottlenecks show up in the logs (SLOW_REQUEST_MS, default 500).
-const slowMs = Number(process.env.SLOW_REQUEST_MS) || 500;
-app.use((req, res, next) => {
-  const start = process.hrtime.bigint();
-  res.on('finish', () => {
-    const ms = Number(process.hrtime.bigint() - start) / 1e6;
-    if (ms >= slowMs) logger.warn(`Slow request ${Math.round(ms)} ms: ${req.method} ${req.originalUrl.split('?')[0]} -> ${res.statusCode}`);
-  });
-  next();
-});
+// Metrics + audit trail of every successful change
 app.use(metricsMiddleware);
 app.use(auditConsent);
+app.use(auditTrail);
 
-// Health & metrics
+// Liveness: the process is up. Readiness: it can serve (DB + Redis reachable, not shutting down).
 app.get('/health', (_req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }));
-app.get('/metrics', metricsHandler);
+app.get('/ready', async (_req, res) => {
+  const r = await readiness();
+  res.status(r.ok ? 200 : 503).json(r);
+});
+// Prometheus metrics. Caddy never exposes /metrics publicly; METRICS_TOKEN adds a second lock.
+app.get('/metrics', (req, res, next) => {
+  const token = process.env.METRICS_TOKEN;
+  if (token && req.header('authorization') !== `Bearer ${token}`) return res.status(401).end();
+  return metricsHandler(req, res).catch(next);
+});
 
 // API routes
 const api = '/api/v1';
+// Per client IP across the whole API. A school office often shares one IP, so it's generous;
+// sign-in, password reset and reports have their own tighter limits.
+app.use(api, apiLimiter);
+app.use(`${api}/reports`, heavyLimiter);
+app.use(`${api}/report-cards`, heavyLimiter);
+app.use(`${api}/audit`, auditRoutes);
 app.use(`${api}/auth`, authRoutes);
 app.use(`${api}/auth/oauth`, oauthRoutes);
 app.use(`${api}/platform`, platformRoutes);

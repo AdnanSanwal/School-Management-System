@@ -23,7 +23,7 @@ export async function refreshToken(req: Request, res: Response, next: NextFuncti
 export async function logout(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const token = req.headers.authorization!.split(' ')[1];
-    await authService.logout(req.user!.id, token);
+    await authService.logout(req.user!, token);
     return sendSuccess(res, null, 'Logged out successfully');
   } catch (err) { next(err); }
 }
@@ -44,7 +44,7 @@ export async function resetPassword(req: Request, res: Response, next: NextFunct
 
 export async function changePassword(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    await authService.changePassword(req.user!.id, req.body.currentPassword, req.body.newPassword);
+    await authService.changePassword(req.user!.id, req.body.currentPassword, req.body.newPassword, req.user!.sid);
     return sendSuccess(res, null, 'Password changed');
   } catch (err) { next(err); }
 }

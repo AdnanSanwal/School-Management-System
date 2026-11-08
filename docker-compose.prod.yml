@@ -51,6 +51,8 @@ services:
 
   backend:
     <<: *restart
+    # Small init process as PID 1: forwards SIGTERM to Node and reaps child processes.
+    init: true
     build:
       context: .
       dockerfile: ./backend/Dockerfile
@@ -61,7 +63,15 @@ services:
     environment:
       NODE_ENV: production
       PORT: '5000'
-      DATABASE_URL: mysql://sms_user:${MYSQL_PASSWORD}@mysql:3306/school_db
+      # connection_limit is per worker process: WEB_CONCURRENCY x DB_POOL must stay well under MySQL's 151.
+      DATABASE_URL: mysql://sms_user:${MYSQL_PASSWORD}@mysql:3306/school_db?connection_limit=${DB_POOL:-10}&pool_timeout=20
+      # Worker processes sharing port 5000 ("auto" = one per CPU core).
+      WEB_CONCURRENCY: ${WEB_CONCURRENCY:-2}
+      SHUTDOWN_TIMEOUT_MS: ${SHUTDOWN_TIMEOUT_MS:-15000}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-1h}
+      METRICS_TOKEN: ${METRICS_TOKEN:-}
+      RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-1000}
       REDIS_URL: redis://redis:6379
       FRONTEND_URL: https://${DOMAIN:?set DOMAIN}
       BACKEND_URL: https://${DOMAIN}
@@ -92,8 +102,10 @@ services:
       SENTRY_DSN: ${SENTRY_DSN:-}
     volumes:
       - uploads_data:/app/uploads
+    stop_grace_period: 30s
     healthcheck:
-      test: ['CMD-SHELL', 'wget -qO- http://localhost:5000/health || exit 1']
+      # /ready also checks MySQL and Redis, and turns 503 while the server is shutting down.
+      test: ['CMD-SHELL', 'wget -qO- http://localhost:5000/ready || exit 1']
       interval: 30s
       timeout: 10s
       retries: 3
@@ -101,12 +113,15 @@ services:
 
   frontend:
     <<: *restart
+    init: true
     build:
       context: .
       dockerfile: ./frontend/Dockerfile
       target: runner
       args:
         NEXT_PUBLIC_API_URL: /api/v1
+        # Your own Sentry project for web error reports (empty = off).
+        NEXT_PUBLIC_SENTRY_DSN: ${NEXT_PUBLIC_SENTRY_DSN:-}
         API_PROXY_URL: http://backend:5000/api
     depends_on:
       backend: { condition: service_healthy }

@@ -168,7 +168,17 @@ EXPO_PUBLIC_API_URL=https://<DOMAIN>/api/v1 npx eas build -p android
 - Any API request slower than `SLOW_REQUEST_MS` (default 500 ms) is logged as a warning. Find them with
   `erp logs backend | grep "Slow request"` and tell the developer which ones repeat.
 
-## 10. Troubleshooting
+## 10. Operations
+
+- **Health:** `/health` reports whether the process is alive. `/ready` checks MySQL and Redis, and Docker uses it, so an unhealthy backend shows in `erp ps`.
+- **Logs** are JSON lines with a `requestId`. When someone reports an error, ask for the code shown on the screen, then run `erp logs backend | grep <code>`.
+- **Who changed what:** owners and principals can call `GET /api/v1/audit`, filtered by `userId`, `entity`, `from` and `to`.
+- **More capacity:** raise `WEB_CONCURRENCY` (worker processes) and `DB_POOL`. Keep `WEB_CONCURRENCY × DB_POOL` well under MySQL's limit of 151 connections, then run `erp up -d`.
+- **Updates without dropping requests:** `erp up -d --build` sends SIGTERM. The backend finishes in-flight requests (up to `SHUTDOWN_TIMEOUT_MS`) before stopping.
+
+See [SECURITY.md](SECURITY.md) for everything the app does to protect data and stay up.
+
+## 11. Troubleshooting
 
 | Symptom | Check |
 |---|---|

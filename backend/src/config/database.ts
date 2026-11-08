@@ -77,9 +77,20 @@ export async function transaction<T>(fn: (tx: ScopedTx) => Promise<T>, attempts 
   }
 }
 
-export async function connectDatabase() {
-  await basePrisma.$connect();
-  logger.info('MySQL connected via Prisma');
+/** Connects at start-up, retrying with back-off while MySQL is still starting (e.g. after a reboot). */
+export async function connectDatabase(attempts = Number(process.env.DB_CONNECT_ATTEMPTS) || 10) {
+  for (let i = 1; ; i++) {
+    try {
+      await basePrisma.$connect();
+      logger.info('MySQL connected via Prisma');
+      return;
+    } catch (err) {
+      if (i >= attempts) throw err;
+      const wait = Math.min(1000 * 2 ** (i - 1), 10_000);
+      logger.warn(`MySQL not reachable (attempt ${i}/${attempts}); retrying in ${wait} ms`, { error: (err as Error).message.split('\n')[0] });
+      await new Promise((r) => setTimeout(r, wait));
+    }
+  }
 }
 
 export default prisma;

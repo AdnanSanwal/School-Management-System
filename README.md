@@ -251,6 +251,12 @@ Backend settings live in `backend/.env` (template: `.env.example`).
 | `MESSAGING_PROVIDER` | | WhatsApp/SMS alerts to parents: `twilio`, `test` (logs only, for development) or empty (off). Each school then turns alerts on in **School settings** |
 | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_PHONE_NUMBER`, `TWILIO_WHATSAPP_FROM` | | Twilio account; `TWILIO_WHATSAPP_FROM` like `whatsapp:+14155238886` for WhatsApp |
 | `DEFAULT_COUNTRY_CODE` | | Turns local numbers like `0300…` into international ones. Default `92` (Pakistan) |
+| `WEB_CONCURRENCY` | | Backend worker processes on one port (`auto` = one per CPU core). Needs `REDIS_URL`. Default 1 |
+| `LOG_LEVEL`, `LOG_DIR` | | Log detail (`info`, `warn`, `debug`…) and an optional folder for log files. Production logs JSON to stdout |
+| `SHUTDOWN_TIMEOUT_MS` | | How long a stopping server waits for in-flight requests. Default 15000 |
+| `JWT_EXPIRES_IN` | | Sign-in token lifetime; apps renew it silently. Default `1h` |
+| `METRICS_TOKEN` | | Locks `/metrics` behind `Authorization: Bearer <token>` |
+| `NEXT_PUBLIC_SENTRY_DSN` | | Your own Sentry project for web error reports (empty = off) |
 | `TRUST_PROXY` | behind a proxy | Number of reverse proxies in front of the API (`1` with Caddy/nginx) so rate limits see real client IPs |
 | `RATE_LIMIT_MAX` | | Requests per IP per 15 minutes. Default `1000` |
 | `GOOGLE_CLIENT_*`, `MS_CLIENT_*` | | "Sign in with Google/Microsoft" for accounts the school already created |
@@ -304,6 +310,7 @@ docker compose -f docker-compose.prod.yml --env-file .env.production up -d --bui
 ```
 
 Step-by-step guide, backups, restore and updates: **[docs/DEPLOY.md](docs/DEPLOY.md)**.
+Security and reliability measures (and how they're tested): **[docs/SECURITY.md](docs/SECURITY.md)**.
 
 ### End of the school year
 

@@ -1,27 +1,20 @@
 import * as Sentry from '@sentry/nextjs';
 
+// Error reporting is off unless the school/platform sets its own Sentry project
+// (NEXT_PUBLIC_SENTRY_DSN, baked in at build time). Reports may contain student data,
+// so they must only ever go to an account you control.
+const dsn = process.env.NEXT_PUBLIC_SENTRY_DSN;
+
 Sentry.init({
-  dsn: 'https://146bc222f76d737247dc83017a701ee9@o4509921943158784.ingest.us.sentry.io/4511287040540672',
-
+  dsn,
+  enabled: !!dsn,
   environment: process.env.NODE_ENV,
-
-  // Capture 100% of traces in development, 20% in production
-  tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.2 : 1.0,
-
-  // Session Replay — capture 10% of sessions, 100% of sessions with errors
-  replaysSessionSampleRate: 0.1,
-  replaysOnErrorSampleRate: 1.0,
-
-  integrations: [
-    Sentry.replayIntegration({
-      maskAllText: true,
-      blockAllMedia: false,
-    }),
-    Sentry.feedbackIntegration({
-      colorScheme: 'system',
-    }),
-  ],
-
-  // Debug mode in development only
+  tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 0,
+  // No session replay: it would record screens with children's names, photos and fees.
+  replaysSessionSampleRate: 0,
+  replaysOnErrorSampleRate: 0,
+  // Don't send the query string or form contents.
+  sendDefaultPii: false,
+  integrations: dsn ? [Sentry.feedbackIntegration({ colorScheme: 'system', showBranding: false })] : [],
   debug: false,
 });

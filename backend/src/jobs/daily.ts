@@ -1,4 +1,5 @@
 import { basePrisma } from '../config/database';
+import { getRedis } from '../config/redis';
 import { runWithTenant } from '../config/tenancy';
 import { dayInTimezone } from '../utils/dates';
 import logger from '../utils/logger';
@@ -29,7 +30,29 @@ export async function runDailyJobsForSchool(schoolId: string, opts: { weekly: bo
   });
 }
 
+/**
+ * Only one process in the whole deployment runs a tick (several workers, several servers).
+ * SET NX with an expiry: if the holder dies the lock frees itself.
+ */
+async function withJobLock(fn: () => Promise<void>) {
+  const redis = getRedis() as any;
+  if (typeof redis.set !== 'function' || typeof redis.multi !== 'function') return fn(); // dev fallback: single process
+  const token = `${process.pid}:${Date.now()}`;
+  const got = await redis.set('lock:daily-jobs', token, 'PX', 10 * 60_000, 'NX');
+  if (got !== 'OK') return; // another instance is on it
+  try {
+    await fn();
+  } finally {
+    // Release only our own lock (it may have expired and been taken by someone else).
+    await redis.eval("if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end", 1, 'lock:daily-jobs', token).catch(() => {});
+  }
+}
+
 async function tick() {
+  return withJobLock(runTick);
+}
+
+async function runTick() {
   const schools = await basePrisma.school.findMany({ where: { isActive: true }, select: { id: true, code: true, timezone: true } });
   for (const s of schools) {
     const today = dayInTimezone(s.timezone);
@@ -47,10 +70,17 @@ async function tick() {
   }
 }
 
+let timers: NodeJS.Timeout[] = [];
+
 export function startDailyJobs() {
   if (process.env.JOBS_ENABLED === 'false' || process.env.NODE_ENV === 'test') return;
   const run = () => tick().catch((err) => logger.error('Daily job tick failed', { message: (err as Error).message }));
-  setTimeout(run, 30_000); // after startup settles
-  setInterval(run, CHECK_EVERY_MS).unref();
+  timers = [setTimeout(run, 30_000), setInterval(run, CHECK_EVERY_MS)]; // first run after start-up settles
+  timers.forEach((t) => t.unref());
   logger.info(`Daily jobs scheduled (after ${RUN_HOUR}:00 school time)`);
+}
+
+export function stopDailyJobs() {
+  timers.forEach((t) => clearTimeout(t));
+  timers = [];
 }

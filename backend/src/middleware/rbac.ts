@@ -34,6 +34,7 @@ export const PERMISSIONS = [
   'transport.view', 'transport.manage',
   'library.view', 'library.manage',
   'homework.mark',
+  'audit.view',
   'platform.manage',
 ] as const;
 
@@ -54,12 +55,12 @@ export const ROLE_PERMISSIONS: Record<Role, ReadonlySet<Permission>> = {
     ...EVERYONE_IN_SCHOOL, ...READ_ALL,
     'school.manage', 'users.manage', 'dashboard.owner',
     'reports.finance', 'reports.attendance', 'reports.academic',
-    'transport.view', 'library.view',
+    'transport.view', 'library.view', 'audit.view',
   ]),
 
   // Academic + administrative head; approvals. No fee collection or fee-structure edits.
   PRINCIPAL: new Set<Permission>([
-    ...EVERYONE_IN_SCHOOL, ...READ_ALL,
+    ...EVERYONE_IN_SCHOOL, ...READ_ALL, 'audit.view',
     'users.manage', 'dashboard.principal',
     'student.manage', 'student.status.request', 'student.status.approve',
     'staff.manage', 'class.manage',

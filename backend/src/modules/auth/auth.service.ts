@@ -4,15 +4,13 @@ import { authenticator } from 'otplib';
 import QRCode from 'qrcode';
 import type { User } from '@prisma/client';
 import { basePrisma } from '../../config/database';
-import { getRedis } from '../../config/redis';
 import { signToken, signRefreshToken, verifyRefreshToken, JwtPayload } from '../../utils/jwt';
 import { AppError } from '../../middleware/errorHandler';
 import { sendEmail } from '../../utils/email';
+import { endAllSessions, endSession, newSessionId, saveSession, storedRefreshToken } from '../../utils/sessions';
 
 // Auth runs before a tenant is known (login, refresh, reset) or concerns only
 // the caller's own User row, so it uses the unscoped client and filters by user id.
-
-const REFRESH_TTL = 30 * 24 * 3600;
 
 const publicUser = {
   id: true, name: true, email: true, phone: true, role: true, avatar: true, mfaEnabled: true,
@@ -29,16 +27,28 @@ async function assertCanSignIn(user: Pick<User, 'isActive' | 'schoolId' | 'role'
 }
 
 export async function issueTokens(user: Pick<User, 'id' | 'role' | 'email' | 'schoolId'>) {
-  const payload: JwtPayload = { id: user.id, role: user.role, email: user.email, schoolId: user.schoolId };
+  const sid = newSessionId();
+  const payload: JwtPayload = { id: user.id, role: user.role, email: user.email, schoolId: user.schoolId, sid };
   const accessToken = signToken(payload);
   const refreshToken = signRefreshToken(payload);
-  await getRedis().setex(`refresh:${user.id}`, REFRESH_TTL, refreshToken);
+  await saveSession(user.id, sid, refreshToken);
   return { accessToken, refreshToken };
 }
 
+// Compared against when the email is unknown, so a wrong email takes as long as a wrong
+// password and the response time doesn't reveal which accounts exist.
+let dummyHash: Promise<string> | undefined;
+const timingDecoy = (password: string) => {
+  dummyHash ??= hashPassword(crypto.randomBytes(16).toString('hex'));
+  return dummyHash.then((h) => verifyPassword(password, h));
+};
+
 export async function login(email: string, password: string, mfaCode?: string) {
   const user = await basePrisma.user.findUnique({ where: { email: email.toLowerCase().trim() } });
-  if (!user) throw new AppError('Invalid credentials', 401);
+  if (!user) {
+    await timingDecoy(password);
+    throw new AppError('Invalid credentials', 401);
+  }
 
   const valid = await verifyPassword(password, user.password);
   if (!valid) throw new AppError('Invalid credentials', 401);
@@ -70,22 +80,21 @@ export async function refreshAccessToken(token: string) {
   } catch {
     throw new AppError('Invalid refresh token', 401);
   }
-  const stored = await getRedis().get(`refresh:${payload.id}`);
-  if (stored !== token) throw new AppError('Invalid refresh token', 401);
+  const stored = await storedRefreshToken(payload.id, payload.sid);
+  if (!stored || stored !== token) throw new AppError('Session ended. Please sign in again.', 401);
 
   // Re-read the user so role changes / deactivation take effect on refresh.
   const user = await basePrisma.user.findUnique({ where: { id: payload.id } });
   if (!user) throw new AppError('Invalid refresh token', 401);
   await assertCanSignIn(user);
 
-  const accessToken = signToken({ id: user.id, role: user.role, email: user.email, schoolId: user.schoolId });
+  const accessToken = signToken({ id: user.id, role: user.role, email: user.email, schoolId: user.schoolId, sid: payload.sid });
   return { accessToken };
 }
 
-export async function logout(userId: string, token: string) {
-  const redis = getRedis();
-  await redis.del(`refresh:${userId}`);
-  await redis.setex(`blacklist:${token}`, 7 * 24 * 3600, '1');
+/** Ends this device's session only. */
+export async function logout(user: JwtPayload, token: string) {
+  await endSession(user.id, user.sid, token, user.exp);
 }
 
 export async function forgotPassword(email: string) {
@@ -124,16 +133,17 @@ export async function resetPassword(token: string, newPassword: string) {
     where: { id: user.id },
     data: { password: hash, resetToken: null, resetTokenExpires: null },
   });
-  await getRedis().del(`refresh:${user.id}`);
+  await endAllSessions(user.id); // a reset means the old password may be known: sign out everywhere
 }
 
-export async function changePassword(userId: string, currentPassword: string, newPassword: string) {
+export async function changePassword(userId: string, currentPassword: string, newPassword: string, keepSid?: string) {
   const user = await basePrisma.user.findUniqueOrThrow({ where: { id: userId } });
   const valid = await verifyPassword(currentPassword, user.password);
   if (!valid) throw new AppError('Current password is incorrect', 400);
 
   const hash = await hashPassword(newPassword);
   await basePrisma.user.update({ where: { id: userId }, data: { password: hash } });
+  await endAllSessions(userId, { keepSid }); // other devices must sign in with the new password
 }
 
 export async function getMe(userId: string) {

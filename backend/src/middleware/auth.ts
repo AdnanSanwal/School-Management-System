@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { verifyToken, JwtPayload } from '../utils/jwt';
 import { sendError } from '../utils/apiResponse';
-import { getRedis } from '../config/redis';
+import { isRevoked } from '../utils/sessions';
 import { tenantStorage, TenantContext } from '../config/tenancy';
 
 export interface AuthRequest extends Request {
@@ -21,9 +21,8 @@ export async function authenticate(req: AuthRequest, res: Response, next: NextFu
   const token = authHeader.split(' ')[1];
   let user: JwtPayload;
   try {
-    const blacklisted = await getRedis().get(`blacklist:${token}`);
-    if (blacklisted) return sendError(res, 'Token revoked', 401);
     user = verifyToken(token);
+    if (await isRevoked(token, user)) return sendError(res, 'Session ended. Please sign in again.', 401);
   } catch {
     return sendError(res, 'Invalid or expired token', 401);
   }

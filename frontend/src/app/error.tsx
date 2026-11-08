@@ -1,5 +1,7 @@
 'use client';
 
+import { useEffect } from 'react';
+import * as Sentry from '@sentry/nextjs';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
 
 export default function GlobalError({
@@ -9,6 +11,7 @@ export default function GlobalError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  useEffect(() => { Sentry.captureException(error); }, [error]);
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-100 via-indigo-50/50 to-violet-50/50 p-6">
       <div className="w-full max-w-lg rounded-3xl border border-white/70 bg-white/90 backdrop-blur-md shadow-card-lg p-8 text-center">
@@ -19,11 +22,11 @@ export default function GlobalError({
         <p className="text-sm text-gray-500 mt-2">
           The page failed to render. Try reloading this view.
         </p>
-        {error?.message && (
-          <p className="mt-4 text-xs text-gray-400 break-words">
-            {error.message}
-          </p>
+        {/* Internal error text can expose code details; show it only while developing. */}
+        {process.env.NODE_ENV !== 'production' && error?.message && (
+          <p className="mt-4 text-xs text-gray-400 break-words">{error.message}</p>
         )}
+        {error?.digest && <p className="mt-4 font-mono text-xs text-gray-400">Error code: {error.digest}</p>}
         <button
           onClick={reset}
           className="btn-primary mt-6 inline-flex items-center gap-2"
