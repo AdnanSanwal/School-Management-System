@@ -70,6 +70,32 @@
         "8081"
       ],
       "port": 8081
+    },
+    {
+      "name": "backend-prod",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "start",
+        "--workspace=backend"
+      ],
+      "port": 5000,
+      "env": {
+        "PORT": "5000"
+      }
+    },
+    {
+      "name": "frontend-prod",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "start",
+        "--workspace=frontend"
+      ],
+      "port": 3000,
+      "env": {
+        "PORT": "3000"
+      }
     }
   ]
 }

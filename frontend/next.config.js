@@ -12,7 +12,10 @@ const originOf = (url) => { try { return url && /^https?:/.test(url) ? new URL(u
  * other sites (clickjacking). Next.js needs inline scripts for hydration.
  */
 function securityHeaders() {
-  const api = originOf(process.env.NEXT_PUBLIC_API_URL || (isDev ? 'http://localhost:5000' : ''));
+  // Must match the address the browser really calls: same fallback as src/lib/api.ts.
+  // ("/api/v1" behind Caddy = this site, so nothing extra is allowed.)
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api/v1';
+  const api = originOf(apiUrl);
   const sentry = process.env.NEXT_PUBLIC_SENTRY_DSN ? 'https://*.ingest.sentry.io https://*.ingest.us.sentry.io https://*.ingest.de.sentry.io' : '';
   const csp = [
     "default-src 'self'",
@@ -28,7 +31,9 @@ function securityHeaders() {
     "base-uri 'self'",
     "form-action 'self'",
     "frame-ancestors 'none'",
-    ...(isDev ? [] : ['upgrade-insecure-requests']),
+    // Only when the API is this site or https: upgrading a plain-http API (a local production
+    // run on http://localhost:5000) would break every request.
+    ...(!isDev && (!api || api.startsWith('https:')) ? ['upgrade-insecure-requests'] : []),
   ].map((d) => d.replace(/\s+/g, ' ').trim()).join('; ');
   return [
     { key: 'Content-Security-Policy', value: csp },
