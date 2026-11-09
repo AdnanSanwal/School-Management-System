@@ -7,15 +7,22 @@ import { sendSuccess, sendError } from '../../utils/apiResponse';
 import logger from '../../utils/logger';
 
 // Configure VAPID once at module load
-const VAPID_PUBLIC = process.env.VAPID_PUBLIC_KEY || '';
-const VAPID_PRIVATE = process.env.VAPID_PRIVATE_KEY || '';
+let VAPID_PUBLIC = process.env.VAPID_PUBLIC_KEY || '';
+let VAPID_PRIVATE = process.env.VAPID_PRIVATE_KEY || '';
 
 if (VAPID_PUBLIC && VAPID_PRIVATE) {
-  webpush.setVapidDetails(
-    `mailto:${process.env.EMAIL_FROM || 'admin@school.com'}`,
-    VAPID_PUBLIC,
-    VAPID_PRIVATE
-  );
+  try {
+    webpush.setVapidDetails(
+      `mailto:${process.env.EMAIL_FROM || 'admin@school.com'}`,
+      VAPID_PUBLIC,
+      VAPID_PRIVATE
+    );
+  } catch (err) {
+    // Invalid keys (e.g. the .env.example placeholders) must not stop the API from starting.
+    logger.warn('Invalid VAPID keys — web push disabled', { error: (err as Error).message });
+    VAPID_PUBLIC = '';
+    VAPID_PRIVATE = '';
+  }
 }
 
 export async function getVapidKey(_req: AuthRequest, res: Response) {
