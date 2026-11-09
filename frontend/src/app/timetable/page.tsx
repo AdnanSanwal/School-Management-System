@@ -1,9 +1,9 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueries, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { Plus, Save, Trash2 } from 'lucide-react';
+import { Plus, Printer, Save, Trash2 } from 'lucide-react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Spinner, Empty, useSections } from '@/components/ui/kit';
 import { timetableAPI, academicsAPI, staffAPI, apiError } from '@/lib/api';
@@ -25,6 +25,8 @@ export default function TimetablePage() {
   const view = chosen ?? (role === 'TEACHER' ? 'mine' : 'section');
   const { data: sections = [] } = useSections();
   const [sectionId, setSectionId] = useState('');
+  // Print once the timetables to print have loaded (all classes can take a moment).
+  const [printing, setPrinting] = useState<null | 'one' | 'all'>(null);
   useEffect(() => { if (!sectionId && sections.length) setSectionId(sections[0].id); }, [sections, sectionId]);
 
   return (
@@ -41,7 +43,12 @@ export default function TimetablePage() {
             {sections.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
           </select>
         )}
+        <button className="btn btn-secondary" disabled={!!printing} onClick={() => setPrinting('one')}><Printer className="h-4 w-4" /> Print</button>
+        {view === 'section' && manage && sections.length > 1 && (
+          <button className="btn btn-ghost" disabled={!!printing} onClick={() => setPrinting('all')}>{printing === 'all' ? 'Preparing…' : 'Print all classes'}</button>
+        )}
       </>}>
+      <PrintArea view={view} sectionId={sectionId} request={printing} sections={sections} onPrinted={() => setPrinting(null)} />
       {view === 'mine' ? <TeacherWeek /> : sectionId && (manage ? <Editor key={sectionId} sectionId={sectionId} /> : <SectionWeek sectionId={sectionId} />)}
     </DashboardLayout>
   );
@@ -224,5 +231,66 @@ function Editor({ sectionId }: { sectionId: string }) {
         setPeriods([...periods, { period: (last?.period ?? 0) + 1, startTime: fmt(start), endTime: fmt(start + 40) }]);
       }}><Plus className="h-4 w-4" /> Add period</button>
     </div>
+  );
+}
+
+/**
+ * What actually prints: a clean, read-only timetable (the editor's dropdowns don't print well),
+ * with the school and class as a heading. "Print all classes" puts one class per page.
+ */
+function PrintArea({ view, sectionId, request, sections, onPrinted }: {
+  view: 'section' | 'mine'; sectionId: string; request: null | 'one' | 'all'; sections: { id: string; label: string }[]; onPrinted: () => void;
+}) {
+  const all = request === 'all';
+  const school = useAuthStore((s) => s.user?.school?.name);
+  const me = useAuthStore((s) => s.user?.name);
+  const list = view === 'mine' ? [] : all ? sections : sections.filter((x) => x.id === sectionId);
+  const sectionWeeks = useQueries({ queries: list.map((x) => ({ queryKey: ['timetable', x.id], queryFn: () => timetableAPI.section(x.id) })) });
+  const mine = useQuery({ queryKey: ['timetable', 'me'], queryFn: () => timetableAPI.teacher('me'), enabled: view === 'mine' });
+  const ready = view === 'mine' ? !mine.isLoading : sectionWeeks.every((q) => !q.isLoading);
+  useEffect(() => {
+    if (!request || !ready) return;
+    const t = setTimeout(() => { window.print(); onPrinted(); }, 100); // let the print layout render first
+    return () => clearTimeout(t);
+  }, [request, ready, onPrinted]);
+  const pages = view === 'mine'
+    ? [{ key: 'me', title: `Timetable — ${me ?? 'My week'}`, slots: mine.data ?? [], show: 'section' as const }]
+    : list.map((x, i) => ({ key: x.id, title: `Timetable — ${x.label}`, slots: sectionWeeks[i]?.data ?? [], show: 'teacher' as const }))
+        // "Print all classes" skips classes that have no timetable yet (no blank pages).
+        .filter((pg) => !all || pg.slots.length > 0);
+  return (
+    <div className="print-only">
+      {pages.map((pg, i) => (
+        <section key={pg.key} className={i < pages.length - 1 ? 'print-page-break' : undefined}>
+          <header className="mb-3">
+            <p className="text-sm text-gray-600">{school}</p>
+            <h1 className="text-xl font-bold">{pg.title}</h1>
+            <p className="text-xs text-gray-500">Printed {new Date().toLocaleDateString('en-GB', { dateStyle: 'medium' })}</p>
+          </header>
+          {pg.slots.length ? <PrintGrid slots={pg.slots} show={pg.show} /> : <p className="text-sm text-gray-500">No timetable set.</p>}
+        </section>
+      ))}
+    </div>
+  );
+}
+
+function PrintGrid({ slots, show }: { slots: any[]; show: 'teacher' | 'section' }) {
+  const periods = [...new Map(slots.map((s) => [s.period, { period: s.period, startTime: s.startTime, endTime: s.endTime }])).values()].sort((a, b) => a.period - b.period);
+  const days = DAYS.filter((d) => d !== 'SATURDAY' || slots.some((s) => s.dayOfWeek === 'SATURDAY'));
+  return (
+    <table className="print-table">
+      <thead><tr><th>Period</th>{days.map((d) => <th key={d}>{d.slice(0, 1) + d.slice(1).toLowerCase()}</th>)}</tr></thead>
+      <tbody>
+        {periods.map((p) => (
+          <tr key={p.period}>
+            <td><b>{p.period}</b><br /><span className="text-xs">{p.startTime}–{p.endTime}</span></td>
+            {days.map((d) => {
+              const x = slots.find((y) => y.dayOfWeek === d && y.period === p.period);
+              return <td key={d}>{x ? <><b>{x.subject.name}</b><br /><span className="text-xs">{show === 'teacher' ? x.teacher.name : x.section.name}{x.room ? ` · ${x.room}` : ''}</span></> : ''}</td>;
+            })}
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 }

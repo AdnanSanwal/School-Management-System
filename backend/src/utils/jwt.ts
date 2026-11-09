@@ -3,18 +3,22 @@ import jwt from 'jsonwebtoken';
 export interface JwtPayload {
   id: string;
   role: string;
-  email: string;
+  email: string | null;
   /** null only for SUPER_ADMIN (platform operator). */
   schoolId: string | null;
   /** Sign-in session (one per device); see utils/sessions.ts. */
   sid?: string;
+  /** Must set their own password before using the app (admin-chosen password). */
+  pwc?: boolean;
+  /** Issue time in milliseconds: lets "sign out everywhere" cut off tokens issued in the same second. */
+  iam?: number;
   /** Set by jsonwebtoken when verifying. */
   iat?: number;
   exp?: number;
 }
 
-function clean({ id, role, email, schoolId, sid }: JwtPayload): JwtPayload {
-  return { id, role, email, schoolId: schoolId ?? null, ...(sid ? { sid } : {}) };
+function clean({ id, role, email, schoolId, sid, pwc }: JwtPayload): JwtPayload {
+  return { id, role, email: email ?? null, schoolId: schoolId ?? null, ...(sid ? { sid } : {}), ...(pwc ? { pwc: true } : {}), iam: Date.now() };
 }
 
 export function signToken(payload: JwtPayload): string {

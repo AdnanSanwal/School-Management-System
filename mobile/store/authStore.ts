@@ -9,7 +9,10 @@ export type Role = 'SUPER_ADMIN' | 'OWNER' | 'PRINCIPAL' | 'ADMIN' | 'ACCOUNTANT
 export interface User {
   id: string;
   name: string;
-  email: string;
+  email: string | null;
+  username?: string | null;
+  /** The school office chose this password: the user must set their own first. */
+  mustChangePassword?: boolean;
   role: Role;
   avatar?: string | null;
   school?: { id: string; name: string; code: string; currency: string; logoUrl?: string | null } | null;

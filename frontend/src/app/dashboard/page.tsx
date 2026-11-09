@@ -1,12 +1,13 @@
 'use client';
 
-import Link from 'next/link';
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Bar } from 'react-chartjs-2';
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Tooltip } from 'chart.js';
 import { Wallet, AlertCircle, Users, GraduationCap, TrendingUp, TrendingDown, Info, AlertTriangle } from 'lucide-react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Stat, Spinner } from '@/components/ui/kit';
+import { DetailsModal, type DetailKind } from '@/components/dashboard/DetailsModal';
 import { dashboardAPI } from '@/lib/api';
 import { CAN } from '@/lib/roles';
 import { formatMoney, formatPeriod, formatDate } from '@/lib/utils';
@@ -31,39 +32,45 @@ export default function DashboardPage() {
 function Overview({ d, currency }: { d: any; currency: string }) {
   const { fees, studentAttendance: sa, staffAttendance: ta } = d;
   const trendUp = fees && Number(fees.collectedToday) >= Number(fees.collectedYesterday);
+  // CR-01: every card opens the live records behind its number.
+  const [open, setOpen] = useState<DetailKind | null>(null);
 
   return (
     <>
+      {open && <DetailsModal kind={open} currency={currency} onClose={() => setOpen(null)} />}
       {/* Row 1 — the spec's four cards */}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {fees && (
-          <Stat icon={Wallet} tone="good" label="Fee collected today" value={formatMoney(fees.collectedToday, currency)}
+          <Stat icon={Wallet} tone="good" label="Fee collected today" value={formatMoney(fees.collectedToday, currency)} onClick={() => setOpen('fees-today')}
             sub={<span className="inline-flex items-center gap-1">
               {trendUp ? <TrendingUp className="h-3 w-3 text-emerald-600" /> : <TrendingDown className="h-3 w-3 text-red-500" />}
               Yesterday {formatMoney(fees.collectedYesterday, currency)}
             </span>} />
         )}
         {fees && (
-          <Stat icon={AlertCircle} tone="bad" label="Total remaining fee" value={formatMoney(fees.totalRemaining, currency)}
-            sub={<Link href="/fees/defaulters" className="text-primary-600 hover:underline">{fees.studentsOverdue30Days} overdue &gt; 30 days</Link>} />
+          <Stat icon={AlertCircle} tone="bad" label="Total remaining fee" value={formatMoney(fees.totalRemaining, currency)} onClick={() => setOpen('outstanding')}
+            sub={`${fees.studentsOverdue30Days} overdue > 30 days`} />
         )}
         {ta && (
-          <Stat icon={Users} tone={ta.percent !== null && ta.percent < 85 ? 'warn' : 'default'} label="Teachers present today"
+          <Stat icon={Users} tone={ta.percent !== null && ta.percent < 85 ? 'warn' : 'default'} label="Teachers present today" onClick={() => setOpen('staff-present')}
             value={ta.marked ? `${ta.teachersPresent}/${ta.teachersTotal}` : '—'}
-            sub={ta.marked ? `${ta.percent}%` : <Link href="/attendance/staff" className="text-primary-600 hover:underline">Not marked yet</Link>} />
+            sub={ta.marked ? `${ta.percent}%` : 'Not marked yet'} />
         )}
         {sa && (
-          <Stat icon={GraduationCap} tone={sa.percent !== null && sa.percent < 85 ? 'warn' : 'default'} label="Students present today"
+          <Stat icon={GraduationCap} tone={sa.percent !== null && sa.percent < 85 ? 'warn' : 'default'} label="Students present today" onClick={() => setOpen('students-present')}
             value={sa.marked ? `${sa.present.toLocaleString()}/${sa.totalActive.toLocaleString()}` : '—'}
-            sub={sa.marked ? `${sa.percent}% · ${sa.sectionsMarked}/${sa.sectionsTotal} sections marked`
-              : <Link href="/attendance/summary" className="text-primary-600 hover:underline">No section marked yet</Link>} />
+            sub={sa.marked ? `${sa.percent}% · ${sa.sectionsMarked}/${sa.sectionsTotal} sections marked` : 'No section marked yet'} />
         )}
       </div>
 
       {/* Quick alerts */}
       {d.alerts.length > 0 && (
-        <div className="card space-y-2">
-          <h3 className="section-title">Alerts</h3>
+        <div role="button" tabIndex={0} onClick={() => setOpen('alerts')} onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), setOpen('alerts'))}
+          className="card cursor-pointer space-y-2 transition hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400" aria-label="Alerts: view all">
+          <div className="flex items-center justify-between">
+            <h3 className="section-title">Alerts</h3>
+            <span className="text-xs font-medium text-primary-600">View all →</span>
+          </div>
           <ul className="space-y-1.5">
             {d.alerts.map((a: any, i: number) => (
               <li key={i} className="flex items-start gap-2 text-sm text-gray-700">

@@ -138,6 +138,7 @@ router.get('/summary', can('attendance.student.view'), handler(async (req, res) 
   const date = q.date ? toDate(q.date) : await schoolToday();
   const [sections, counts] = await Promise.all([
     prisma.section.findMany({
+      where: { class: { archivedAt: null } },
       include: {
         class: { select: { name: true, level: true } },
         classTeacher: { select: { name: true } },

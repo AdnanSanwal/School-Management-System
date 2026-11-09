@@ -42,6 +42,10 @@ api.interceptors.response.use(
 api.interceptors.response.use(
   (res) => res,
   async (error) => {
+    if (error.response?.status === 403 && error.response.data?.code === 'PASSWORD_CHANGE_REQUIRED' && typeof window !== 'undefined' && location.pathname !== '/change-password') {
+      window.location.href = '/change-password';
+      return Promise.reject(error);
+    }
     const original = error.config;
     if (error.response?.status === 401 && !original._retry && !original.url?.includes('/auth/login')) {
       original._retry = true;
@@ -84,8 +88,10 @@ export const authAPI = {
   login: (body: { email: string; password: string; mfaCode?: string }) => data(api.post('/auth/login', body)),
   logout: () => api.post('/auth/logout'),
   me: () => data(api.get('/auth/me')),
-  changePassword: (body: { currentPassword: string; newPassword: string }) => api.post('/auth/change-password', body),
-  updateProfile: (body: { name: string; phone?: string | null }) => data(api.patch('/auth/profile', body)),
+  /** Returns fresh tokens (the old ones may require a password change). */
+  changePassword: (body: { currentPassword: string; newPassword: string }) => data<{ user: any; accessToken: string; refreshToken: string }>(api.post('/auth/change-password', body)),
+  usernameCheck: (username: string) => data<UsernameCheck>(api.get('/auth/username-check', { params: { username } })),
+  updateProfile: (body: { name: string; phone?: string | null; email?: string | null; username?: string | null; currentPassword?: string }) => data(api.patch('/auth/profile', body)),
   forgotPassword: (email: string) => api.post('/auth/forgot-password', { email }),
   resetPassword: (token: string, newPassword: string) => api.post('/auth/reset-password', { token, newPassword }),
   mfaSetup: () => data<{ secret: string; qrCodeUrl: string }>(api.post('/auth/mfa/enable')),
@@ -101,7 +107,11 @@ export const schoolAPI = {
   makeCurrent: (id: string) => data(api.post(`/school/academic-years/${id}/make-current`)),
 };
 
+export type UsernameCheck = { username: string; valid: boolean; available: boolean; message: string; suggestions: string[] };
+
 export const usersAPI = {
+  /** Is a username free for a new login, and what's close if not? */
+  usernameCheck: (username: string, name?: string) => data<UsernameCheck>(api.get('/users/username-check', { params: { username, name } })),
   list: (params?: any) => page(api.get('/users', { params })),
   create: (body: any) => data(api.post('/users', body)),
   update: (id: string, body: any) => data(api.patch(`/users/${id}`, body)),
@@ -112,7 +122,9 @@ export const academicsAPI = {
   classes: () => data<any[]>(api.get('/academics/classes')),
   createClass: (body: any) => data(api.post('/academics/classes', body)),
   updateClass: (id: string, body: any) => data(api.patch(`/academics/classes/${id}`, body)),
-  deleteClass: (id: string) => api.delete(`/academics/classes/${id}`),
+  archivedClasses: () => data<any[]>(api.get('/academics/classes', { params: { archived: 'true' } })),
+  archiveClass: (id: string) => data(api.post(`/academics/classes/${id}/archive`)),
+  restoreClass: (id: string) => data(api.post(`/academics/classes/${id}/restore`)),
   addSection: (classId: string, body: any) => data(api.post(`/academics/classes/${classId}/sections`, body)),
   updateSection: (id: string, body: any) => data(api.patch(`/academics/sections/${id}`, body)),
   deleteSection: (id: string) => api.delete(`/academics/sections/${id}`),
@@ -136,6 +148,8 @@ export const studentsAPI = {
   get: (id: string) => data(api.get(`/students/${id}`)),
   admit: (body: any) => data(api.post('/students', body)),
   update: (id: string, body: any) => data(api.patch(`/students/${id}`, body)),
+  /** CR-04: the student's own monthly fee (null = follow the class fee structure). */
+  setMonthlyFee: (id: string, monthlyFee: number | null) => data(api.put(`/students/${id}/monthly-fee`, { monthlyFee })),
   setStatus: (id: string, body: any) => data(api.post(`/students/${id}/status`, body)),
   searchGuardians: (q: string) => data<any[]>(api.get('/students/guardians/search', { params: { q } })),
   linkGuardian: (id: string, body: any) => data(api.post(`/students/${id}/guardians`, body)),
@@ -267,6 +281,15 @@ export const reportsAPI = {
     a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 10_000);
   },
+  /** CR-02: the report's table as data, shown on screen (never a download). */
+  view: (type: string, params: Record<string, string | undefined>) => data<ReportView>(api.get(`/reports/${type}`, { params: { ...params, format: 'view' } })),
+};
+
+export type ReportColumn = { key: string; label: string; type?: 'text' | 'money' | 'number' | 'percent'; width?: number };
+export type ReportView = {
+  title: string; subtitle?: string; school: string; currency: string;
+  columns: ReportColumn[]; rows: Record<string, string | number | null>[];
+  totals?: Record<string, string | number | null>; notes?: string[];
 };
 
 export const platformAPI = {
@@ -311,6 +334,8 @@ export const messagingAPI = {
 
 export const dashboardAPI = {
   overview: () => data(api.get('/dashboard/overview')),
+  /** CR-01: what's behind a dashboard card. */
+  details: (kind: 'fees-today' | 'outstanding' | 'staff-present' | 'students-present' | 'alerts') => data<any>(api.get(`/dashboard/details/${kind}`)),
 };
 
 export const notificationsAPI = {

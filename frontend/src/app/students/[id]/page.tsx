@@ -22,7 +22,7 @@ export default function StudentProfilePage() {
   const { data: s, isLoading, error } = useQuery({ queryKey: ['student', id], queryFn: () => studentsAPI.get(id) });
   const refresh = () => { qc.invalidateQueries({ queryKey: ['student', id] }); qc.invalidateQueries({ queryKey: ['students'] }); };
 
-  const [modal, setModal] = useState<null | 'status' | 'section' | 'doc' | 'concession' | { loginFor: any }>(null);
+  const [modal, setModal] = useState<null | 'status' | 'section' | 'doc' | 'concession' | 'fee' | { loginFor: any }>(null);
   const [issued, setIssued] = useState<any>(null);
   const manage = can(role, 'manageStudents');
 
@@ -75,6 +75,12 @@ export default function StudentProfilePage() {
                 <h3 className="section-title mb-2">Fees</h3>
                 <Line k="Pending" v={<span className={Number(s.fees.pending) > 0 ? 'text-red-600' : 'text-emerald-600'}>{formatMoney(s.fees.pending, currency)}</span>} />
                 {s.fees.oldestDueDate && <Line k="Oldest due" v={formatDate(s.fees.oldestDueDate)} />}
+                <Line k="Monthly fee" v={
+                  <span className="flex items-center gap-2">
+                    {s.monthlyFee !== null && s.monthlyFee !== undefined ? formatMoney(s.monthlyFee, currency) : <span className="text-gray-500">Class fee</span>}
+                    {can(role, 'setStudentFee') && s.status === 'ACTIVE' && <button className="text-xs text-primary-600 hover:underline" onClick={() => setModal('fee')}>Change</button>}
+                  </span>
+                } />
                 {can(role, 'requestConcession') && (
                   <button className="btn btn-ghost mt-2 w-full" onClick={() => setModal('concession')}><BadgePercent className="h-4 w-4" /> Request concession</button>
                 )}
@@ -132,6 +138,7 @@ export default function StudentProfilePage() {
       {s && modal === 'section' && <SectionModal s={s} onClose={() => setModal(null)} onDone={refresh} />}
       {s && modal === 'doc' && <DocModal id={s.id} onClose={() => setModal(null)} onDone={refresh} />}
       {s && modal === 'concession' && <ConcessionModal id={s.id} onClose={() => setModal(null)} />}
+      {s && modal === 'fee' && <MonthlyFeeModal s={s} currency={currency} onClose={() => setModal(null)} onDone={refresh} />}
       {s && modal && typeof modal === 'object' && (
         <LoginModal guardian={modal.loginFor} onClose={() => setModal(null)} onDone={(r) => { setIssued(r); refresh(); }} />
       )}
@@ -410,5 +417,30 @@ function LibraryCard({ studentId, currency }: { studentId: string; currency: str
         </>
       )}
     </div>
+  );
+}
+
+/** CR-04: change a student's own monthly fee, or go back to the class fee structure. */
+function MonthlyFeeModal({ s, currency, onClose, onDone }: { s: any; currency: string; onClose: () => void; onDone: () => void }) {
+  const [fee, setFee] = useState(s.monthlyFee !== null && s.monthlyFee !== undefined ? String(Number(s.monthlyFee)) : '');
+  const save = useMutation({
+    mutationFn: (value: number | null) => studentsAPI.setMonthlyFee(s.id, value),
+    onSuccess: (_r, value) => { toast.success(value === null ? 'Now billed from the class fee structure' : `Monthly fee set to ${formatMoney(value, currency)}`); onDone(); onClose(); },
+    onError: (e) => toast.error(apiError(e)),
+  });
+  return (
+    <Modal open onClose={onClose} title={`Monthly fee — ${s.name}`}>
+      <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); save.mutate(Number(fee)); }}>
+        <Field label="Monthly Fee" hint="Replaces the class's monthly charges on invoices generated from now on. Annual charges, transport and concessions still apply.">
+          <input type="number" min="0" step="1" required className="input" value={fee} onChange={(e) => setFee(e.target.value)} />
+        </Field>
+        <div className="flex flex-wrap justify-between gap-2">
+          {s.monthlyFee !== null && s.monthlyFee !== undefined && (
+            <button type="button" className="btn btn-ghost" disabled={save.isPending} onClick={() => save.mutate(null)}>Use the class fee instead</button>
+          )}
+          <button className="btn btn-primary ml-auto" disabled={save.isPending || fee === ''}>Save</button>
+        </div>
+      </form>
+    </Modal>
   );
 }

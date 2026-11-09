@@ -23,10 +23,17 @@ export function DashboardLayout({ children, title, allowedRoles, subtitle, actio
       router.replace('/login');
       return;
     }
+    if (user?.mustChangePassword) {
+      router.replace('/change-password');
+      return;
+    }
     if (allowedRoles && user && !allowedRoles.includes(user.role)) {
       router.replace('/unauthorized');
     }
   }, [allowedRoles, isAuthenticated, router, user]);
+
+  // Must set their own password first: render nothing (no requests) while redirecting.
+  if (user?.mustChangePassword) return null;
 
   return (
     <div className="relative flex h-screen overflow-hidden bg-gradient-to-br from-slate-50 via-indigo-50/40 to-violet-50/40">

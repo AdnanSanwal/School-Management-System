@@ -3,10 +3,11 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { Plus, KeyRound, UserMinus } from 'lucide-react';
+import { Plus, KeyRound, UserMinus, UserCheck } from 'lucide-react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Field, Modal, PasswordNotice, Spinner, Empty } from '@/components/ui/kit';
-import { staffAPI, apiError } from '@/lib/api';
+import { staffAPI, apiError, type UsernameCheck } from '@/lib/api';
+import { LoginFields, CredentialsNotice, emptyLogin, loginBody, loginProblems, type LoginValue } from '@/components/ui/LoginFields';
 import { CAN, can } from '@/lib/roles';
 import { useAuthStore } from '@/store/authStore';
 
@@ -29,12 +30,22 @@ export default function StaffPage() {
     onSuccess: () => { toast.success('Marked as left; login disabled'); for (const key of ['staff', 'teachers', 'classes', 'users']) qc.invalidateQueries({ queryKey: [key] }); },
     onError: (e) => toast.error(apiError(e)),
   });
+  const reactivate = useMutation({
+    mutationFn: (id: string) => staffAPI.update(id, { status: 'ACTIVE' }),
+    onSuccess: (r: any) => {
+      toast.success(`${r.name} is active again${r.userId ? '; their login works again' : ''}. Reassign their classes if needed.`, { duration: 6000 });
+      for (const key of ['staff', 'teachers', 'classes', 'users']) qc.invalidateQueries({ queryKey: [key] });
+    },
+    onError: (e) => toast.error(apiError(e)),
+  });
   const rows: any[] = data?.data ?? [];
 
   return (
     <DashboardLayout title="Staff" allowedRoles={CAN.viewStaff} subtitle={data ? `${data.pagination.total} people` : undefined}
       actions={manage && <button className="btn btn-primary" onClick={() => setAdding(true)}><Plus className="h-4 w-4" /> Add staff</button>}>
-      {issued && <PasswordNotice email={issued.user.email} password={issued.temporaryPassword} />}
+      {issued && (issued.temporaryPassword
+        ? <PasswordNotice email={issued.user.username ?? issued.user.email} password={issued.temporaryPassword} />
+        : <CredentialsNotice name={issued.user.name} username={issued.user.username ?? issued.user.email} onClose={() => setIssued(null)} />)}
       <div className="card space-y-4">
         <div className="flex flex-wrap gap-3">
           <input className="input max-w-xs" placeholder="Search name, employee no., phone" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Search staff" />
@@ -54,11 +65,16 @@ export default function StaffPage() {
                     <td className="text-sm">{s.designation ?? (s.isTeacher ? 'Teacher' : '—')}</td>
                     <td className="text-sm">{s.classTeacherOf.map((c: any) => `${c.class.name}-${c.name}`).join(', ') || '—'}</td>
                     <td className="text-sm">{s.phone ?? '—'}</td>
-                    <td className="text-sm">{s.user ? <span className={s.user.isActive ? 'badge badge-green' : 'badge badge-gray'}>{s.user.role.toLowerCase()}</span>
+                    <td className="text-sm">{s.user ? <span className="inline-flex flex-col"><span className={s.user.isActive ? 'badge badge-green w-fit' : 'badge badge-gray w-fit'}>{s.user.role.toLowerCase()}</span>{(s.user.username || s.user.email) && <span className="mt-0.5 font-mono text-xs text-gray-500">{s.user.username ?? s.user.email}</span>}</span>
                       : manage && s.status === 'ACTIVE' ? <button className="btn btn-ghost px-2 py-1" onClick={() => setLoginFor(s)}><KeyRound className="h-3.5 w-3.5" /> Give access</button> : '—'}</td>
-                    {manage && <td>{s.status === 'ACTIVE' && (
-                      <button className="btn-icon btn-ghost text-red-500" aria-label={`Mark ${s.name} as left`}
+                    {manage && <td>{s.status === 'ACTIVE' ? (
+                      <button className="btn-icon btn-ghost text-red-500" aria-label={`Mark ${s.name} as left`} title="Mark as left"
                         onClick={() => confirm(`Mark ${s.name} as left? Their login will be disabled.`) && markLeft.mutate(s.id)}><UserMinus className="h-4 w-4" /></button>
+                    ) : (
+                      <button className="btn btn-ghost px-2 py-1 text-xs text-emerald-700" disabled={reactivate.isPending}
+                        onClick={() => confirm(`Reactivate ${s.name}?${s.user ? ' Their login will work again.' : ''}`) && reactivate.mutate(s.id)}>
+                        <UserCheck className="h-3.5 w-3.5" /> Reactivate
+                      </button>
                     )}</td>}
                   </tr>
                 ))}
@@ -83,35 +99,39 @@ function useLoginRoles() {
 
 function AddStaffModal({ onClose, onIssued }: { onClose: () => void; onIssued: (r: any) => void }) {
   const qc = useQueryClient();
-  const [f, setF] = useState({ name: '', phone: '', designation: 'Teacher', department: '', qualification: '', joiningDate: '', isTeacher: true, loginEmail: '', loginRole: 'TEACHER' });
+  const roles = useLoginRoles();
+  const [f, setF] = useState({ name: '', phone: '', designation: 'Teacher', department: '', qualification: '', joiningDate: '', isTeacher: true });
+  const [withLogin, setWithLogin] = useState(true);
+  const [login, setLogin] = useState<LoginValue>(emptyLogin(roles[0]?.[0] ?? 'TEACHER'));
+  const [check, setCheck] = useState<UsernameCheck | null>(null);
+  const problems = withLogin ? loginProblems(login, check) : [];
   const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setF({ ...f, [k]: e.target.value });
   const m = useMutation({
     mutationFn: () => staffAPI.create({
       name: f.name, phone: f.phone || undefined, designation: f.designation || undefined, department: f.department || undefined,
       qualification: f.qualification || undefined, joiningDate: f.joiningDate || undefined, isTeacher: f.isTeacher,
-      login: f.loginEmail ? { email: f.loginEmail, role: f.loginRole } : undefined,
+      login: withLogin ? loginBody(login) : undefined,
     }),
     onSuccess: (r: any) => { toast.success(`${r.staff.name} added (${r.staff.employeeNo})`); if (r.login) onIssued(r.login); qc.invalidateQueries({ queryKey: ['staff'] }); onClose(); },
     onError: (e) => toast.error(apiError(e)),
   });
   return (
     <Modal open onClose={onClose} title="Add staff member" wide>
-      <form className="grid gap-3 md:grid-cols-2" onSubmit={(e) => { e.preventDefault(); m.mutate(); }}>
-        <Field label="Name *"><input className="input" required minLength={2} value={f.name} onChange={set('name')} /></Field>
+      <form className="grid gap-3 md:grid-cols-2" onSubmit={(e) => { e.preventDefault(); if (problems.length) return toast.error(problems[0]); m.mutate(); }}>
+        <Field label="Staff name *"><input className="input" required minLength={2} value={f.name} onChange={set('name')} /></Field>
         <Field label="Phone"><input className="input" value={f.phone} onChange={set('phone')} /></Field>
-        <Field label="Designation"><input className="input" value={f.designation} onChange={set('designation')} /></Field>
+        <Field label="Role / designation"><input className="input" value={f.designation} onChange={set('designation')} placeholder="Teacher, Clerk, Driver…" /></Field>
         <Field label="Department"><input className="input" value={f.department} onChange={set('department')} /></Field>
         <Field label="Qualification"><input className="input" value={f.qualification} onChange={set('qualification')} /></Field>
         <Field label="Joining date"><input type="date" className="input" value={f.joiningDate} onChange={set('joiningDate')} /></Field>
         <label className="flex items-center gap-2 text-sm md:col-span-2"><input type="checkbox" checked={f.isTeacher} onChange={(e) => setF({ ...f, isTeacher: e.target.checked })} /> Teaches classes</label>
         <div className="rounded-xl bg-slate-50 p-3 md:col-span-2">
-          <p className="mb-2 text-sm font-medium">App login (optional)</p>
-          <div className="grid gap-3 md:grid-cols-2">
-            <Field label="Login email"><input type="email" className="input" value={f.loginEmail} onChange={set('loginEmail')} /></Field>
-            <Field label="Role"><select className="select" value={f.loginRole} onChange={set('loginRole')}>{useLoginRoles().map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></Field>
-          </div>
+          <label className="mb-2 flex items-center gap-2 text-sm font-medium">
+            <input type="checkbox" checked={withLogin} onChange={(e) => setWithLogin(e.target.checked)} /> Login credentials (lets them use the app)
+          </label>
+          {withLogin && <LoginFields value={login} onChange={setLogin} roles={roles} personName={f.name} onCheck={setCheck} />}
         </div>
-        <button className="btn btn-primary md:col-span-2" disabled={m.isPending}>Add</button>
+        <button className="btn btn-primary md:col-span-2" disabled={m.isPending || problems.length > 0} title={problems[0]}>Add staff member</button>
       </form>
     </Modal>
   );
@@ -119,18 +139,20 @@ function AddStaffModal({ onClose, onIssued }: { onClose: () => void; onIssued: (
 
 function LoginModal({ staff, onClose, onIssued }: { staff: any; onClose: () => void; onIssued: (r: any) => void }) {
   const qc = useQueryClient();
-  const [f, setF] = useState({ email: '', role: staff.isTeacher ? 'TEACHER' : 'ACCOUNTANT' });
+  const roles = useLoginRoles();
+  const [login, setLogin] = useState<LoginValue>(emptyLogin(staff.isTeacher ? 'TEACHER' : (roles.find(([r]) => r === 'ACCOUNTANT')?.[0] ?? roles[0]?.[0] ?? 'TEACHER')));
+  const [check, setCheck] = useState<UsernameCheck | null>(null);
+  const problems = loginProblems(login, check);
   const m = useMutation({
-    mutationFn: () => staffAPI.createLogin(staff.id, f),
+    mutationFn: () => staffAPI.createLogin(staff.id, loginBody(login)),
     onSuccess: (r) => { onIssued(r); qc.invalidateQueries({ queryKey: ['staff'] }); onClose(); },
     onError: (e) => toast.error(apiError(e)),
   });
   return (
-    <Modal open onClose={onClose} title={`App access for ${staff.name}`}>
-      <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); m.mutate(); }}>
-        <Field label="Login email"><input type="email" required className="input" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} /></Field>
-        <Field label="Role"><select className="select" value={f.role} onChange={(e) => setF({ ...f, role: e.target.value })}>{useLoginRoles().map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></Field>
-        <button className="btn btn-primary w-full" disabled={m.isPending}>Create login</button>
+    <Modal open onClose={onClose} title={`Login credentials for ${staff.name}`} wide>
+      <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); if (problems.length) return toast.error(problems[0]); m.mutate(); }}>
+        <LoginFields value={login} onChange={setLogin} roles={roles} personName={staff.name} onCheck={setCheck} />
+        <button className="btn btn-primary w-full" disabled={m.isPending || problems.length > 0} title={problems[0]}>Create login</button>
       </form>
     </Modal>
   );

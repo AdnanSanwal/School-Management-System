@@ -50,6 +50,10 @@ export default function RootLayout() {
   useEffect(() => {
     if (!hydrated) return;
     const inAuth = segments[0] === '(auth)';
+    if (user?.mustChangePassword) {
+      if (segments[0] !== 'set-password') router.replace('/set-password');
+      return;
+    }
     const area = areaFor(user?.role);
     if (!user || !area) {
       if (!inAuth) router.replace('/(auth)/login');
@@ -91,6 +95,7 @@ export default function RootLayout() {
           <Stack.Screen name="transport" options={{ title: 'School transport' }} />
           <Stack.Screen name="library" options={{ title: 'Library' }} />
           <Stack.Screen name="homework/[id]" options={{ title: 'Homework done' }} />
+          <Stack.Screen name="set-password" options={{ title: 'Set your password', headerBackVisible: false, gestureEnabled: false }} />
         </Stack>
         <GlobalLoader />
       </QueryClientProvider>

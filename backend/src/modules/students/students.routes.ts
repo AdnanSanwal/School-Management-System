@@ -135,8 +135,12 @@ const studentFields = z.object({
   sectionId: id,
 });
 
+const monthlyFee = z.coerce.number().min(0, 'Monthly fee can’t be negative').max(10_000_000);
+
 const admissionBody = studentFields.extend({
   guardians: z.array(guardianInput).min(1).max(4),
+  // CR-04: the student's own monthly fee (prefilled in the form from the class fee).
+  monthlyFee: monthlyFee.optional().nullable(),
 });
 
 async function linkGuardian(tx: Tx, actorRole: string, studentId: string, g: z.infer<typeof guardianInput>) {
@@ -159,8 +163,9 @@ async function linkGuardian(tx: Tx, actorRole: string, studentId: string, g: z.i
   return login;
 }
 
-router.post('/', can('student.manage'), handler(async (req, res) => {
-  const { guardians, dateOfBirth, admissionDate, ...body } = parseBody(admissionBody, req);
+router.post('/', can('student.admit'), handler(async (req, res) => {
+  const { guardians, dateOfBirth, admissionDate, monthlyFee: fee, ...body } = parseBody(admissionBody, req);
+  if (fee !== undefined && fee !== null && !hasPermission(me(req).role, 'student.fee.set')) throw new AppError('You cannot set fees', 403);
   await ensureInSchool(prisma.section, body.sectionId, 'Section');
   if (guardians.filter((g) => g.isPrimary).length > 1) throw new AppError('Only one primary guardian', 422);
   if (!guardians.some((g) => g.isPrimary)) guardians[0].isPrimary = true;
@@ -172,6 +177,7 @@ router.post('/', can('student.manage'), handler(async (req, res) => {
     const student = await tx.student.create({
       data: {
         ...body, schoolId, admissionNo,
+        monthlyFee: fee ?? null,
         dateOfBirth: dateOfBirth ? toDate(dateOfBirth) : undefined,
         admissionDate: admissionDate ? toDate(admissionDate) : today,
       },
@@ -187,7 +193,7 @@ router.post('/', can('student.manage'), handler(async (req, res) => {
 }));
 
 // Sibling detection at admission: find existing guardians by phone/CNIC.
-router.get('/guardians/search', can('student.manage'), handler(async (req, res) => {
+router.get('/guardians/search', can('student.manage', 'student.admit'), handler(async (req, res) => {
   const { q } = parseQuery(z.object({ q: z.string().min(4).max(32) }), req);
   const rows = await prisma.guardian.findMany({
     where: { OR: [{ phone: { contains: q } }, { cnic: { contains: q } }] },
@@ -198,6 +204,14 @@ router.get('/guardians/search', can('student.manage'), handler(async (req, res) 
 }));
 
 // ─── Updates ───
+
+/** CR-04: change (or clear, to follow the class fee again) a student's own monthly fee. */
+router.put('/:id/monthly-fee', can('student.fee.set'), handler(async (req, res) => {
+  const { monthlyFee: fee } = parseBody(z.object({ monthlyFee: monthlyFee.nullable() }), req);
+  await ensureInSchool(prisma.student, req.params.id, 'Student');
+  const student = await prisma.student.update({ where: { id: req.params.id }, data: { monthlyFee: fee }, select: { id: true, monthlyFee: true } });
+  return sendSuccess(res, student, fee === null ? 'Monthly fee now follows the class fee structure' : 'Monthly fee saved. It applies to invoices generated from now on.');
+}));
 
 router.patch('/:id', can('student.manage'), handler(async (req, res) => {
   const { dateOfBirth, admissionDate, ...body } = parseBody(studentFields.partial().strict(), req);

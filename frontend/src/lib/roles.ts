@@ -9,6 +9,9 @@ export const CAN = {
   dashboard: ['OWNER', 'PRINCIPAL', 'ADMIN', 'ACCOUNTANT'],
   viewStudents: ['OWNER', 'PRINCIPAL', 'ADMIN', 'ACCOUNTANT', 'TEACHER'],
   manageStudents: ['PRINCIPAL', 'ADMIN'],
+  // CR-04: accountants may admit students and set their monthly fee (not edit them).
+  admitStudents: ['PRINCIPAL', 'ADMIN', 'ACCOUNTANT'],
+  setStudentFee: ['ADMIN', 'ACCOUNTANT'],
   viewStaff: ['OWNER', 'PRINCIPAL', 'ADMIN'],
   manageStaff: ['PRINCIPAL', 'ADMIN'],
   viewClasses: ['OWNER', 'PRINCIPAL', 'ADMIN', 'ACCOUNTANT', 'TEACHER'],

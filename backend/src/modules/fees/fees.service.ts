@@ -22,6 +22,13 @@ export interface GenerateOptions {
  * structure and the student's approved concessions. Students that already have
  * an invoice for the period are skipped, so re-running is safe.
  */
+/** Fee head for students' own monthly fee; created on first use, hidden from the class grid. */
+export const STUDENT_MONTHLY_FEE_HEAD = 'Monthly Fee';
+export async function studentMonthlyFeeHead() {
+  const existing = await prisma.feeHead.findFirst({ where: { name: STUDENT_MONTHLY_FEE_HEAD } });
+  return existing ?? prisma.feeHead.create({ data: { schoolId: currentSchoolId(), name: STUDENT_MONTHLY_FEE_HEAD, frequency: 'MONTHLY' } });
+}
+
 export async function generateInvoices(opts: GenerateOptions) {
   const schoolId = currentSchoolId();
   const year = await currentAcademicYear();
@@ -39,7 +46,7 @@ export async function generateInvoices(opts: GenerateOptions) {
       ...(opts.studentIds?.length ? { id: { in: opts.studentIds } } : {}),
       invoices: { none: { period: opts.period } },
     },
-    select: { id: true, section: { select: { classId: true } }, transport: { select: { route: { select: { monthlyFee: true, isActive: true } } } } },
+    select: { id: true, monthlyFee: true, section: { select: { classId: true } }, transport: { select: { route: { select: { monthlyFee: true, isActive: true } } } } },
   });
   const skipped = await prisma.feeInvoice.count({
     where: {
@@ -57,6 +64,7 @@ export async function generateInvoices(opts: GenerateOptions) {
     prisma.feeStructure.findMany({
       where: { academicYearId: year.id, feeHead: { isActive: true, frequency: { in: opts.frequencies } } },
       orderBy: { feeHead: { name: 'asc' } },
+      include: { feeHead: { select: { frequency: true } } },
     }),
     prisma.concession.findMany({
       where: {
@@ -68,6 +76,10 @@ export async function generateInvoices(opts: GenerateOptions) {
     }),
   ]);
 
+  // Students with their own monthly fee (CR-04) are billed it under one "Monthly Fee" head.
+  const monthlyRun = opts.frequencies.includes('MONTHLY');
+  const ownFeeHeadId = monthlyRun && students.some((s) => s.monthlyFee !== null) ? (await studentMonthlyFeeHead()).id : null;
+
   const today = await schoolToday();
   let created = 0;
   let billed = D(0);
@@ -75,8 +87,13 @@ export async function generateInvoices(opts: GenerateOptions) {
   for (const s of students) {
     const classId = s.section!.classId;
     // Transport is billed from the student's route, never from the class structure.
-    const lines = structures.filter((f) => f.classId === classId && f.feeHeadId !== transportHeadId)
+    const ownFee = s.monthlyFee !== null && ownFeeHeadId ? s.monthlyFee : null;
+    const lines = structures
+      .filter((f) => f.classId === classId && f.feeHeadId !== transportHeadId && f.feeHeadId !== ownFeeHeadId)
+      // The student's own monthly fee replaces every monthly head of their class.
+      .filter((f) => ownFee === null || f.feeHead.frequency !== 'MONTHLY')
       .map((f) => ({ feeHeadId: f.feeHeadId, amount: f.amount }));
+    if (ownFee !== null && D(ownFee).gt(0)) lines.unshift({ feeHeadId: ownFeeHeadId!, amount: ownFee });
     const route = s.transport?.route;
     if (transportHeadId && route?.isActive && D(route.monthlyFee).gt(0)) lines.push({ feeHeadId: transportHeadId, amount: route.monthlyFee });
     if (!lines.length) { noStructure.add(classId); continue; }

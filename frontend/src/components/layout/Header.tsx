@@ -143,7 +143,7 @@ function UserMenu({ onClose }: { onClose: () => void }) {
           </div>
           <div className="min-w-0">
             <p className="text-sm font-semibold text-gray-900 truncate">{user?.name}</p>
-            <p className="text-xs text-gray-400 truncate">{user?.email}</p>
+            <p className="text-xs text-gray-400 truncate">{user?.username ?? user?.email}</p>
           </div>
         </div>
         <span className={cn('mt-2 inline-block text-2xs font-semibold px-2 py-0.5 rounded-full', meta.bg, meta.color)}>

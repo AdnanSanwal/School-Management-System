@@ -18,5 +18,6 @@ router.post('/mfa/verify', authenticate, mfaLimiter, validate(mfaCodeSchema), au
 router.post('/mfa/disable', authenticate, mfaLimiter, validate(disableMfaSchema), authController.disableMFA);
 router.get('/me', authenticate, authController.getMe);
 router.patch('/profile', authenticate, validate(profileSchema), authController.updateProfile);
+router.get('/username-check', authenticate, authController.usernameCheck);
 
 export default router;

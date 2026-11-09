@@ -6,7 +6,9 @@ export type Role = 'SUPER_ADMIN' | 'OWNER' | 'PRINCIPAL' | 'ADMIN' | 'ACCOUNTANT
 interface User {
   id: string;
   name: string;
-  email: string;
+  email: string | null;
+  username?: string | null;
+  mustChangePassword?: boolean;
   role: Role;
   avatar?: string;
   school?: { id: string; name: string; code: string; logoUrl?: string | null; currency: string } | null;

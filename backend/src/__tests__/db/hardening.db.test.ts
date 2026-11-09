@@ -17,7 +17,7 @@ d('Production hardening (database)', () => {
   let t: Awaited<ReturnType<typeof createTestSchool>>;
   let owner: Awaited<ReturnType<Awaited<ReturnType<typeof createTestSchool>>['user']>>;
   let accountant: typeof owner;
-  const login = (email: string, password = 'Test@12345', ip = '10.9.8.7') =>
+  const login = (email: string | null, password = 'Test@12345', ip = '10.9.8.7') =>
     request(app).post('/api/v1/auth/login').set('X-Forwarded-For', ip).send({ email, password });
   const refresh = (refreshToken: string) => request(app).post('/api/v1/auth/refresh').send({ refreshToken });
   const me = (token: string) => request(app).get('/api/v1/auth/me').set('Authorization', `Bearer ${token}`);
@@ -60,14 +60,17 @@ d('Production hardening (database)', () => {
     expect((await refresh(phone.refreshToken)).status).toBe(200);
   });
 
-  it('changing the password ends the other devices but keeps this one', async () => {
+  it('changing the password signs out every device; this one continues on the fresh tokens', async () => {
     const a = (await login(accountant.email)).body.data;
     const b = (await login(accountant.email)).body.data;
     const res = await request(app).post('/api/v1/auth/change-password').set('Authorization', `Bearer ${a.accessToken}`)
       .send({ currentPassword: 'Test@12345', newPassword: 'NewPass@2026' });
     expect(res.status).toBe(200);
-    expect((await refresh(a.refreshToken)).status).toBe(200);
+    expect((await me(res.body.data.accessToken)).status).toBe(200);
+    expect((await refresh(res.body.data.refreshToken)).status).toBe(200);
+    expect((await refresh(a.refreshToken)).status).toBe(401);
     expect((await refresh(b.refreshToken)).status).toBe(401);
+    expect((await me(b.accessToken)).status).toBe(401);
     await basePrisma.user.update({ where: { id: accountant.id }, data: { password: (await basePrisma.user.findUniqueOrThrow({ where: { id: owner.id } })).password } });
   });
 

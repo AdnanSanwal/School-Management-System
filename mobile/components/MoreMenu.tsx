@@ -40,9 +40,10 @@ export function MoreMenu({ extra }: { extra?: React.ReactNode }) {
     if (pw.next.length < 8) return Alert.alert('Password too short', 'Use at least 8 characters.');
     setPw({ ...pw, saving: true });
     try {
-      await API.changePassword(pw.current, pw.next);
+      const r = await API.changePassword(pw.current, pw.next);
+      useAuthStore.getState().setAuth(r.user, r.accessToken, r.refreshToken);
       setPw({ open: false, current: '', next: '', saving: false });
-      Alert.alert('Password changed');
+      Alert.alert('Password changed', 'Your other devices have been signed out.');
     } catch (e) {
       setPw({ ...pw, saving: false });
       Alert.alert('Could not change password', apiError(e));

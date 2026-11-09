@@ -83,9 +83,15 @@ model User {
   id                String         @id @default(uuid())
   schoolId          String? // null only for SUPER_ADMIN (platform operator)
   name              String
-  email             String         @unique
+  // Optional for staff created with a username (CR-05). Unique when present.
+  email             String?        @unique
+  // Sign-in name chosen by the admin (lowercase, unique on the platform). Optional for
+  // accounts that sign in with email.
+  username          String?        @unique @db.VarChar(60)
   phone             String?        @db.VarChar(32)
   password          String
+  // Set when an admin chose the password; the user must pick their own at next sign-in.
+  mustChangePassword Boolean       @default(false)
   role              Role
   isActive          Boolean        @default(true)
   avatar            String?        @db.VarChar(1024)
@@ -177,6 +183,9 @@ model Student {
   photoKey      String?       @db.VarChar(512) // uploaded photo; served via signed URL
   admissionDate DateTime      @db.Date
   sectionId     String?
+  // The student's own monthly fee, set at admission (CR-04). When present it replaces the
+  // class's monthly fee heads on monthly invoices; null = bill from the class fee structure.
+  monthlyFee    Decimal?      @db.Decimal(12, 2)
   status        StudentStatus @default(ACTIVE)
   leftOn        DateTime?     @db.Date
   leftReason    String?
@@ -249,6 +258,8 @@ model Class {
   schoolId  String
   name      String // "Class 8", "Nursery"
   level     Int // ordering + promotion (Nursery=0, Class 1=1 ...)
+  // Archived classes are hidden everywhere but keep their history; they can be restored.
+  archivedAt DateTime?
   createdAt DateTime @default(now())
 
   sections      Section[]

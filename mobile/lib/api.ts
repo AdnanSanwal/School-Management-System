@@ -76,7 +76,9 @@ const data = <T = any>(p: Promise<{ data: { data: T } }>) => p.then((r) => r.dat
 export const API = {
   login: (email: string, password: string) => data(api.post('/auth/login', { email, password })),
   logout: () => api.post('/auth/logout').catch(() => {}),
-  changePassword: (currentPassword: string, newPassword: string) => api.post('/auth/change-password', { currentPassword, newPassword }),
+  /** Returns fresh tokens: changing the password signs out every other session. */
+  changePassword: (currentPassword: string, newPassword: string) =>
+    data<{ user: any; accessToken: string; refreshToken: string }>(api.post('/auth/change-password', { currentPassword, newPassword })),
 
   registerDevice: (token: string, platform: string) => api.post('/push/devices', { token, platform }),
   unregisterDevice: (token: string) => api.delete('/push/devices', { data: { token } }),

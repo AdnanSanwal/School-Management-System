@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { Role } from '@prisma/client';
 import prisma, { transaction } from '../../config/database';
 import { endAllSessions } from '../../utils/sessions';
+import { checkUsername } from '../../utils/usernames';
 import { authenticate } from '../../middleware/auth';
 import { can } from '../../middleware/rbac';
 import { AppError } from '../../middleware/errorHandler';
@@ -24,7 +25,7 @@ router.use(authenticate, can('users.manage'));
 const schoolRoles = z.enum(['OWNER', 'PRINCIPAL', 'ADMIN', 'ACCOUNTANT', 'TEACHER', 'PARENT', 'STUDENT']);
 
 const userSelect = {
-  id: true, name: true, email: true, phone: true, role: true, isActive: true, lastLoginAt: true, createdAt: true,
+  id: true, name: true, email: true, username: true, phone: true, role: true, isActive: true, mustChangePassword: true, lastLoginAt: true, createdAt: true,
   staff: { select: { id: true, employeeNo: true } },
   guardian: { select: { id: true } },
   student: { select: { id: true, admissionNo: true } },
@@ -39,7 +40,7 @@ router.get('/', handler(async (req, res) => {
   const where = {
     role: q.role ?? { not: Role.SUPER_ADMIN },
     ...(q.active ? { isActive: q.active === 'true' } : {}),
-    ...(q.search ? { OR: [{ name: { contains: q.search } }, { email: { contains: q.search } }, { phone: { contains: q.search } }] } : {}),
+    ...(q.search ? { OR: [{ name: { contains: q.search } }, { email: { contains: q.search } }, { username: { contains: q.search } }, { phone: { contains: q.search } }] } : {}),
   };
   const [rows, total] = await Promise.all([
     prisma.user.findMany({ where, select: userSelect, orderBy: { name: 'asc' }, ...paging(q) }),
@@ -50,11 +51,19 @@ router.get('/', handler(async (req, res) => {
 
 const createBody = z.object({
   name: z.string().min(2).max(100),
-  email: z.string().email(),
+  email: z.string().email().optional(),
+  username: z.string().min(3).max(40).optional(),
   phone: z.string().max(32).optional(),
   role: schoolRoles,
   password: z.string().min(8).max(100).optional(),
-});
+}).refine((b) => b.email || b.username, { message: 'Give the login a username or an email', path: ['username'] });
+
+/** Live check for the add-login forms: is this username free, and what's close if not? */
+router.get('/username-check', handler(async (req, res) => {
+  const q = parseQuery(z.object({ username: z.string().max(80), name: z.string().max(100).optional() }), req);
+  const school = await prisma.school.findUniqueOrThrow({ where: { id: currentSchoolId() }, select: { code: true } });
+  return sendSuccess(res, await checkUsername(q.username, { name: q.name, schoolCode: school.code }));
+}));
 
 // Office accounts. Staff, parent and student logins are normally created from
 // their own screens (staff / admission), which also link the profile.
@@ -108,7 +117,7 @@ router.patch('/:id', handler(async (req, res) => {
 router.post('/:id/reset-password', handler(async (req, res) => {
   const target = await loadManageable(me(req), req.params.id);
   const password = temporaryPassword();
-  await prisma.user.update({ where: { id: target.id }, data: { password: await hashPassword(password) } });
+  await prisma.user.update({ where: { id: target.id }, data: { password: await hashPassword(password), mustChangePassword: true } });
   await endAllSessions(target.id);
   return sendSuccess(res, { temporaryPassword: password }, 'Password reset — share the new password with the user');
 }));

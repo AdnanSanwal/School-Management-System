@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { sendSuccess } from '../../utils/apiResponse';
 import { z } from 'zod';
 import prisma from '../../config/database';
 import { currentSchoolId } from '../../config/tenancy';
@@ -30,14 +31,18 @@ const REPORTS: Record<string, Builder> = {
   // Daily / date-range fee collection (Owner, Principal, Accountant)
   'fee-collection': {
     perms: ['reports.finance'], schoolWideOnly: true,
-    params: z.object({ from: dateOnly.optional(), to: dateOnly.optional() }),
+    params: z.object({ from: dateOnly.optional(), to: dateOnly.optional(), classId: id.optional(), studentId: id.optional() }),
     async build({ q }) {
       const today = toIso(await schoolToday());
       const from = (q.from as string) ?? today;
       const to = (q.to as string) ?? from;
       const tz = await schoolTimezone();
       const payments = await prisma.payment.findMany({
-        where: { status: 'SUCCESS', paidAt: { gte: zonedDayStart(from, tz), lt: zonedDayStart(toIso(addDays(toDate(to), 1)), tz) } },
+        where: {
+          status: 'SUCCESS', paidAt: { gte: zonedDayStart(from, tz), lt: zonedDayStart(toIso(addDays(toDate(to), 1)), tz) },
+          ...(q.studentId ? { studentId: q.studentId as string } : {}),
+          ...(q.classId ? { student: { section: { classId: q.classId as string } } } : {}),
+        },
         orderBy: { paidAt: 'asc' },
         include: { student: { select: { name: true, admissionNo: true, section: { select: { name: true, class: { select: { name: true } } } } } } },
       });
@@ -65,13 +70,17 @@ const REPORTS: Record<string, Builder> = {
   // Month-by-month billed vs received for the academic year
   'fee-monthly-summary': {
     perms: ['reports.finance'], schoolWideOnly: true,
-    params: z.object({}),
-    async build() {
+    params: z.object({ classId: id.optional(), studentId: id.optional() }),
+    async build({ q }) {
       const year = await currentAcademicYear();
       const tz = await schoolTimezone();
+      const who = {
+        ...(q.studentId ? { studentId: q.studentId as string } : {}),
+        ...(q.classId ? { student: { section: { classId: q.classId as string } } } : {}),
+      };
       const [invoices, payments] = await Promise.all([
-        prisma.feeInvoice.findMany({ where: { academicYearId: year.id, status: { not: 'CANCELLED' } }, select: { period: true, netAmount: true, fineAmount: true, paidAmount: true, status: true } }),
-        prisma.payment.findMany({ where: { status: 'SUCCESS', paidAt: { gte: zonedDayStart(toIso(year.startDate), tz) } }, select: { amount: true, paidAt: true } }),
+        prisma.feeInvoice.findMany({ where: { academicYearId: year.id, status: { not: 'CANCELLED' }, ...who }, select: { period: true, netAmount: true, fineAmount: true, paidAmount: true, status: true } }),
+        prisma.payment.findMany({ where: { status: 'SUCCESS', paidAt: { gte: zonedDayStart(toIso(year.startDate), tz) }, ...who }, select: { amount: true, paidAt: true } }),
       ]);
       const months: string[] = [];
       for (let d = new Date(year.startDate); d <= year.endDate; d = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1))) months.push(toIso(d).slice(0, 7));
@@ -99,9 +108,10 @@ const REPORTS: Record<string, Builder> = {
 
   defaulters: {
     perms: ['reports.finance', 'fee.view'], schoolWideOnly: true,
-    params: z.object({ classId: id.optional(), minDaysOverdue: z.coerce.number().int().min(0).max(365).default(0) }),
+    params: z.object({ classId: id.optional(), studentId: id.optional(), minDaysOverdue: z.coerce.number().int().min(0).max(365).default(0) }),
     async build({ q }) {
-      const rows = await defaulters({ classId: q.classId as string | undefined, minDaysOverdue: q.minDaysOverdue as number });
+      const rows = (await defaulters({ classId: q.classId as string | undefined, minDaysOverdue: q.minDaysOverdue as number }))
+        .filter((r) => !q.studentId || r.studentId === q.studentId);
       return {
         title: 'Fee defaulters', subtitle: (q.minDaysOverdue as number) ? `Overdue by more than ${q.minDaysOverdue} days` : 'All overdue fee',
         columns: [
@@ -179,9 +189,10 @@ const REPORTS: Record<string, Builder> = {
   // Class-wise strength (Principal, Admin)
   'class-strength': {
     perms: ['class.view'], schoolWideOnly: true,
-    params: z.object({}),
-    async build() {
+    params: z.object({ classId: id.optional() }),
+    async build({ q }) {
       const sections = await prisma.section.findMany({
+        where: { class: { archivedAt: null, ...(q.classId ? { id: q.classId as string } : {}) } },
         include: { class: { select: { name: true, level: true } }, classTeacher: { select: { name: true } }, students: { where: { status: 'ACTIVE' }, select: { gender: true } } },
       });
       sections.sort((a, b) => a.class.level - b.class.level || a.name.localeCompare(b.name));
@@ -243,10 +254,12 @@ router.get('/:type', can('school.view'), handler(async (req, res) => {
     throw new AppError('Forbidden: insufficient permissions', 403);
   }
   const { format, ...rest } = req.query;
-  const fmtParam = z.enum(['pdf', 'xlsx']).default('pdf').parse(format);
+  const fmtParam = z.enum(['pdf', 'xlsx', 'view']).default('pdf').parse(format);
   const q = def.params.parse(rest);
   const school = await prisma.school.findUniqueOrThrow({ where: { id: currentSchoolId() }, select: { name: true, currency: true } });
   const report = { ...(await def.build({ user, q, school })), school: school.name, currency: school.currency };
+  // CR-02: the same table as JSON, shown on screen. Never a file download.
+  if (fmtParam === 'view') return sendSuccess(res, report);
   const file = fmtParam === 'pdf' ? await toPdf(report) : await toXlsx(report);
   const name = `${req.params.type}-${toIso(await schoolToday())}.${fmtParam}`;
   res.setHeader('Content-Type', fmtParam === 'pdf' ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');

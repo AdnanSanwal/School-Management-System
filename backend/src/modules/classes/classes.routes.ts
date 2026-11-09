@@ -19,7 +19,10 @@ router.use(authenticate);
 router.get('/classes', can('class.view'), handler(async (req, res) => {
   // Teachers only see the sections they teach.
   const sectionFilter = isSchoolWide(me(req)) ? {} : { id: { in: await teacherSectionIds(me(req).id) } };
+  // Archived classes are hidden everywhere; the Classes screen asks for them explicitly.
+  const archived = req.query.archived === 'true' && isSchoolWide(me(req));
   const classes = await prisma.class.findMany({
+    where: { archivedAt: archived ? { not: null } : null },
     orderBy: { level: 'asc' },
     include: {
       sections: {
@@ -45,6 +48,8 @@ const classBody = z.object({ name: z.string().min(1).max(50), level: z.coerce.nu
 router.post('/classes', can('class.manage'), handler(async (req, res) => {
   const body = parseBody(classBody.extend({ sections: z.array(z.string().min(1).max(10)).max(20).default(['A']) }), req);
   const schoolId = currentSchoolId();
+  const clash = await prisma.class.findFirst({ where: { name: body.name }, select: { archivedAt: true } });
+  if (clash) throw new AppError(clash.archivedAt ? `An archived class is already called “${body.name}”. Restore it instead.` : `“${body.name}” already exists`, 409);
   const created = await transaction(async (tx) => {
     const cls = await tx.class.create({ data: { schoolId, name: body.name, level: body.level } });
     for (const name of new Set(body.sections)) await tx.section.create({ data: { schoolId, classId: cls.id, name } });
@@ -59,19 +64,40 @@ router.patch('/classes/:id', can('class.manage'), handler(async (req, res) => {
   return sendSuccess(res, cls, 'Class updated');
 }));
 
-router.delete('/classes/:id', can('class.manage'), handler(async (req, res) => {
-  const students = await prisma.student.count({ where: { section: { classId: req.params.id } } });
-  if (students) throw new AppError('Class still has students; move them first', 409);
+/**
+ * CR-03: "Delete class" archives it: hidden from every list and dropdown, but its sections,
+ * past students, invoices, exams and fee structure stay for history and reports. Refused
+ * while active students are still in it, so nobody ends up in a hidden class.
+ */
+router.post('/classes/:id/archive', can('class.manage'), handler(async (req, res) => {
+  const cls = await prisma.class.findFirst({ where: { id: req.params.id }, select: { id: true, name: true, archivedAt: true } });
+  if (!cls) throw new AppError('Class not found', 404);
+  if (cls.archivedAt) throw new AppError('Class is already archived', 409);
+  const active = await prisma.student.count({ where: { status: 'ACTIVE', section: { classId: cls.id } } });
+  if (active) throw new AppError(`${cls.name} still has ${active} active student(s). Move them to another class (or promote them) first.`, 409);
   await transaction(async (tx) => {
-    await tx.section.deleteMany({ where: { classId: req.params.id } });
-    await tx.class.delete({ where: { id: req.params.id } });
+    await tx.class.update({ where: { id: cls.id }, data: { archivedAt: new Date() } });
+    // Nothing should be scheduled for a class that no longer runs.
+    const sections = await tx.section.findMany({ where: { classId: cls.id }, select: { id: true } });
+    await tx.timetableSlot.deleteMany({ where: { sectionId: { in: sections.map((s) => s.id) } } });
+    await tx.section.updateMany({ where: { classId: cls.id }, data: { classTeacherId: null } });
   });
-  return sendSuccess(res, null, 'Class deleted');
+  return sendSuccess(res, null, `${cls.name} archived. You can restore it from “Archived classes”.`);
+}));
+
+router.post('/classes/:id/restore', can('class.manage'), handler(async (req, res) => {
+  const cls = await prisma.class.findFirst({ where: { id: req.params.id }, select: { id: true, name: true, archivedAt: true } });
+  if (!cls) throw new AppError('Class not found', 404);
+  if (!cls.archivedAt) throw new AppError('Class is not archived', 409);
+  await prisma.class.update({ where: { id: cls.id }, data: { archivedAt: null } });
+  return sendSuccess(res, null, `${cls.name} restored`);
 }));
 
 router.post('/classes/:id/sections', can('class.manage'), handler(async (req, res) => {
   const body = parseBody(z.object({ name: z.string().min(1).max(10), capacity: z.coerce.number().int().positive().optional() }), req);
-  await ensureInSchool(prisma.class, req.params.id, 'Class');
+  const cls = await prisma.class.findFirst({ where: { id: req.params.id }, select: { archivedAt: true } });
+  if (!cls) throw new AppError('Class not found', 404);
+  if (cls.archivedAt) throw new AppError('Restore the class before adding sections', 409);
   const section = await prisma.section.create({ data: { schoolId: currentSchoolId(), classId: req.params.id, ...body } });
   return sendSuccess(res, section, 'Section created', 201);
 }));

@@ -2,8 +2,9 @@ import { z } from 'zod';
 
 export const loginSchema = z.object({
   body: z.object({
-    email: z.string().email(),
-    password: z.string(),
+    // Email or username (CR-05); the field keeps its old name for existing apps.
+    email: z.string().trim().min(3).max(191),
+    password: z.string().min(1).max(200),
     mfaCode: z.string().optional(),
   }),
 });
@@ -12,6 +13,9 @@ export const profileSchema = z.object({
   body: z.object({
     name: z.string().trim().min(2).max(100),
     phone: z.string().trim().max(32).optional().nullable(),
+    email: z.string().trim().email().max(191).optional().nullable().or(z.literal('').transform(() => null)),
+    username: z.string().trim().min(3).max(40).optional().nullable().or(z.literal('').transform(() => null)),
+    currentPassword: z.string().max(200).optional(),
   }).strict(),
 });
 

@@ -15,7 +15,7 @@ export default function LoginScreen() {
   const setAuth = useAuthStore((s) => s.setAuth);
 
   const submit = async () => {
-    if (!email.trim() || !password) return setError('Enter your email and password');
+    if (!email.trim() || !password) return setError('Enter your username (or email) and password');
     setError('');
     setLoading(true);
     try {
@@ -38,11 +38,11 @@ export default function LoginScreen() {
           <Text style={s.sub}>Sign in with the login your school gave you</Text>
 
           <View style={s.card}>
-            <Text style={s.label}>Email</Text>
+            <Text style={s.label}>Username or email</Text>
             <TextInput
-              style={s.input} value={email} onChangeText={setEmail} autoCapitalize="none" autoComplete="email"
-              keyboardType="email-address" returnKeyType="next" onSubmitEditing={() => passwordRef.current?.focus()}
-              placeholder="you@example.com" placeholderTextColor={colors.faint} accessibilityLabel="Email"
+              style={s.input} value={email} onChangeText={setEmail} autoCapitalize="none" autoCorrect={false} autoComplete="username"
+              returnKeyType="next" onSubmitEditing={() => passwordRef.current?.focus()}
+              placeholder="e.g. ali.raza or you@example.com" placeholderTextColor={colors.faint} accessibilityLabel="Username or email"
             />
             <Text style={s.label}>Password</Text>
             <TextInput

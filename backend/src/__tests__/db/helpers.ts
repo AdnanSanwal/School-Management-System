@@ -38,6 +38,6 @@ export async function createTestSchool(prefix = 'test') {
   return { school, year, code, user, destroy };
 }
 
-export function tokenFor(u: { id: string; role: string; email: string; schoolId: string | null }) {
+export function tokenFor(u: { id: string; role: string; email: string | null; schoolId: string | null }) {
   return signToken({ id: u.id, role: u.role, email: u.email, schoolId: u.schoolId });
 }

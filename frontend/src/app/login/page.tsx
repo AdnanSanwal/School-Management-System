@@ -12,7 +12,8 @@ import { api } from '@/lib/api';
 import { Eye, EyeOff, GraduationCap, Shield, User } from 'lucide-react';
 
 const schema = z.object({
-  email: z.string().email('Invalid email'),
+  // Email or username (CR-05)
+  email: z.string().trim().min(3, 'Enter your username or email'),
   password: z.string().min(1, 'Password required'),
 });
 type FormData = z.infer<typeof schema>;
@@ -77,7 +78,8 @@ export default function LoginPage() {
       const { user, accessToken, refreshToken } = res.data.data;
       queryClient.clear(); // never show a previous user's cached screens
       setAuth(user, accessToken, refreshToken);
-      router.push(HOME_BY_ROLE[user.role] || '/dashboard');
+      // Admin-chosen password: choose your own before anything else.
+      router.push(user.mustChangePassword ? '/change-password' : HOME_BY_ROLE[user.role] || '/dashboard');
     } catch (err: any) {
       const message = err.response?.data?.message || 'Login failed';
       if (message === 'MFA code required') {
@@ -200,14 +202,16 @@ export default function LoginPage() {
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
               <div>
                 <label className="label">
-                  {role === 'STUDENT' ? 'Student Email ID' : role === 'ADMIN' ? 'Admin Email ID' : 'Teacher Email ID'}
+                  Username or email
                 </label>
                 <input
                   {...register('email')}
-                  type="email"
+                  type="text"
+                  autoCapitalize="none"
+                  spellCheck={false}
                   className={`input focus-visible:ring-2 ${cfg.ring}`}
-                  placeholder={`Enter your username`}
-                  autoComplete="email"
+                  placeholder="e.g. ali.raza or you@school.com"
+                  autoComplete="username"
                 />
                 {errors.email && <p className="text-red-500 text-xs mt-1">{errors.email.message}</p>}
               </div>

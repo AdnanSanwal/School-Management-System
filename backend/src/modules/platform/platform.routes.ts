@@ -58,7 +58,7 @@ router.post('/schools', validate(createSchoolSchema), async (req: AuthRequest, r
       const s = await tx.school.create({ data: school });
       await tx.academicYear.create({ data: { ...academicYear, schoolId: s.id, isCurrent: true } });
       const o = await tx.user.create({
-        data: { schoolId: s.id, role: 'OWNER', name: owner.name, email: owner.email.toLowerCase(), phone: owner.phone, password },
+        data: { schoolId: s.id, role: 'OWNER', name: owner.name, email: owner.email.toLowerCase(), phone: owner.phone, password, mustChangePassword: true },
         select: { id: true, name: true, email: true, role: true },
       });
       return { school: s, owner: o };

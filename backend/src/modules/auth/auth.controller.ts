@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import * as authService from './auth.service';
+import { checkUsername } from '../../utils/usernames';
 import { AuthRequest } from '../../middleware/auth';
 import { sendSuccess, sendError } from '../../utils/apiResponse';
 
@@ -44,8 +45,8 @@ export async function resetPassword(req: Request, res: Response, next: NextFunct
 
 export async function changePassword(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    await authService.changePassword(req.user!.id, req.body.currentPassword, req.body.newPassword, req.user!.sid);
-    return sendSuccess(res, null, 'Password changed');
+    const result = await authService.changePassword(req.user!.id, req.body.currentPassword, req.body.newPassword, req.user!.sid);
+    return sendSuccess(res, result, 'Password changed');
   } catch (err) { next(err); }
 }
 
@@ -80,5 +81,14 @@ export async function updateProfile(req: AuthRequest, res: Response, next: NextF
   try {
     const user = await authService.updateProfile(req.user!.id, req.body);
     return sendSuccess(res, user, 'Profile saved');
+  } catch (err) { next(err); }
+}
+
+/** Is a username free? For the signed-in user's own profile (their current name counts as free). */
+export async function usernameCheck(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const raw = String(req.query.username ?? '');
+    const result = await checkUsername(raw, { name: String(req.query.name ?? ''), exceptUserId: req.user!.id });
+    return sendSuccess(res, result);
   } catch (err) { next(err); }
 }

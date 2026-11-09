@@ -41,7 +41,7 @@ export default function FeeStructurePage() {
   const heads: any[] = data?.heads ?? [];
   return (
     <DashboardLayout title="Fee structure" allowedRoles={CAN.viewFees}
-      subtitle={data ? `Class-wise fee for ${data.academicYear.name}. Changes apply to invoices generated afterwards.` : undefined}
+      subtitle={data ? `Class-wise fee for ${data.academicYear.name}. Changes apply to invoices generated afterwards. Students given their own monthly fee at admission are billed that instead of the monthly heads.` : undefined}
       actions={editable && <>
         <button className="btn btn-secondary" onClick={() => setAddHead(true)}><Plus className="h-4 w-4" /> Fee head</button>
         <button className="btn btn-primary" disabled={!dirty.size || save.isPending} onClick={() => save.mutate()}><Save className="h-4 w-4" /> Save changes</button>

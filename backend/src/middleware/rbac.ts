@@ -16,7 +16,7 @@ export type { Role };
 export const PERMISSIONS = [
   'school.view', 'school.manage', 'users.manage',
   'dashboard.owner', 'dashboard.principal', 'dashboard.admin', 'dashboard.accountant',
-  'student.view', 'student.manage', 'student.status.request', 'student.status.approve',
+  'student.view', 'student.manage', 'student.admit', 'student.fee.set', 'student.status.request', 'student.status.approve',
   'staff.view', 'staff.manage',
   'class.view', 'class.manage',
   'attendance.student.mark', 'attendance.student.view', 'attendance.student.correct',
@@ -62,7 +62,7 @@ export const ROLE_PERMISSIONS: Record<Role, ReadonlySet<Permission>> = {
   PRINCIPAL: new Set<Permission>([
     ...EVERYONE_IN_SCHOOL, ...READ_ALL, 'audit.view',
     'users.manage', 'dashboard.principal',
-    'student.manage', 'student.status.request', 'student.status.approve',
+    'student.manage', 'student.admit', 'student.status.request', 'student.status.approve',
     'staff.manage', 'class.manage',
     'attendance.student.correct', 'attendance.staff.mark',
     'leave.apply', 'leave.approve',
@@ -78,7 +78,7 @@ export const ROLE_PERMISSIONS: Record<Role, ReadonlySet<Permission>> = {
   ADMIN: new Set<Permission>([
     ...EVERYONE_IN_SCHOOL,
     'school.view', 'school.manage', 'users.manage', 'dashboard.admin',
-    'student.view', 'student.manage', 'student.status.request',
+    'student.view', 'student.manage', 'student.admit', 'student.fee.set', 'student.status.request',
     'staff.view', 'staff.manage', 'class.view', 'class.manage',
     'attendance.student.view', 'attendance.student.correct',
     'attendance.staff.mark', 'attendance.staff.view',
@@ -93,6 +93,8 @@ export const ROLE_PERMISSIONS: Record<Role, ReadonlySet<Permission>> = {
   ACCOUNTANT: new Set<Permission>([
     ...EVERYONE_IN_SCHOOL,
     'school.view', 'dashboard.accountant', 'student.view', 'class.view',
+    // CR-04: accountants may admit students (and set their monthly fee), not edit them.
+    'student.admit', 'student.fee.set',
     'fee.view', 'fee.structure.view', 'fee.invoice.generate', 'fee.collect', 'fee.concession.request',
     'reports.finance', 'leave.apply', 'transport.view',
   ]),

@@ -46,12 +46,16 @@ export async function endAllSessions(userId: string, opts: { keepSid?: string } 
   } while (cursor !== '0');
   await redis.del(`refresh:${userId}`); // pre-sessions token
   // Without a session to keep, also refuse every access token issued until now.
-  if (!opts.keepSid) await redis.setex(`revoked-before:${userId}`, CUTOFF_TTL, String(Math.floor(Date.now() / 1000)));
+  if (!opts.keepSid) await redis.setex(`revoked-before:${userId}`, CUTOFF_TTL, String(Date.now()));
 }
 
 /** True when an access token was signed out or issued before a "sign out everywhere". */
 export async function isRevoked(token: string, payload: JwtPayload) {
   const [blacklisted, cutoff] = await getRedis().mget(`blacklist:${token}`, `revoked-before:${payload.id}`);
   if (blacklisted) return true;
-  return !!cutoff && typeof payload.iat === 'number' && payload.iat <= Number(cutoff);
+  if (!cutoff) return false;
+  // Millisecond issue time when present (tokens issued right after a cut-off stay valid);
+  // older tokens only carry whole seconds, so anything from that second is refused.
+  if (typeof payload.iam === 'number') return payload.iam < Number(cutoff);
+  return typeof payload.iat === 'number' && payload.iat * 1000 <= Number(cutoff);
 }

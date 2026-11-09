@@ -36,7 +36,7 @@ router.get('/preview', handler(async (req, res) => {
   const { from, to } = await nextYear(q.toAcademicYearId);
 
   const [classes, students, done] = await Promise.all([
-    prisma.class.findMany({ orderBy: { level: 'asc' }, include: { sections: { orderBy: { name: 'asc' }, select: { id: true, name: true } } } }),
+    prisma.class.findMany({ where: { archivedAt: null }, orderBy: { level: 'asc' }, include: { sections: { orderBy: { name: 'asc' }, select: { id: true, name: true } } } }),
     prisma.student.findMany({
       where: { status: 'ACTIVE', sectionId: { not: null } },
       select: { id: true, name: true, admissionNo: true, rollNo: true, sectionId: true },
@@ -104,7 +104,7 @@ router.post('/run', handler(async (req, res) => {
 
   const [students, sections, done] = await Promise.all([
     prisma.student.findMany({ where: { id: { in: ids }, status: 'ACTIVE' }, select: { id: true, sectionId: true } }),
-    prisma.section.findMany({ select: { id: true } }),
+    prisma.section.findMany({ where: { class: { archivedAt: null } }, select: { id: true } }),
     prisma.promotionRecord.findMany({ where: { toAcademicYearId: to.id, studentId: { in: ids } }, select: { studentId: true } }),
   ]);
   if (students.length !== ids.length) throw new AppError('Some students are not active', 422);

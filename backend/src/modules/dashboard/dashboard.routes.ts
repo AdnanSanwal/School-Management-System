@@ -82,7 +82,7 @@ async function studentAttendance(today: Date) {
   const [active, counts, sections] = await Promise.all([
     prisma.student.count({ where: { status: 'ACTIVE' } }),
     prisma.studentAttendance.groupBy({ by: ['sectionId', 'status'], where: { date: today }, _count: true }),
-    prisma.section.findMany({ select: { id: true, name: true, class: { select: { name: true } } } }),
+    prisma.section.findMany({ where: { class: { archivedAt: null } }, select: { id: true, name: true, class: { select: { name: true } } } }),
   ]);
   const markedSections = new Set(counts.map((c) => c.sectionId));
   const lowSections = sections
@@ -149,6 +149,7 @@ async function overview(role: Role) {
     hasPermission(role, 'attendance.staff.view') ? staffAttendance(today) : null,
     hasPermission(role, 'class.view')
       ? prisma.class.findMany({
+          where: { archivedAt: null },
           orderBy: { level: 'asc' },
           select: { id: true, name: true, sections: { select: { _count: { select: { students: { where: { status: 'ACTIVE' } } } } } } },
         })

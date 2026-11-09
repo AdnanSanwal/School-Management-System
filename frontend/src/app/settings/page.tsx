@@ -7,7 +7,7 @@ import toast from 'react-hot-toast';
 import { User, Lock, ShieldCheck, Bell } from 'lucide-react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Field, Spinner } from '@/components/ui/kit';
-import { authAPI, apiError } from '@/lib/api';
+import { authAPI, apiError, type UsernameCheck } from '@/lib/api';
 import { ROLE_LABEL } from '@/lib/roles';
 import { usePushSubscription } from '@/hooks/usePushSubscription';
 import { useAuthStore } from '@/store/authStore';
@@ -40,26 +40,61 @@ function CardTitle({ icon: Icon, title, desc }: { icon: React.ElementType; title
 
 function Profile({ me }: { me: any }) {
   const qc = useQueryClient();
-  const [f, setF] = useState({ name: me.name ?? '', phone: me.phone ?? '' });
-  useEffect(() => setF({ name: me.name ?? '', phone: me.phone ?? '' }), [me]);
+  const initial = () => ({ name: me.name ?? '', phone: me.phone ?? '', email: me.email ?? '', username: me.username ?? '', currentPassword: '' });
+  const [f, setF] = useState(initial);
+  const [check, setCheck] = useState<UsernameCheck | null>(null);
+  useEffect(() => setF(initial()), [me]); // eslint-disable-line react-hooks/exhaustive-deps
+  const loginChanged = f.email.trim().toLowerCase() !== (me.email ?? '') || f.username.trim().toLowerCase() !== (me.username ?? '');
+  const usernameChanged = f.username.trim().toLowerCase() !== (me.username ?? '');
+
+  // Live availability while changing the username (your current one counts as free).
+  useEffect(() => {
+    const u = f.username.trim();
+    if (!usernameChanged || u.length < 3) { setCheck(null); return; }
+    const t = setTimeout(() => authAPI.usernameCheck(u).then(setCheck).catch(() => setCheck(null)), 400);
+    return () => clearTimeout(t);
+  }, [f.username, usernameChanged]);
+
   const save = useMutation({
-    mutationFn: () => authAPI.updateProfile({ name: f.name, phone: f.phone || null }),
+    mutationFn: () => authAPI.updateProfile({
+      name: f.name, phone: f.phone || null,
+      ...(loginChanged ? { email: f.email.trim() || null, username: f.username.trim() || null, currentPassword: f.currentPassword } : {}),
+    }),
     onSuccess: (u: any) => {
-      toast.success('Profile saved');
+      toast.success(loginChanged ? 'Saved. Sign in with your new details from now on.' : 'Profile saved');
       const { user, accessToken, refreshToken, setAuth } = useAuthStore.getState();
-      if (user && accessToken && refreshToken) setAuth({ ...user, name: u.name }, accessToken, refreshToken);
+      if (user && accessToken && refreshToken) setAuth({ ...user, name: u.name, email: u.email, username: u.username }, accessToken, refreshToken);
       qc.invalidateQueries({ queryKey: ['me'] });
     },
     onError: (e) => toast.error(apiError(e)),
   });
+  const blocked = usernameChanged && !!check && !check.available;
   return (
-    <form className="card space-y-3" onSubmit={(e) => { e.preventDefault(); save.mutate(); }}>
-      <CardTitle icon={User} title="Profile" desc="Shown to colleagues and on records you create." />
+    <form className="card space-y-3" onSubmit={(e) => { e.preventDefault(); if (!blocked) save.mutate(); }}>
+      <CardTitle icon={User} title="Profile & sign-in" desc="Your name, phone, and the username or email you sign in with." />
       <Field label="Name"><input className="input" required minLength={2} value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /></Field>
       <Field label="Phone"><input className="input" value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} placeholder="0300 1234567" /></Field>
-      <Field label="Email" hint="Your login. Ask the school office to change it."><input className="input bg-slate-50" value={me.email} readOnly /></Field>
+      <div>
+        <Field label="Username"><input className="input font-mono" autoCapitalize="none" spellCheck={false} value={f.username} onChange={(e) => setF({ ...f, username: e.target.value.replace(/\s/g, '').toLowerCase() })} placeholder="e.g. ali.raza" /></Field>
+        {usernameChanged && check && (
+          <p className={`mt-1 text-xs ${check.available ? 'text-emerald-600' : 'text-red-600'}`}>
+            {check.message}
+            {!check.available && check.suggestions.length > 0 && <> — try {check.suggestions.map((s, i) => (
+              <button key={s} type="button" className="ml-1 font-medium text-primary-700 underline" onClick={() => setF({ ...f, username: s })}>{s}{i < check.suggestions.length - 1 ? ',' : ''}</button>
+            ))}</>}
+          </p>
+        )}
+      </div>
+      <Field label="Email" hint="Optional if you have a username. Needed to reset a forgotten password by email.">
+        <input type="email" className="input" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} />
+      </Field>
+      {loginChanged && (
+        <Field label="Current password" hint="Needed to change how you sign in">
+          <input type="password" className="input" required autoComplete="current-password" value={f.currentPassword} onChange={(e) => setF({ ...f, currentPassword: e.target.value })} />
+        </Field>
+      )}
       <p className="text-sm text-gray-500">Role: <b>{ROLE_LABEL[me.role] ?? me.role}</b>{me.school ? ` · ${me.school.name}` : ''}</p>
-      <button className="btn btn-primary" disabled={save.isPending}>Save profile</button>
+      <button className="btn btn-primary" disabled={save.isPending || blocked}>Save</button>
     </form>
   );
 }
@@ -69,7 +104,12 @@ function Password() {
   const mismatch = f.confirm.length > 0 && f.next !== f.confirm;
   const save = useMutation({
     mutationFn: () => authAPI.changePassword({ currentPassword: f.current, newPassword: f.next }),
-    onSuccess: () => { toast.success('Password changed'); setF({ current: '', next: '', confirm: '' }); },
+    // Changing the password signs out every device; this one continues on the fresh tokens.
+    onSuccess: (r) => {
+      useAuthStore.getState().setAuth(r.user, r.accessToken, r.refreshToken);
+      toast.success('Password changed. Other devices have been signed out.');
+      setF({ current: '', next: '', confirm: '' });
+    },
     onError: (e) => toast.error(apiError(e)),
   });
   return (

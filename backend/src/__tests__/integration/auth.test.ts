@@ -63,13 +63,13 @@ describe('POST /api/v1/auth/login', () => {
     expect(res.body.data.user.email).toBe('admin@test.com');
   });
 
-  it('returns 422 on invalid email format', async () => {
-    const res = await request(app)
-      .post('/api/v1/auth/login')
-      .send({ email: 'not-an-email', password: 'ValidPass@1' });
-
-    expect(res.status).toBe(422);
-    expect(res.body.success).toBe(false);
+  it('returns 422 when the email/username is missing or too short', async () => {
+    // A username (no @) is a valid sign-in name since CR-05; empty or 1-2 chars is not.
+    for (const email of ['', 'ab']) {
+      const res = await request(app).post('/api/v1/auth/login').send({ email, password: 'ValidPass@1' });
+      expect(res.status).toBe(422);
+      expect(res.body.success).toBe(false);
+    }
   });
 
   it('returns 401 on wrong password', async () => {

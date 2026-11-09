@@ -43,8 +43,10 @@ export function Field({ label, children, hint, className }: { label: string; chi
   );
 }
 
-export function Stat({ label, value, sub, tone = 'default', icon: Icon }: {
+export function Stat({ label, value, sub, tone = 'default', icon: Icon, onClick }: {
   label: string; value: React.ReactNode; sub?: React.ReactNode; tone?: 'default' | 'good' | 'bad' | 'warn'; icon?: React.ElementType;
+  /** Makes the whole card a button that opens its details. */
+  onClick?: () => void;
 }) {
   const tones = {
     default: 'bg-primary-50 text-primary-600',
@@ -52,15 +54,23 @@ export function Stat({ label, value, sub, tone = 'default', icon: Icon }: {
     bad: 'bg-red-50 text-red-600',
     warn: 'bg-amber-50 text-amber-600',
   };
-  return (
-    <div className="card flex items-start gap-4">
+  const body = (
+    <>
       {Icon && <div className={cn('flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl', tones[tone])}><Icon className="h-5 w-5" /></div>}
-      <div className="min-w-0">
+      <div className="min-w-0 flex-1">
         <p className="text-sm text-gray-500">{label}</p>
         <p className="mt-0.5 text-2xl font-bold tracking-tight text-gray-900">{value}</p>
         {sub && <p className="mt-0.5 text-xs text-gray-500">{sub}</p>}
       </div>
-    </div>
+      {onClick && <span className="self-center text-xs font-medium text-primary-600 opacity-0 transition-opacity group-hover:opacity-100">View →</span>}
+    </>
+  );
+  if (!onClick) return <div className="card flex items-start gap-4">{body}</div>;
+  return (
+    <button type="button" onClick={onClick} aria-label={`${label}: view details`}
+      className="card group flex w-full items-start gap-4 text-left transition hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400">
+      {body}
+    </button>
   );
 }
 

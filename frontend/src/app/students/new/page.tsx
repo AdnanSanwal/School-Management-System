@@ -1,14 +1,16 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { Plus, Trash2, Search, Users } from 'lucide-react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { Field, SectionSelect, PasswordNotice, Modal } from '@/components/ui/kit';
-import { studentsAPI, apiError } from '@/lib/api';
-import { CAN } from '@/lib/roles';
+import { Field, SectionSelect, PasswordNotice, Modal, useSections } from '@/components/ui/kit';
+import { studentsAPI, feesAPI, apiError } from '@/lib/api';
+import { CAN, can } from '@/lib/roles';
+import { formatMoney } from '@/lib/utils';
+import { useAuthStore } from '@/store/authStore';
 
 type GuardianDraft =
   | { kind: 'existing'; guardianId: string; name: string; phone: string; children: string[]; relation: string; isPrimary: boolean }
@@ -26,6 +28,21 @@ export default function AdmissionPage() {
   const [lookup, setLookup] = useState('');
   const [matches, setMatches] = useState<any[] | null>(null);
   const [done, setDone] = useState<any>(null);
+
+  // CR-04: the student's own Monthly Fee, prefilled from their class's monthly fee.
+  const me = useAuthStore((st) => st.user);
+  const setsFee = can(me?.role, 'setStudentFee');
+  const canGiveLogins = can(me?.role, 'manageUsers');
+  const currency = me?.school?.currency ?? 'PKR';
+  const { data: sections = [] } = useSections();
+  const structure = useQuery({ queryKey: ['fee-structure'], queryFn: feesAPI.structure, enabled: setsFee });
+  const [fee, setFee] = useState('');
+  const [feeTouched, setFeeTouched] = useState(false);
+  const classId = sections.find((x) => x.id === s.sectionId)?.classId;
+  const classMonthly = (structure.data as any)?.classes?.find((c: any) => c.id === classId)?.monthlyTotal;
+  useEffect(() => {
+    if (!feeTouched && classMonthly !== undefined) setFee(String(Number(classMonthly)));
+  }, [classMonthly, feeTouched]);
 
   const set = (k: keyof typeof s) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => setS({ ...s, [k]: e.target.value });
   const setG = (i: number, patch: Partial<GuardianDraft>) => setGuardians(guardians.map((g, j) => (j === i ? { ...g, ...patch } as GuardianDraft : g)));
@@ -50,6 +67,7 @@ export default function AdmissionPage() {
   const admit = useMutation({
     mutationFn: () => studentsAPI.admit({
       ...Object.fromEntries(Object.entries(s).filter(([, v]) => v !== '')),
+      ...(setsFee && fee !== '' ? { monthlyFee: Number(fee) } : {}),
       guardians: guardians.map((g) => g.kind === 'existing'
         ? { guardianId: g.guardianId, relation: g.relation, isPrimary: g.isPrimary }
         : Object.fromEntries(Object.entries({ ...g, kind: undefined }).filter(([, v]) => v !== '' && v !== undefined))),
@@ -65,7 +83,7 @@ export default function AdmissionPage() {
   });
 
   return (
-    <DashboardLayout title="New admission" allowedRoles={CAN.manageStudents} subtitle="Student details, class and guardians">
+    <DashboardLayout title="New admission" allowedRoles={CAN.admitStudents} subtitle="Student details, class and guardians">
       <form className="space-y-6" onSubmit={(e) => { e.preventDefault(); admit.mutate(); }}>
         <div className="card">
           <h3 className="section-title mb-4">Student</h3>
@@ -81,6 +99,14 @@ export default function AdmissionPage() {
             <Field label="Roll no."><input className="input" value={s.rollNo} onChange={set('rollNo')} /></Field>
             <Field label="Admission no." hint="Leave blank to number automatically"><input className="input" value={s.admissionNo} onChange={set('admissionNo')} /></Field>
             <Field label="Blood group"><input className="input" value={s.bloodGroup} onChange={set('bloodGroup')} maxLength={8} /></Field>
+            {setsFee && (
+              <Field label="Monthly Fee *" hint={classMonthly !== undefined
+                ? `Class fee is ${formatMoney(classMonthly, currency)}/month. Change it for this student only.`
+                : 'Choose the class first to prefill its monthly fee'}>
+                <input type="number" min="0" step="1" required className="input" value={fee}
+                  onChange={(e) => { setFee(e.target.value); setFeeTouched(true); }} placeholder="e.g. 4500" />
+              </Field>
+            )}
             <Field label="Address" className="md:col-span-3"><textarea className="input" rows={2} value={s.address} onChange={set('address')} /></Field>
           </div>
         </div>
@@ -129,9 +155,11 @@ export default function AdmissionPage() {
                   <Field label="CNIC"><input className="input" value={g.cnic} onChange={(e) => setG(i, { cnic: e.target.value })} /></Field>
                   <Field label="Email"><input type="email" className="input" value={g.email} onChange={(e) => setG(i, { email: e.target.value })} /></Field>
                   <Field label="Occupation"><input className="input" value={g.occupation} onChange={(e) => setG(i, { occupation: e.target.value })} /></Field>
-                  <Field label="Parent app login" hint="Email to sign in with; leave blank for no app access">
-                    <input type="email" className="input" value={g.loginEmail} onChange={(e) => setG(i, { loginEmail: e.target.value })} />
-                  </Field>
+                  {canGiveLogins && (
+                    <Field label="Parent app login" hint="Email to sign in with; leave blank for no app access">
+                      <input type="email" className="input" value={g.loginEmail} onChange={(e) => setG(i, { loginEmail: e.target.value })} />
+                    </Field>
+                  )}
                 </div>
               )}
             </div>

@@ -43,7 +43,9 @@ export async function broadcast(req: AuthRequest, res: Response, next: NextFunct
       else io.to(schoolRoom(schoolId)).emit('notification', { title, message });
     }
     if (channels?.includes('email')) {
-      await Promise.allSettled(users.map((u) => sendEmail({ to: u.email, subject: title, html: `<p>${message}</p>` })));
+      // Escape: the message is typed by school staff and must not become HTML in the email.
+      const esc = (t: string) => t.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
+      await Promise.allSettled(users.filter((u) => u.email).map((u) => sendEmail({ to: u.email!, subject: title, html: `<p>${esc(message)}</p>` })));
     }
     if (channels?.includes('sms')) {
       await Promise.allSettled(users.filter((u) => u.phone).map((u) => sendSMS(u.phone!, message)));

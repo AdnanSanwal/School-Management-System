@@ -12,6 +12,8 @@ export interface AuthRequest extends Request {
  * Verifies the bearer token and runs the rest of the request inside the user's
  * tenant context, so the scoped Prisma client only sees that school's rows.
  */
+const PASSWORD_CHANGE_ALLOWED = /^\/api\/v1\/auth\/(me|change-password|logout)$/;
+
 export async function authenticate(req: AuthRequest, res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith('Bearer ')) {
@@ -25,6 +27,11 @@ export async function authenticate(req: AuthRequest, res: Response, next: NextFu
     if (await isRevoked(token, user)) return sendError(res, 'Session ended. Please sign in again.', 401);
   } catch {
     return sendError(res, 'Invalid or expired token', 401);
+  }
+
+  // An admin-chosen password must be replaced before anything else.
+  if (user.pwc && !PASSWORD_CHANGE_ALLOWED.test(req.originalUrl.split('?')[0])) {
+    return res.status(403).json({ success: false, code: 'PASSWORD_CHANGE_REQUIRED', message: 'Please set your own password first' });
   }
 
   let ctx: TenantContext;

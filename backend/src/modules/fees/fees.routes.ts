@@ -10,7 +10,7 @@ import { sendSuccess, sendPaginated } from '../../utils/apiResponse';
 import { handler, parseBody, parseQuery, paginationSchema, paging, dateOnly, period, money, id, me } from '../../utils/http';
 import { toDate, toIso, addDays, schoolToday, schoolTimezone, zonedDayStart } from '../../utils/dates';
 import { assertStudentAccess, currentAcademicYear, ensureInSchool, isSchoolWide, studentScope } from '../../utils/scope';
-import { applyLateFines, collectPayment, defaulters, generateInvoices, receipt, sendFeeReminders } from './fees.service';
+import { applyLateFines, collectPayment, defaulters, generateInvoices, receipt, sendFeeReminders, STUDENT_MONTHLY_FEE_HEAD } from './fees.service';
 import { D } from './fees.calc';
 import { guardiansOf, notifyEach } from '../../utils/notify';
 import { messageFamilies } from '../../utils/messaging';
@@ -53,9 +53,9 @@ router.patch('/heads/:id', can('fee.structure.manage'), handler(async (req, res)
 router.get('/structure', can('fee.structure.view'), handler(async (_req, res) => {
   const year = await currentAcademicYear();
   const [classes, heads, rows] = await Promise.all([
-    prisma.class.findMany({ orderBy: { level: 'asc' }, select: { id: true, name: true } }),
+    prisma.class.findMany({ where: { archivedAt: null }, orderBy: { level: 'asc' }, select: { id: true, name: true } }),
     // Transport is charged from each rider's route (modules/transport), so it isn't set per class.
-    prisma.feeHead.findMany({ where: { isActive: true, NOT: { name: 'Transport' } }, orderBy: { name: 'asc' } }),
+    prisma.feeHead.findMany({ where: { isActive: true, name: { notIn: ['Transport', STUDENT_MONTHLY_FEE_HEAD] } }, orderBy: { name: 'asc' } }),
     prisma.feeStructure.findMany({ where: { academicYearId: year.id } }),
   ]);
   return sendSuccess(res, {

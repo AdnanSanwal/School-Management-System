@@ -30,7 +30,7 @@ export default function StudentsPage() {
   return (
     <DashboardLayout title="Students" allowedRoles={CAN.viewStudents}
       subtitle={p ? `${p.total.toLocaleString()} students` : undefined}
-      actions={can(role, 'manageStudents') && <Link href="/students/new" className="btn btn-primary"><Plus className="h-4 w-4" /> New admission</Link>}>
+      actions={can(role, 'admitStudents') && <Link href="/students/new" className="btn btn-primary"><Plus className="h-4 w-4" /> New admission</Link>}>
       <div className="card space-y-4">
         <div className="flex flex-wrap gap-3">
           <div className="relative min-w-[240px] flex-1">
