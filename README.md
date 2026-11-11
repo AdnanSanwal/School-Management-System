@@ -29,6 +29,7 @@ and owners.
 - [Mobile app](#mobile-app)
 - [Run with Docker](#run-with-docker)
 - [Configuration](#configuration)
+- [HR, finance, roles and subscriptions](#hr-finance-roles-and-subscriptions)
 - [Adding a real school](#adding-a-real-school)
 - [Deploy to a server](#deploy-to-a-server)
 - [Tests](#tests)
@@ -269,6 +270,42 @@ Mobile (`mobile/.env`): `EXPO_PUBLIC_API_URL`, `EXPO_PUBLIC_PROJECT_ID`.
 WhatsApp/SMS alerts, academic years, timezone) are set in the web panel under **School settings**, not in `.env`.
 
 ---
+
+## HR, finance, roles and subscriptions
+
+Every school gets all of these; what a person sees depends on their role, not on a paid add-on.
+
+**HR and payroll** (sidebar → HR)
+
+- Staff profiles with documents, departments and designations, salary structures with history,
+  yearly leave allowances and balances.
+- **Payroll** each month: the accountant prepares it, reviews every line, and sends it to the owner;
+  the owner approves; the accountant pays it from a cash or bank account. Pay is worked out from the
+  salary structure, staff attendance (absent, half day), unpaid leave and loan instalments.
+- Advances and loans, printable payslips, the bank transfer sheet, and "My payslips" for staff.
+
+**Finance and accounting** (sidebar → Finance)
+
+- Money accounts (cash, bank, wallets). Fee payments land in the account for their payment method.
+- Expenses (above a limit they wait for the owner's approval) and other income, with categories.
+- A double-entry ledger worked out from those records, so it cannot disagree with them:
+  **Statements** (income & expenditure, balance sheet, trial balance), the **Journal**, the
+  **Chart of accounts** and each account's ledger. Fees count as income when they are received.
+- **Month closing** locks everything dated up to a month; only the owner can reopen it.
+
+**Roles and permissions** (owner → Settings → Roles & permissions)
+
+- The owner chooses what Principal, Office admin, Accountant and Teacher may do in their school.
+  Changes apply at once, to that school only. The owner always keeps full access; parents and
+  students only ever see their own information.
+
+**Subscriptions** (platform admin → Schools → Subscription)
+
+- Each school has a plan, a paid-until date, notice and grace days and an optional student limit.
+  Recording a payment moves the paid-until date.
+- The school sees a notice before the end date and during the grace days. After that it is
+  **locked**: people can sign in and see why, but nothing else works until it is renewed. Nothing is
+  deleted. A school with no paid-until date never expires.
 
 ## Adding a real school
 

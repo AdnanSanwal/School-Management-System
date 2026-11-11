@@ -2,12 +2,13 @@ import { useState } from 'react';
 import { Alert, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { API, apiError } from '../lib/api';
-import { Badge, Button, Card, Empty, ErrorBox, H, Loading, Muted, Screen } from '../components/ui';
+import { Badge, Button, Card, Empty, ErrorBox, H, Loading, Muted, Row, Screen } from '../components/ui';
 import { colors } from '../lib/theme';
 import { day, todayIso } from '../lib/format';
 
 const say = (title: string, msg = '') => (Platform.OS === 'web' ? globalThis.alert?.(`${title}\n${msg}`) : Alert.alert(title, msg));
 const addDays = (iso: string, n: number) => new Date(new Date(`${iso}T00:00:00Z`).getTime() + n * 86_400_000).toISOString().slice(0, 10);
+const LEAVE_LABEL: Record<string, string> = { CASUAL: 'Casual', SICK: 'Sick', ANNUAL: 'Annual', UNPAID: 'Unpaid', OTHER: 'Other' };
 const BADGE: Record<string, { fg: string; bg: string; label: string }> = {
   PENDING: { fg: colors.warn, bg: colors.warnSoft, label: 'Pending' },
   APPROVED: { fg: colors.good, bg: colors.goodSoft, label: 'Approved' },
@@ -31,7 +32,7 @@ export default function LeaveScreen() {
   const qc = useQueryClient();
   const q = useQuery({ queryKey: ['leave', 'mine'], queryFn: API.myLeave });
   const today = todayIso();
-  const [type, setType] = useState<'CASUAL' | 'SICK' | 'OTHER'>('CASUAL');
+  const [type, setType] = useState<'CASUAL' | 'SICK' | 'ANNUAL' | 'UNPAID' | 'OTHER'>('CASUAL');
   const [from, setFrom] = useState(today);
   const [days, setDays] = useState(1);
   const [reason, setReason] = useState('');
@@ -46,7 +47,7 @@ export default function LeaveScreen() {
     <Screen refreshing={q.isRefetching} onRefresh={() => q.refetch()}>
       <Card style={{ gap: 10 }}>
         <H>Apply for leave</H>
-        <Pills value={type} onChange={setType} items={[{ v: 'CASUAL', label: 'Casual' }, { v: 'SICK', label: 'Sick' }, { v: 'OTHER', label: 'Other' }]} />
+        <Pills value={type} onChange={setType} items={[{ v: 'CASUAL', label: 'Casual' }, { v: 'SICK', label: 'Sick' }, { v: 'ANNUAL', label: 'Annual' }, { v: 'UNPAID', label: 'Unpaid' }, { v: 'OTHER', label: 'Other' }]} />
         <Muted>From</Muted>
         <Pills value={from} onChange={setFrom} items={[-1, 0, 1, 2, 3, 4, 5, 6, 7].map((n) => ({ v: addDays(today, n), label: n === 0 ? 'Today' : n === 1 ? 'Tomorrow' : n === -1 ? 'Yesterday' : day(addDays(today, n), { weekday: 'short', day: 'numeric' }) }))} />
         <Muted>Number of days</Muted>
@@ -60,7 +61,19 @@ export default function LeaveScreen() {
       {q.error && <ErrorBox message={apiError(q.error)} />}
       {q.data && (
         <>
-          <Muted>Approved this year: {Object.entries(q.data.usedThisYear).map(([k, v]) => `${k.toLowerCase()} ${v} day(s)`).join(', ') || 'none'}</Muted>
+          {q.data.balances?.length ? (
+            <Card>
+              <H>Leave balance{q.data.year ? ` · ${q.data.year}` : ''}</H>
+              {q.data.balances.filter((b: any) => b.isPaid && (b.allowed > 0 || b.used > 0)).map((b: any) => (
+                <Row key={b.type} label={`${LEAVE_LABEL[b.type] ?? b.type} · ${b.used} of ${b.allowed} used`}
+                  value={<Text style={{ fontWeight: '700', color: b.used > b.allowed ? colors.bad : colors.good }}>{b.used > b.allowed ? `${b.used - b.allowed} over` : `${b.remaining} left`}</Text>} />
+              ))}
+              {q.data.balances.some((b: any) => b.pending > 0) && <Muted>Waiting for a decision: {q.data.balances.reduce((n: number, b: any) => n + b.pending, 0)} day(s)</Muted>}
+              {q.data.balances.some((b: any) => b.unpaid > 0) && <Muted style={{ color: colors.bad }}>Unpaid days this year: {q.data.balances.reduce((n: number, b: any) => n + b.unpaid, 0)} (deducted from salary)</Muted>}
+            </Card>
+          ) : (
+            <Muted>Approved this year: {Object.entries(q.data.usedThisYear).map(([k, v]) => `${k.toLowerCase()} ${v} day(s)`).join(', ') || 'none'}</Muted>
+          )}
           {q.data.requests.length === 0 && <Empty title="No leave requests yet" />}
           {q.data.requests.map((l: any) => (
             <Card key={l.id}>

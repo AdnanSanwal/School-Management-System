@@ -142,4 +142,10 @@ export const API = {
 
   // Office
   dashboard: () => data(api.get('/dashboard/overview')),
+
+  // HR and finance
+  myPayslips: () => data(api.get('/payroll/my')),
+  payslip: (lineId: string) => data(api.get(`/payroll/lines/${lineId}/payslip`)),
+  financeSummary: (month: string) => data(api.get('/finance/summary', { params: { month } })),
+  payrollRuns: () => data<any[]>(api.get('/payroll/runs')),
 };

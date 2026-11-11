@@ -16,6 +16,14 @@ export interface User {
   role: Role;
   avatar?: string | null;
   school?: { id: string; name: string; code: string; currency: string; logoUrl?: string | null } | null;
+  /** What this user may do in their school (the school can tune its staff roles). */
+  permissions?: string[];
+}
+
+/** Does the signed-in user hold this permission? Falls back to the role's standard set for older sessions. */
+export function allowed(user: User | null | undefined, permission: string, standardRoles: Role[]) {
+  if (!user) return false;
+  return user.permissions ? user.permissions.includes(permission) : standardRoles.includes(user.role);
 }
 
 interface AuthState {

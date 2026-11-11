@@ -91,6 +91,9 @@ export default function RootLayout() {
           <Stack.Screen name="marks" options={{ title: 'Marks entry' }} />
           <Stack.Screen name="pay" options={{ title: 'Pay fee online' }} />
           <Stack.Screen name="leave" options={{ title: 'Leave' }} />
+          <Stack.Screen name="payslips" options={{ title: 'My payslips' }} />
+          <Stack.Screen name="payslip/[id]" options={{ title: 'Payslip' }} />
+          <Stack.Screen name="finance" options={{ title: 'Finance' }} />
           <Stack.Screen name="approvals" options={{ title: 'Approvals' }} />
           <Stack.Screen name="transport" options={{ title: 'School transport' }} />
           <Stack.Screen name="library" options={{ title: 'Library' }} />

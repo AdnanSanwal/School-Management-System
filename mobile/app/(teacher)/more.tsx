@@ -9,6 +9,7 @@ export default function TeacherMore() {
         <Item icon="time-outline" label="My timetable" onPress={() => router.push('/timetable')} />
         <Item icon="create-outline" label="Marks entry" onPress={() => router.push('/marks')} />
         <Item icon="airplane-outline" label="Leave" onPress={() => router.push('/leave')} />
+        <Item icon="cash-outline" label="My payslips" onPress={() => router.push('/payslips')} />
       </>} />
     </Screen>
   );
