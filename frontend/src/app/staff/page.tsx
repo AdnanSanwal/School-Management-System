@@ -1,12 +1,13 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { Plus, KeyRound, UserMinus, UserCheck } from 'lucide-react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Field, Modal, PasswordNotice, Spinner, Empty } from '@/components/ui/kit';
-import { staffAPI, apiError, type UsernameCheck } from '@/lib/api';
+import { staffAPI, hrAPI, apiError, type UsernameCheck } from '@/lib/api';
 import { LoginFields, CredentialsNotice, emptyLogin, loginBody, loginProblems, type LoginValue } from '@/components/ui/LoginFields';
 import { CAN, can } from '@/lib/roles';
 import { useAuthStore } from '@/store/authStore';
@@ -60,7 +61,7 @@ export default function StaffPage() {
               <tbody>
                 {rows.map((s) => (
                   <tr key={s.id}>
-                    <td className="font-medium">{s.name}</td>
+                    <td className="font-medium"><Link href={`/staff/${s.id}`} className="text-primary-700 hover:underline">{s.name}</Link></td>
                     <td className="font-mono text-sm">{s.employeeNo}</td>
                     <td className="text-sm">{s.designation ?? (s.isTeacher ? 'Teacher' : '—')}</td>
                     <td className="text-sm">{s.classTeacherOf.map((c: any) => `${c.class.name}-${c.name}`).join(', ') || '—'}</td>
@@ -100,6 +101,7 @@ function useLoginRoles() {
 function AddStaffModal({ onClose, onIssued }: { onClose: () => void; onIssued: (r: any) => void }) {
   const qc = useQueryClient();
   const roles = useLoginRoles();
+  const options = useQuery({ queryKey: ['hr', 'options'], queryFn: hrAPI.options });
   const [f, setF] = useState({ name: '', phone: '', designation: 'Teacher', department: '', qualification: '', joiningDate: '', isTeacher: true });
   const [withLogin, setWithLogin] = useState(true);
   const [login, setLogin] = useState<LoginValue>(emptyLogin(roles[0]?.[0] ?? 'TEACHER'));
@@ -120,8 +122,14 @@ function AddStaffModal({ onClose, onIssued }: { onClose: () => void; onIssued: (
       <form className="grid gap-3 md:grid-cols-2" onSubmit={(e) => { e.preventDefault(); if (problems.length) return toast.error(problems[0]); m.mutate(); }}>
         <Field label="Staff name *"><input className="input" required minLength={2} value={f.name} onChange={set('name')} /></Field>
         <Field label="Phone"><input className="input" value={f.phone} onChange={set('phone')} /></Field>
-        <Field label="Role / designation"><input className="input" value={f.designation} onChange={set('designation')} placeholder="Teacher, Clerk, Driver…" /></Field>
-        <Field label="Department"><input className="input" value={f.department} onChange={set('department')} /></Field>
+        <Field label="Role / designation">
+          <input className="input" list="add-designations" value={f.designation} onChange={set('designation')} placeholder="Teacher, Clerk, Driver…" />
+          <datalist id="add-designations">{(options.data?.designations ?? []).map((o) => <option key={o.id} value={o.name} />)}</datalist>
+        </Field>
+        <Field label="Department">
+          <input className="input" list="add-departments" value={f.department} onChange={set('department')} />
+          <datalist id="add-departments">{(options.data?.departments ?? []).map((o) => <option key={o.id} value={o.name} />)}</datalist>
+        </Field>
         <Field label="Qualification"><input className="input" value={f.qualification} onChange={set('qualification')} /></Field>
         <Field label="Joining date"><input type="date" className="input" value={f.joiningDate} onChange={set('joiningDate')} /></Field>
         <label className="flex items-center gap-2 text-sm md:col-span-2"><input type="checkbox" checked={f.isTeacher} onChange={(e) => setF({ ...f, isTeacher: e.target.checked })} /> Teaches classes</label>

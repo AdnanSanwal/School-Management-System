@@ -11,6 +11,7 @@ import { handler, parseBody, parseQuery, dateOnly, me } from '../../utils/http';
 import { addDays, schoolToday, toDate, toIso } from '../../utils/dates';
 import { currentAcademicYear, staffForUser } from '../../utils/scope';
 import { notify } from '../../utils/notify';
+import { leaveBalances } from '../../utils/hr';
 
 // Leave management (spec §6 Approvals, §8 Leave Apply, §12 "Leave Approved / Rejected → Teacher").
 
@@ -61,7 +62,13 @@ router.post('/', can('leave.apply'), handler(async (req, res) => {
     body: `${b.type.toLowerCase()} leave ${b.fromDate}${b.toDate !== b.fromDate ? ` to ${b.toDate}` : ''}: ${b.reason.slice(0, 100)}`,
     data: { leaveId: leave.id },
   });
-  return sendSuccess(res, present(leave), 'Leave request sent to the principal', 201);
+  // Tell them up front when part of it would be unpaid.
+  const year = await currentAcademicYear();
+  const bal = (await leaveBalances([staff.id], year)).get(staff.id)?.find((x) => x.type === b.type);
+  const days = leaveDays(from, to);
+  const unpaid = !bal ? 0 : !bal.isPaid ? days : Math.max(0, bal.used + bal.pending - bal.allowed);
+  return sendSuccess(res, { ...present(leave), unpaidDays: Math.min(days, unpaid) },
+    unpaid > 0 ? `Leave request sent. ${Math.min(days, unpaid)} day(s) are beyond your ${b.type.toLowerCase()} leave allowance and would be unpaid.` : 'Leave request sent to the principal', 201);
 }));
 
 router.get('/mine', can('leave.apply'), handler(async (req, res) => {
@@ -72,7 +79,8 @@ router.get('/mine', can('leave.apply'), handler(async (req, res) => {
   for (const l of rows) {
     if (l.status === 'APPROVED' && l.fromDate >= year.startDate) used[l.type] = (used[l.type] ?? 0) + leaveDays(l.fromDate, l.toDate);
   }
-  return sendSuccess(res, { requests: rows.map(present), usedThisYear: used });
+  const balances = (await leaveBalances([staff.id], year)).get(staff.id) ?? [];
+  return sendSuccess(res, { requests: rows.map(present), usedThisYear: used, year: year.name, balances });
 }));
 
 router.get('/', can('leave.view', 'leave.approve'), handler(async (req, res) => {

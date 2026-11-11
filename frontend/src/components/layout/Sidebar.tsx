@@ -12,6 +12,7 @@ import {
   UserCheck, Layers, Wallet, Receipt, AlertTriangle, BadgePercent, FileSpreadsheet, ClipboardCheck,
   KeyRound, School, Home, Megaphone, BookOpen, CalendarDays, PenLine, Clock, Inbox, FileBarChart, Plane,
   Building2, ArrowUpCircle, Bus, Library,
+  CalendarCheck, Banknote, SlidersHorizontal,
 } from 'lucide-react';
 import { can, Capability } from '@/lib/roles';
 
@@ -44,7 +45,17 @@ const navGroups: NavGroup[] = [
     title: 'People',
     items: [
       { label: 'Students', href: '/students', icon: GraduationCap, cap: 'viewStudents' },
+    ],
+  },
+  {
+    title: 'HR',
+    items: [
       { label: 'Staff', href: '/staff', icon: Users, cap: 'viewStaff' },
+      { label: 'Staff attendance', href: '/attendance/staff', icon: UserCheck, cap: 'staffAttendance' },
+      { label: 'Leave', href: '/leave', icon: Plane, cap: 'applyLeave' },
+      { label: 'Leave balances', href: '/hr/leave', icon: CalendarCheck, cap: 'viewLeaveBalances' },
+      { label: 'Salaries', href: '/hr/salaries', icon: Banknote, cap: 'viewSalary' },
+      { label: 'HR settings', href: '/hr/settings', icon: SlidersHorizontal, cap: 'manageHr' },
     ],
   },
   {
@@ -53,7 +64,6 @@ const navGroups: NavGroup[] = [
       { label: 'Classes', href: '/classes', icon: Layers, cap: 'viewClasses' },
       { label: 'Attendance', href: '/attendance', icon: UserCheck, cap: 'markAttendance' },
       { label: 'Attendance today', href: '/attendance/summary', icon: ClipboardCheck, cap: 'viewAttendanceSummary' },
-      { label: 'Staff attendance', href: '/attendance/staff', icon: UserCheck, cap: 'staffAttendance' },
       { label: 'Exams & results', href: '/exams', icon: GraduationCap, cap: 'viewExams' },
       { label: 'Marks entry', href: '/marks', icon: PenLine, cap: 'enterMarks' },
       { label: 'Timetable', href: '/timetable', icon: Clock, cap: 'viewTimetable' },
@@ -66,7 +76,6 @@ const navGroups: NavGroup[] = [
       { label: 'Notices', href: '/notices', icon: Megaphone, cap: 'viewNotices' },
       { label: 'Daily diary', href: '/diary', icon: BookOpen, cap: 'viewDiary' },
       { label: 'Calendar', href: '/calendar', icon: CalendarDays, cap: 'viewCalendar' },
-      { label: 'Leave', href: '/leave', icon: Plane, cap: 'applyLeave' },
     ],
   },
   {

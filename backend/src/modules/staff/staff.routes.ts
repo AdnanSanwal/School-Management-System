@@ -8,7 +8,11 @@ import { can, hasPermission } from '../../middleware/rbac';
 import { AppError } from '../../middleware/errorHandler';
 import { sendSuccess, sendPaginated } from '../../utils/apiResponse';
 import { handler, parseBody, parseQuery, paginationSchema, paging, dateOnly, me } from '../../utils/http';
-import { toDate } from '../../utils/dates';
+import { schoolToday, toDate, toIso } from '../../utils/dates';
+import { currentAcademicYear } from '../../utils/scope';
+import { leaveBalances, salariesOn } from '../../utils/hr';
+import { assertKind, deleteFile, MIME, saveFile, signedUrl } from '../../utils/storage';
+import { uploadOne } from '../files/files.routes';
 import { createAccount } from '../../utils/accounts';
 import { formatNumber, nextNumber } from '../../utils/counter';
 
@@ -36,6 +40,18 @@ const staffBody = z.object({
   qualification: z.string().max(120).optional(),
   joiningDate: dateOnly.optional(),
   isTeacher: z.boolean().default(true),
+  // HR profile
+  cnic: z.string().trim().max(20).optional().nullable(),
+  dateOfBirth: dateOnly.optional().nullable(),
+  gender: z.enum(['MALE', 'FEMALE', 'OTHER']).optional().nullable(),
+  email: z.string().trim().email().max(191).optional().nullable().or(z.literal('').transform(() => null)),
+  address: z.string().trim().max(500).optional().nullable(),
+  emergencyContactName: z.string().trim().max(100).optional().nullable(),
+  emergencyContactPhone: z.string().trim().max(32).optional().nullable(),
+  contractType: z.enum(['PERMANENT', 'CONTRACT', 'VISITING']).optional(),
+  bankName: z.string().trim().max(100).optional().nullable(),
+  bankAccountTitle: z.string().trim().max(100).optional().nullable(),
+  bankAccountNo: z.string().trim().max(40).optional().nullable(),
   login: z.lazy(() => loginBody).optional(),
 });
 
@@ -68,17 +84,33 @@ router.get('/:id', can('staff.view'), handler(async (req, res) => {
   const staff = await prisma.staff.findFirst({
     where: { id: req.params.id },
     include: {
+      documents: { orderBy: { uploadedAt: 'desc' } },
       user: { select: { id: true, email: true, username: true, role: true, isActive: true, lastLoginAt: true } },
       classTeacherOf: { select: { id: true, name: true, class: { select: { name: true } } } },
       subjectsTaught: { include: { subject: true, section: { include: { class: { select: { name: true } } } } } },
     },
   });
   if (!staff) throw new AppError('Staff member not found', 404);
-  return sendSuccess(res, staff);
+  const [year, today] = await Promise.all([currentAcademicYear(), schoolToday()]);
+  const [balances, pay] = await Promise.all([
+    leaveBalances([staff.id], year),
+    hasPermission(me(req).role, 'salary.view') ? salariesOn([staff.id], today) : null,
+  ]);
+  const { documents, ...rest } = staff;
+  return sendSuccess(res, {
+    ...rest,
+    joiningDate: staff.joiningDate ? toIso(staff.joiningDate) : null,
+    dateOfBirth: staff.dateOfBirth ? toIso(staff.dateOfBirth) : null,
+    leftOn: staff.leftOn ? toIso(staff.leftOn) : null,
+    documents: documents.map(({ storageKey, ...d }) => ({ ...d, href: signedUrl(storageKey) })),
+    leave: { year: year.name, balances: balances.get(staff.id) ?? [] },
+    // Only for roles allowed to see pay.
+    ...(pay ? { salary: pay.get(staff.id) ?? null } : {}),
+  });
 }));
 
 router.post('/', can('staff.manage'), handler(async (req, res) => {
-  const { login, joiningDate, ...body } = parseBody(staffBody, req);
+  const { login, joiningDate, dateOfBirth, ...body } = parseBody(staffBody, req);
   if (login && !hasPermission(me(req).role, 'users.manage')) throw new AppError('You cannot create logins', 403);
   const schoolId = currentSchoolId();
 
@@ -88,7 +120,11 @@ router.post('/', can('staff.manage'), handler(async (req, res) => {
       : undefined;
     const employeeNo = body.employeeNo ?? formatNumber('EMP', await nextNumber(tx, 'employee'), 4);
     const staff = await tx.staff.create({
-      data: { ...body, schoolId, employeeNo, joiningDate: joiningDate ? toDate(joiningDate) : undefined, userId: account?.user.id },
+      data: {
+        ...body, schoolId, employeeNo, userId: account?.user.id,
+        joiningDate: joiningDate ? toDate(joiningDate) : undefined,
+        dateOfBirth: dateOfBirth ? toDate(dateOfBirth) : undefined,
+      },
     });
     return { staff, login: account };
   });
@@ -101,11 +137,17 @@ const staffUpdate = staffBody.omit({ login: true, isTeacher: true }).partial().e
 }).strict();
 
 router.patch('/:id', can('staff.manage'), handler(async (req, res) => {
-  const { joiningDate, ...body } = parseBody(staffUpdate, req);
+  const { joiningDate, dateOfBirth, ...body } = parseBody(staffUpdate, req);
   const staff = await transaction(async (tx) => {
     const updated = await tx.staff.update({
       where: { id: req.params.id },
-      data: { ...body, ...(joiningDate !== undefined ? { joiningDate: toDate(joiningDate) } : {}) },
+      data: {
+        ...body,
+        ...(joiningDate !== undefined ? { joiningDate: toDate(joiningDate) } : {}),
+        ...(dateOfBirth !== undefined ? { dateOfBirth: dateOfBirth ? toDate(dateOfBirth) : null } : {}),
+        // Keep the leaving date for the record; clear it when they rejoin.
+        ...(body.status === 'LEFT' ? { leftOn: await schoolToday() } : body.status === 'ACTIVE' ? { leftOn: null } : {}),
+      },
     });
     // Leaving the school disables the login and frees their class-teacher slots.
     if (body.status === 'LEFT') {
@@ -121,6 +163,36 @@ router.patch('/:id', can('staff.manage'), handler(async (req, res) => {
   });
   if (body.status === 'LEFT' && staff.userId) await endAllSessions(staff.userId); // signed out on every device now
   return sendSuccess(res, staff, 'Staff member updated');
+}));
+
+// ─── Documents (CNIC copy, degree, contract…): PDF/JPEG/PNG/WebP in field "file" ───
+
+router.post('/:id/documents', can('staff.manage'), uploadOne, handler(async (req, res) => {
+  const { title } = parseBody(z.object({ title: z.string().trim().min(1).max(120) }), req);
+  if (!req.file) throw new AppError('Attach a file as "file"', 422);
+  const staff = await prisma.staff.findFirst({ where: { id: req.params.id }, select: { id: true } });
+  if (!staff) throw new AppError('Staff member not found', 404);
+  const schoolId = currentSchoolId();
+  const kind = assertKind(req.file.buffer, ['pdf', 'jpg', 'png', 'webp']);
+  const storageKey = await saveFile(schoolId, 'documents', req.file.buffer, kind);
+  try {
+    const doc = await prisma.staffDocument.create({
+      data: { schoolId, staffId: staff.id, title, storageKey, fileName: req.file.originalname.slice(0, 190), mimeType: MIME[kind], sizeBytes: req.file.size },
+    });
+    const { storageKey: _k, ...rest } = doc;
+    return sendSuccess(res, { ...rest, href: signedUrl(storageKey) }, 'Document added', 201);
+  } catch (e) {
+    await deleteFile(storageKey);
+    throw e;
+  }
+}));
+
+router.delete('/:id/documents/:docId', can('staff.manage'), handler(async (req, res) => {
+  const doc = await prisma.staffDocument.findFirst({ where: { id: req.params.docId, staffId: req.params.id } });
+  if (!doc) throw new AppError('Document not found', 404);
+  await prisma.staffDocument.delete({ where: { id: doc.id } });
+  await deleteFile(doc.storageKey);
+  return sendSuccess(res, null, 'Document removed');
 }));
 
 // Give an existing staff member app access.

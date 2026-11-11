@@ -10,6 +10,7 @@ import { leaveAPI, apiError } from '@/lib/api';
 import { CAN, can } from '@/lib/roles';
 import { formatDate, todayIso } from '@/lib/utils';
 import { useAuthStore } from '@/store/authStore';
+import { LeaveCard, LEAVE_LABEL } from '@/components/hr/LeaveCard';
 
 export default function LeavePage() {
   const role = useAuthStore((s) => s.user?.role);
@@ -19,7 +20,7 @@ export default function LeavePage() {
   const [f, setF] = useState({ type: 'CASUAL', fromDate: todayIso(), toDate: todayIso(), reason: '' });
   const apply = useMutation({
     mutationFn: () => leaveAPI.apply(f),
-    onSuccess: () => { toast.success('Sent to the principal'); setF({ ...f, reason: '' }); qc.invalidateQueries({ queryKey: ['leave'] }); },
+    onSuccess: () => { toast.success('Sent to the principal'); setF({ ...f, reason: '' }); qc.invalidateQueries({ queryKey: ['leave'] }); qc.invalidateQueries({ queryKey: ['hr'] }); },
     onError: (e) => toast.error(apiError(e)),
   });
   const cancel = useMutation({
@@ -27,7 +28,10 @@ export default function LeavePage() {
     onSuccess: () => { toast.success('Withdrawn'); qc.invalidateQueries({ queryKey: ['leave'] }); },
     onError: (e) => toast.error(apiError(e)),
   });
-  const used = mine.data?.usedThisYear ?? {};
+  // How much of this request would go beyond the allowance (shown before sending).
+  const chosen = (mine.data?.balances ?? []).find((b: any) => b.type === f.type);
+  const days = Math.max(1, Math.round((new Date(f.toDate).getTime() - new Date(f.fromDate).getTime()) / 86_400_000) + 1);
+  const overBy = chosen?.isPaid ? Math.min(days, Math.max(0, chosen.used + chosen.pending + days - chosen.allowed)) : 0;
 
   return (
     <DashboardLayout title="Leave" allowedRoles={CAN.applyLeave}>
@@ -36,7 +40,9 @@ export default function LeavePage() {
           <h3 className="section-title">Apply for leave</h3>
           <Field label="Type">
             <select className="select" value={f.type} onChange={(e) => setF({ ...f, type: e.target.value })}>
-              <option value="CASUAL">Casual</option><option value="SICK">Sick</option><option value="OTHER">Other</option>
+              {(mine.data?.balances ?? [{ type: 'CASUAL' }, { type: 'SICK' }, { type: 'OTHER' }]).map((b: any) => (
+                <option key={b.type} value={b.type}>{LEAVE_LABEL[b.type] ?? b.type}{b.isPaid === false ? ' (unpaid)' : b.allowed !== undefined ? ` (${b.remaining} of ${b.allowed} left)` : ''}</option>
+              ))}
             </select>
           </Field>
           <div className="grid grid-cols-2 gap-2">
@@ -45,9 +51,12 @@ export default function LeavePage() {
           </div>
           <Field label="Reason"><textarea className="input" rows={3} required minLength={3} value={f.reason} onChange={(e) => setF({ ...f, reason: e.target.value })} /></Field>
           <button className="btn btn-primary w-full" disabled={apply.isPending}><Send className="h-4 w-4" /> Send request</button>
-          <p className="text-xs text-gray-500">Approved this year: {Object.entries(used).map(([k, v]) => `${k.toLowerCase()} ${v} day(s)`).join(', ') || 'none'}</p>
+          {overBy > 0 && <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">{overBy} of these {days} day(s) are beyond your {(LEAVE_LABEL[f.type] ?? f.type).toLowerCase()} allowance and would be unpaid.</p>}
+          {chosen?.isPaid === false && <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">This leave type is unpaid: {days} day(s) would be deducted from salary.</p>}
         </form>
-        <div className="card lg:col-span-2">
+        <div className="space-y-4 lg:col-span-2">
+          {mine.data?.balances && <LeaveCard title="My leave balance" year={mine.data.year} balances={mine.data.balances} />}
+        <div className="card">
           <h3 className="section-title mb-3">My requests</h3>
           {mine.isLoading ? <Spinner /> : mine.error ? <p className="text-sm text-gray-500">{apiError(mine.error)}</p> : !mine.data.requests.length ? <Empty title="No leave requests" /> : (
             <table className="table">
@@ -65,6 +74,7 @@ export default function LeavePage() {
               </tbody>
             </table>
           )}
+        </div>
         </div>
       </div>
       {all.data && can(role, 'reports') && (

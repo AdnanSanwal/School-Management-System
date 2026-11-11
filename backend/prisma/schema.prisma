@@ -131,10 +131,26 @@ model Staff {
   joiningDate   DateTime?   @db.Date
   isTeacher     Boolean     @default(true)
   status        StaffStatus @default(ACTIVE)
+  // ── HR profile ──
+  cnic                  String?      @db.VarChar(20)
+  dateOfBirth           DateTime?    @db.Date
+  gender                Gender?
+  email                 String?      @db.VarChar(191) // contact email (the login is on User)
+  address               String?      @db.Text
+  emergencyContactName  String?      @db.VarChar(100)
+  emergencyContactPhone String?      @db.VarChar(32)
+  contractType          ContractType @default(PERMANENT)
+  // Where salary is paid; shown on the bank transfer sheet.
+  bankName              String?      @db.VarChar(100)
+  bankAccountTitle      String?      @db.VarChar(100)
+  bankAccountNo         String?      @db.VarChar(40) // account number or IBAN
+  leftOn                DateTime?    @db.Date
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
 
   user              User?               @relation(fields: [userId], references: [id])
+  documents         StaffDocument[]
+  salaryStructures  SalaryStructure[]
   classTeacherOf    Section[]
   subjectsTaught    SubjectAssignment[]
   timetable         TimetableSlot[]
@@ -145,6 +161,96 @@ model Staff {
   @@unique([schoolId, employeeNo])
   @@index([schoolId])
   @@map("staff")
+}
+
+// Uploaded staff papers: CNIC copy, degree, contract, experience letters.
+model StaffDocument {
+  id         String   @id @default(uuid())
+  schoolId   String
+  staffId    String
+  title      String
+  storageKey String   @db.VarChar(512) // uploaded file (see src/utils/storage.ts)
+  fileName   String?
+  mimeType   String?  @db.VarChar(100)
+  sizeBytes  Int?
+  uploadedAt DateTime @default(now())
+
+  staff Staff @relation(fields: [staffId], references: [id], onDelete: Cascade)
+
+  @@index([schoolId])
+  @@index([staffId])
+  @@map("staff_documents")
+}
+
+// Managed lists for the staff forms. Staff keep the chosen name as text, so renaming
+// an entry here also renames it on staff (done in the HR routes).
+model Department {
+  id        String   @id @default(uuid())
+  schoolId  String
+  name      String   @db.VarChar(60)
+  createdAt DateTime @default(now())
+
+  @@unique([schoolId, name])
+  @@map("departments")
+}
+
+model Designation {
+  id        String   @id @default(uuid())
+  schoolId  String
+  name      String   @db.VarChar(60)
+  createdAt DateTime @default(now())
+
+  @@unique([schoolId, name])
+  @@map("designations")
+}
+
+// A person's pay from a date onwards. A raise is a new row with a later effectiveFrom,
+// so the history is kept and payroll for an old month still uses that month's pay.
+model SalaryStructure {
+  id            String   @id @default(uuid())
+  schoolId      String
+  staffId       String
+  effectiveFrom DateTime @db.Date
+  basic         Decimal  @db.Decimal(12, 2)
+  note          String?  @db.VarChar(300)
+  createdById   String?
+  createdAt     DateTime @default(now())
+
+  staff      Staff             @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  components SalaryComponent[]
+
+  @@unique([staffId, effectiveFrom])
+  @@index([schoolId])
+  @@map("salary_structures")
+}
+
+// Monthly allowances (house rent, transport…) and fixed deductions (income tax, EOBI…).
+model SalaryComponent {
+  id          String              @id @default(uuid())
+  schoolId    String
+  structureId String
+  kind        SalaryComponentKind
+  name        String              @db.VarChar(60)
+  amount      Decimal             @db.Decimal(12, 2)
+
+  structure SalaryStructure @relation(fields: [structureId], references: [id], onDelete: Cascade)
+
+  @@index([schoolId])
+  @@index([structureId])
+  @@map("salary_components")
+}
+
+// Yearly leave allowance per type. Approved days beyond it are unpaid (deducted in payroll).
+model LeavePolicy {
+  id          String    @id @default(uuid())
+  schoolId    String
+  type        LeaveType
+  daysPerYear Int       @default(0)
+  // false = every day of this type is unpaid (e.g. "Unpaid leave").
+  isPaid      Boolean   @default(true)
+
+  @@unique([schoolId, type])
+  @@map("leave_policies")
 }
 
 model Guardian {
@@ -1100,7 +1206,20 @@ enum AttendanceStatus {
 enum LeaveType {
   CASUAL
   SICK
+  ANNUAL
+  UNPAID
   OTHER
+}
+
+enum ContractType {
+  PERMANENT
+  CONTRACT
+  VISITING
+}
+
+enum SalaryComponentKind {
+  ALLOWANCE
+  DEDUCTION
 }
 
 enum ApprovalStatus {

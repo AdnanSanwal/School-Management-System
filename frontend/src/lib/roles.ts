@@ -12,8 +12,13 @@ export const CAN = {
   // CR-04: accountants may admit students and set their monthly fee (not edit them).
   admitStudents: ['PRINCIPAL', 'ADMIN', 'ACCOUNTANT'],
   setStudentFee: ['ADMIN', 'ACCOUNTANT'],
-  viewStaff: ['OWNER', 'PRINCIPAL', 'ADMIN'],
+  viewStaff: ['OWNER', 'PRINCIPAL', 'ADMIN', 'ACCOUNTANT'],
   manageStaff: ['PRINCIPAL', 'ADMIN'],
+  // HR: lists and leave policy; who may see and set salaries.
+  manageHr: ['ADMIN'],
+  viewSalary: ['OWNER', 'PRINCIPAL', 'ADMIN', 'ACCOUNTANT'],
+  manageSalary: ['ADMIN'],
+  viewLeaveBalances: ['OWNER', 'PRINCIPAL', 'ADMIN', 'ACCOUNTANT'],
   viewClasses: ['OWNER', 'PRINCIPAL', 'ADMIN', 'ACCOUNTANT', 'TEACHER'],
   manageClasses: ['PRINCIPAL', 'ADMIN'],
   markAttendance: ['TEACHER', 'PRINCIPAL', 'ADMIN'],

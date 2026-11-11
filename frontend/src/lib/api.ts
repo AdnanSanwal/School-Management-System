@@ -141,6 +141,36 @@ export const staffAPI = {
   create: (body: any) => data(api.post('/staff', body)),
   update: (id: string, body: any) => data(api.patch(`/staff/${id}`, body)),
   createLogin: (id: string, body: any) => data(api.post(`/staff/${id}/login`, body)),
+  uploadDocument: (id: string, title: string, file: File) => {
+    const fd = new FormData();
+    fd.append('title', title);
+    fd.append('file', file);
+    return data(api.post(`/staff/${id}/documents`, fd));
+  },
+  deleteDocument: (id: string, docId: string) => api.delete(`/staff/${id}/documents/${docId}`),
+};
+
+export type LeaveBalance = { type: string; allowed: number; isPaid: boolean; used: number; pending: number; remaining: number; unpaid: number };
+export type SalaryView = {
+  id: string; effectiveFrom: string; basic: string; note: string | null;
+  components: { id: string; kind: 'ALLOWANCE' | 'DEDUCTION'; name: string; amount: string }[];
+  allowances: string; deductions: string; gross: string; net: string;
+};
+
+/** HR: lists, leave policy and balances, salary structures. */
+export const hrAPI = {
+  options: () => data<{ departments: { id: string; name: string; staff: number }[]; designations: { id: string; name: string; staff: number }[] }>(api.get('/hr/options')),
+  addOption: (list: 'departments' | 'designations', name: string) => data(api.post(`/hr/${list}`, { name })),
+  renameOption: (list: 'departments' | 'designations', id: string, name: string) => data(api.patch(`/hr/${list}/${id}`, { name })),
+  deleteOption: (list: 'departments' | 'designations', id: string) => api.delete(`/hr/${list}/${id}`),
+  leavePolicy: () => data<{ type: string; daysPerYear: number; isPaid: boolean }[]>(api.get('/hr/leave-policy')),
+  saveLeavePolicy: (items: { type: string; daysPerYear: number; isPaid: boolean }[]) => data(api.put('/hr/leave-policy', { items })),
+  leaveBalances: () => data<{ year: string; staff: { id: string; name: string; employeeNo: string; designation: string | null; balances: LeaveBalance[] }[] }>(api.get('/hr/leave-balances')),
+  salaries: () => data<any>(api.get('/hr/salaries')),
+  salary: (staffId: string) => data<{ current: SalaryView | null; history: SalaryView[] }>(api.get(`/hr/staff/${staffId}/salary`)),
+  setSalary: (staffId: string, body: any) => data<{ current: SalaryView | null; history: SalaryView[] }>(api.post(`/hr/staff/${staffId}/salary`, body)),
+  deleteSalary: (structureId: string) => api.delete(`/hr/salary/${structureId}`),
+  me: () => data<any>(api.get('/hr/me')),
 };
 
 export const studentsAPI = {
