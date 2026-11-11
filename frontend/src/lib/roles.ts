@@ -1,7 +1,10 @@
-import type { Role } from '@/store/authStore';
+import { useAuthStore, type Role } from '@/store/authStore';
 
-// Mirrors backend/src/middleware/rbac.ts for showing/hiding UI. The server is
-// the real gatekeeper; this only avoids showing buttons that would get a 403.
+// Decides what to show. The server is the real gatekeeper; this only avoids showing
+// screens and buttons that would get a 403.
+//  - CAN lists the roles that have each capability as standard.
+//  - A school can tune its staff roles (Settings → Roles & permissions). For those roles the
+//    user's own permission list (sent by the server) decides, through CAP_PERMISSIONS.
 
 export const OFFICE: Role[] = ['OWNER', 'PRINCIPAL', 'ADMIN', 'ACCOUNTANT'];
 
@@ -67,13 +70,52 @@ export const CAN = {
   manageTransport: ['PRINCIPAL', 'ADMIN'],
   viewLibrary: ['OWNER', 'PRINCIPAL', 'ADMIN'],
   manageLibrary: ['PRINCIPAL', 'ADMIN'],
+  manageRoles: ['OWNER'],
   platform: ['SUPER_ADMIN'],
 } satisfies Record<string, Role[]>;
 
 export type Capability = keyof typeof CAN;
 
+/**
+ * The server permission(s) behind a capability (any one is enough). Capabilities not listed
+ * here always follow the role. For the four staff roles and the standard permission sets
+ * this gives exactly the same answer as CAN.
+ */
+const CAP_PERMISSIONS: Partial<Record<Capability, string[]>> = {
+  viewStudents: ['student.view'], manageStudents: ['student.manage'], admitStudents: ['student.admit'], setStudentFee: ['student.fee.set'],
+  viewStaff: ['staff.view'], manageStaff: ['staff.manage'], manageHr: ['hr.manage'], viewSalary: ['salary.view'], manageSalary: ['salary.manage'],
+  viewLeaveBalances: ['leave.view'], applyLeave: ['leave.apply'],
+  viewFinance: ['finance.view'], manageFinance: ['finance.manage'], approveExpense: ['expense.approve'],
+  viewPayroll: ['payroll.view'], managePayroll: ['payroll.manage'], approvePayroll: ['payroll.approve'],
+  viewClasses: ['class.view'], manageClasses: ['class.manage'],
+  markAttendance: ['attendance.student.mark', 'attendance.student.correct'],
+  staffAttendance: ['attendance.staff.view'], markStaffAttendance: ['attendance.staff.mark'],
+  viewFees: ['fee.view'], collectFees: ['fee.collect'], manageFeeStructure: ['fee.structure.manage'], generateInvoices: ['fee.invoice.generate'],
+  requestConcession: ['fee.concession.request'], approveConcession: ['fee.concession.approve'], sendFeeReminders: ['fee.collect', 'fee.invoice.generate'],
+  manageUsers: ['users.manage'], manageSchool: ['school.manage'],
+  publishNotices: ['notice.publish'], viewDiary: ['diary.view'], postDiary: ['diary.post'], manageCalendar: ['calendar.manage'],
+  manageExams: ['exam.manage'], approveExams: ['exam.approve'], enterMarks: ['marks.enter', 'exam.manage'], viewResults: ['marks.view', 'exam.manage'],
+  manageTimetable: ['timetable.manage'], promotion: ['promotion.run'],
+  viewTransport: ['transport.view'], manageTransport: ['transport.manage'], viewLibrary: ['library.view'], manageLibrary: ['library.manage'],
+};
+/** Roles a school can tune. */
+const TUNED_ROLES = ['PRINCIPAL', 'ADMIN', 'ACCOUNTANT', 'TEACHER'];
+
+// Each list remembers its capability, so `allowedRoles={CAN.viewFees}` can follow the school's settings too.
+for (const [cap, roles] of Object.entries(CAN)) Object.defineProperty(roles, 'capability', { value: cap, enumerable: false });
+
 export function can(role: string | undefined, cap: Capability) {
-  return !!role && (CAN[cap] as string[]).includes(role);
+  if (!role) return false;
+  const need = CAP_PERMISSIONS[cap];
+  const own = useAuthStore.getState().user?.permissions;
+  if (need && own && TUNED_ROLES.includes(role)) return need.some((p) => own.includes(p));
+  return (CAN[cap] as string[]).includes(role);
+}
+
+/** May this role open a page limited to `roles` (normally one of the CAN lists)? */
+export function allowedIn(roles: string[], role: string) {
+  const cap = (roles as { capability?: Capability }).capability;
+  return cap ? can(role, cap) : roles.includes(role);
 }
 
 export const ROLE_LABEL: Record<string, string> = {

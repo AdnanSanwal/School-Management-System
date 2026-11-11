@@ -6,8 +6,11 @@ import { AsyncLocalStorage } from 'async_hooks';
  *  - `system`: trusted code (login, seed, platform admin, background jobs) that
  *    may read across schools. Never derive this from request input.
  */
+/** A school's changes to its roles: permissions added to or taken from the standard set, by role. */
+export type RoleOverrides = Record<string, { grant: Set<string>; revoke: Set<string> } | undefined>;
+
 export type TenantContext =
-  | { kind: 'tenant'; schoolId: string }
+  | { kind: 'tenant'; schoolId: string; roles?: RoleOverrides }
   | { kind: 'system' };
 
 export const tenantStorage = new AsyncLocalStorage<TenantContext>();

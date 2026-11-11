@@ -9,6 +9,7 @@ import { AppError } from '../../middleware/errorHandler';
 import { sendEmail } from '../../utils/email';
 import { endAllSessions, endSession, newSessionId, saveSession, storedRefreshToken } from '../../utils/sessions';
 import { normalizeUsername, usernameProblem, isUsernameTaken } from '../../utils/usernames';
+import { permissionsFor } from '../../utils/rolePermissions';
 
 // Auth runs before a tenant is known (login, refresh, reset) or concerns only
 // the caller's own User row, so it uses the unscoped client and filters by user id.
@@ -17,6 +18,11 @@ const publicUser = {
   id: true, name: true, email: true, username: true, phone: true, role: true, avatar: true, mfaEnabled: true, mustChangePassword: true,
   school: { select: { id: true, name: true, code: true, logoUrl: true, currency: true } },
 } as const;
+
+/** The profile plus what this user may do in their school (the web and mobile apps show menus from it). */
+async function withPermissions<T extends { role: string; school: { id: string } | null }>(profile: T) {
+  return { ...profile, permissions: await permissionsFor(profile?.role ?? '', profile?.school?.id) };
+}
 
 /** Blocks disabled users and users of disabled schools. */
 async function assertCanSignIn(user: Pick<User, 'isActive' | 'schoolId' | 'role'>) {
@@ -73,7 +79,7 @@ export async function login(identifier: string, password: string, mfaCode?: stri
   await basePrisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
   const tokens = await issueTokens(user);
   const profile = await basePrisma.user.findUniqueOrThrow({ where: { id: user.id }, select: publicUser });
-  return { user: profile, ...tokens };
+  return { user: await withPermissions(profile), ...tokens };
 }
 
 export async function refreshAccessToken(token: string) {
@@ -151,11 +157,11 @@ export async function changePassword(userId: string, currentPassword: string, ne
   await endAllSessions(userId); // every device, this one included, continues on the new tokens below
   const tokens = await issueTokens(updated);
   const profile = await basePrisma.user.findUniqueOrThrow({ where: { id: userId }, select: publicUser });
-  return { user: profile, ...tokens };
+  return { user: await withPermissions(profile), ...tokens };
 }
 
 export async function getMe(userId: string) {
-  return basePrisma.user.findUniqueOrThrow({ where: { id: userId }, select: publicUser });
+  return withPermissions(await basePrisma.user.findUniqueOrThrow({ where: { id: userId }, select: publicUser }));
 }
 
 export async function updateProfile(userId: string, body: { name: string; phone?: string | null; email?: string | null; username?: string | null; currentPassword?: string }) {

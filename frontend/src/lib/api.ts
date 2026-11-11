@@ -281,6 +281,18 @@ export const ledgerAPI = {
   reopen: (period: string) => api.post('/ledger/reopen', { period }),
 };
 
+export type RoleMatrix = {
+  modules: string[];
+  roles: { role: string; label: string; about: string; users: number; changed: number;
+    permissions: { key: string; module: string; label: string; standard: boolean; granted: boolean; available: boolean }[] }[];
+};
+/** Roles & permissions (owner): what each staff role may do in this school. */
+export const rolesAPI = {
+  matrix: () => data<RoleMatrix>(api.get('/roles')),
+  save: (role: string, permissions: string[]) => api.put(`/roles/${role}`, { permissions }),
+  reset: (role: string) => api.post(`/roles/${role}/reset`),
+};
+
 export const studentsAPI = {
   list: (params?: any) => page(api.get('/students', { params })),
   get: (id: string) => data(api.get(`/students/${id}`)),

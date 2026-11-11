@@ -2,6 +2,7 @@ import { Response, NextFunction } from 'express';
 import type { Role } from '@prisma/client';
 import { AuthRequest } from './auth';
 import { sendError } from '../utils/apiResponse';
+import { tenantStorage, RoleOverrides } from '../config/tenancy';
 
 export type { Role };
 
@@ -22,7 +23,7 @@ export const PERMISSIONS = [
   'hr.manage', 'salary.view', 'salary.manage',
   'finance.view', 'finance.manage', 'expense.approve',
   'payroll.view', 'payroll.manage', 'payroll.approve',
-  'books.reopen',
+  'books.reopen', 'roles.manage',
   'class.view', 'class.manage',
   'attendance.student.mark', 'attendance.student.view', 'attendance.student.correct',
   'attendance.staff.mark', 'attendance.staff.view',
@@ -61,7 +62,7 @@ export const ROLE_PERMISSIONS: Record<Role, ReadonlySet<Permission>> = {
     'school.manage', 'users.manage', 'dashboard.owner',
     'reports.finance', 'reports.attendance', 'reports.academic',
     'transport.view', 'library.view', 'audit.view', 'salary.view',
-    'finance.view', 'expense.approve', 'payroll.view', 'payroll.approve', 'books.reopen',
+    'finance.view', 'expense.approve', 'payroll.view', 'payroll.approve', 'books.reopen', 'roles.manage',
   ]),
 
   // Academic + administrative head; approvals. No fee collection or fee-structure edits.
@@ -134,8 +135,25 @@ export const ROLE_PERMISSIONS: Record<Role, ReadonlySet<Permission>> = {
   ]),
 };
 
+/** The role's standard permissions with the school's own changes applied. */
+export function effectivePermissions(role: string, overrides?: RoleOverrides): Permission[] {
+  const base = ROLE_PERMISSIONS[role as Role];
+  if (!base) return [];
+  const o = overrides?.[role];
+  if (!o) return [...base];
+  return PERMISSIONS.filter((p) => (base.has(p) && !o.revoke.has(p)) || o.grant.has(p));
+}
+
+/**
+ * Does this role hold the permission in the current school? Inside a school request the
+ * school's own role settings apply (loaded by `authenticate`); elsewhere the standard set.
+ */
 export function hasPermission(role: string, permission: Permission): boolean {
-  return ROLE_PERMISSIONS[role as Role]?.has(permission) ?? false;
+  const standard = ROLE_PERMISSIONS[role as Role]?.has(permission) ?? false;
+  const ctx = tenantStorage.getStore();
+  const o = ctx?.kind === 'tenant' ? ctx.roles?.[role] : undefined;
+  if (!o) return standard;
+  return (standard && !o.revoke.has(permission)) || o.grant.has(permission);
 }
 
 /** Allows the request if the user's role holds ANY of the listed permissions. */

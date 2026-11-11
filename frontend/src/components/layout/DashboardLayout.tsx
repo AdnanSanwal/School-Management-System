@@ -5,6 +5,24 @@ import { useRouter } from 'next/navigation';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
 import { useAuthStore } from '@/store/authStore';
+import { useQuery } from '@tanstack/react-query';
+import { authAPI } from '@/lib/api';
+import { allowedIn } from '@/lib/roles';
+
+/**
+ * Keeps the signed-in user's details fresh (name, school, and what they may do), so a change
+ * the owner makes to a role reaches people who are already signed in.
+ */
+function useSessionRefresh() {
+  const signedIn = useAuthStore((s) => !!s.accessToken && !!s.user && !s.user.mustChangePassword);
+  const { data } = useQuery({ queryKey: ['session'], queryFn: authAPI.me, enabled: signedIn, staleTime: 60_000, refetchInterval: 5 * 60_000, meta: { quiet: true } });
+  useEffect(() => {
+    const current = useAuthStore.getState().user;
+    if (!data || !current || data.id !== current.id) return;
+    const next = { ...current, ...data };
+    if (JSON.stringify(next) !== JSON.stringify(current)) useAuthStore.setState({ user: next });
+  }, [data]);
+}
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -17,6 +35,7 @@ interface DashboardLayoutProps {
 export function DashboardLayout({ children, title, allowedRoles, subtitle, actions }: DashboardLayoutProps) {
   const router = useRouter();
   const { isAuthenticated, user } = useAuthStore();
+  useSessionRefresh();
 
   useEffect(() => {
     if (!isAuthenticated()) {
@@ -27,7 +46,7 @@ export function DashboardLayout({ children, title, allowedRoles, subtitle, actio
       router.replace('/change-password');
       return;
     }
-    if (allowedRoles && user && !allowedRoles.includes(user.role)) {
+    if (allowedRoles && user && !allowedIn(allowedRoles, user.role)) {
       router.replace('/unauthorized');
     }
   }, [allowedRoles, isAuthenticated, router, user]);

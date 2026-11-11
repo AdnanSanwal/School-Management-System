@@ -12,6 +12,8 @@ interface User {
   role: Role;
   avatar?: string;
   school?: { id: string; name: string; code: string; logoUrl?: string | null; currency: string } | null;
+  /** What this user may do in their school (the school can tune its staff roles). */
+  permissions?: string[];
 }
 
 interface AuthState {

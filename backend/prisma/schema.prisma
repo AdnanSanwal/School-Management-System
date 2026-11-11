@@ -1407,6 +1407,20 @@ model OtherIncome {
   @@map("other_incomes")
 }
 
+// A school's own change to what a role may do: a permission added to, or taken from,
+// the role's standard set (see src/middleware/rbac.ts). Roles without rows use the standard set.
+model RolePermission {
+  id         String   @id @default(uuid())
+  schoolId   String
+  role       Role
+  permission String   @db.VarChar(60)
+  granted    Boolean
+  createdAt  DateTime @default(now())
+
+  @@unique([schoolId, role, permission])
+  @@map("role_permissions")
+}
+
 // ─── Accounting ledger ───
 // The ledger is worked out from the records themselves (fee payments, expenses, income,
 // payroll, advances, transfers), so it can never disagree with them. Only the chart of

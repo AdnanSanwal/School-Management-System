@@ -12,6 +12,7 @@ jest.mock('../../config/database', () => {
       update: jest.fn(),
     },
     school: { findUnique: jest.fn() },
+    rolePermission: { findMany: jest.fn().mockResolvedValue([]) },
   };
   return { __esModule: true, default: mockPrisma, basePrisma: mockPrisma };
 });

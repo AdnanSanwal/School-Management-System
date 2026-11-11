@@ -12,7 +12,7 @@ import {
   UserCheck, Layers, Wallet, Receipt, AlertTriangle, BadgePercent, FileSpreadsheet, ClipboardCheck,
   KeyRound, School, Home, Megaphone, BookOpen, CalendarDays, PenLine, Clock, Inbox, FileBarChart, Plane,
   Building2, ArrowUpCircle, Bus, Library,
-  CalendarCheck, Banknote, SlidersHorizontal, PieChart, Landmark, TrendingDown, TrendingUp, HandCoins, ReceiptText, CircleDollarSign, Scale, BookText, ListTree,
+  CalendarCheck, Banknote, SlidersHorizontal, PieChart, Landmark, TrendingDown, TrendingUp, HandCoins, ReceiptText, CircleDollarSign, Scale, BookText, ListTree, ShieldCheck,
 } from 'lucide-react';
 import { can, Capability } from '@/lib/roles';
 
@@ -117,6 +117,7 @@ const navGroups: NavGroup[] = [
       { label: 'Notifications', href: '/notifications', icon: Bell, roles: ['OWNER', 'PRINCIPAL', 'ADMIN', 'ACCOUNTANT', 'TEACHER', 'PARENT', 'STUDENT'] },
       { label: 'Users & logins', href: '/users', icon: KeyRound, cap: 'manageUsers' },
       { label: 'School settings', href: '/settings/school', icon: School, cap: 'manageSchool' },
+      { label: 'Roles & permissions', href: '/settings/roles', icon: ShieldCheck, cap: 'manageRoles' },
       { label: 'My account', href: '/settings', icon: Settings, roles: ['OWNER', 'PRINCIPAL', 'ADMIN', 'ACCOUNTANT', 'TEACHER', 'PARENT', 'STUDENT', 'SUPER_ADMIN'] },
     ],
   },

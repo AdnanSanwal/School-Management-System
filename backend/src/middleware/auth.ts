@@ -3,6 +3,7 @@ import { verifyToken, JwtPayload } from '../utils/jwt';
 import { sendError } from '../utils/apiResponse';
 import { isRevoked } from '../utils/sessions';
 import { tenantStorage, TenantContext } from '../config/tenancy';
+import { roleOverrides } from '../utils/rolePermissions';
 
 export interface AuthRequest extends Request {
   user?: JwtPayload;
@@ -36,7 +37,7 @@ export async function authenticate(req: AuthRequest, res: Response, next: NextFu
 
   let ctx: TenantContext;
   if (user.role === 'SUPER_ADMIN') ctx = { kind: 'system' };
-  else if (user.schoolId) ctx = { kind: 'tenant', schoolId: user.schoolId };
+  else if (user.schoolId) ctx = { kind: 'tenant', schoolId: user.schoolId, roles: await roleOverrides(user.schoolId) };
   else return sendError(res, 'Token has no school', 401);
 
   req.user = user;
