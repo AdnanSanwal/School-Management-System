@@ -9,6 +9,7 @@ import { D } from '../modules/fees/fees.calc';
 // An account's balance is always derived from its movements, never stored, so it can't drift:
 //   opening + fee payments + other income + deposits/transfers in
 //           − approved expenses − withdrawals/transfers out
+//           − staff advances/loans given + their repayments in cash
 
 const DEFAULT_ACCOUNTS: { name: string; type: 'CASH' | 'BANK' | 'WALLET'; methods: PaymentMethod[] }[] = [
   { name: 'Cash in hand', type: 'CASH', methods: ['CASH'] },
@@ -72,12 +73,14 @@ export async function accountBalances(opts: { before?: Date } = {}) {
   const tz = await schoolTimezone();
   const dateLt = opts.before ? { lt: opts.before } : undefined;
   const paidLt = opts.before ? { lt: zonedDayStart(toIso(opts.before), tz) } : undefined;
-  const [accounts, fees, incomes, expenses, manual] = await Promise.all([
+  const [accounts, fees, incomes, expenses, manual, loans, repaid] = await Promise.all([
     prisma.moneyAccount.findMany({ orderBy: [{ isActive: 'desc' }, { createdAt: 'asc' }] }),
     prisma.payment.groupBy({ by: ['accountId'], where: { status: 'SUCCESS', accountId: { not: null }, ...(paidLt ? { paidAt: paidLt } : {}) }, _sum: { amount: true } }),
     prisma.otherIncome.groupBy({ by: ['accountId'], where: dateLt ? { incomeDate: dateLt } : {}, _sum: { amount: true } }),
     prisma.expense.groupBy({ by: ['accountId'], where: { status: 'APPROVED', ...(dateLt ? { expenseDate: dateLt } : {}) }, _sum: { amount: true } }),
     prisma.moneyTransaction.groupBy({ by: ['accountId', 'type'], where: dateLt ? { txDate: dateLt } : {}, _sum: { amount: true } }),
+    prisma.staffLoan.groupBy({ by: ['accountId'], where: dateLt ? { issuedOn: dateLt } : {}, _sum: { amount: true } }),
+    prisma.loanRepayment.groupBy({ by: ['accountId'], where: { accountId: { not: null }, ...(dateLt ? { paidOn: dateLt } : {}) }, _sum: { amount: true } }),
   ]);
   const of = (rows: { accountId: string | null; _sum: { amount: Prisma.Decimal | null } }[], id: string) => D(rows.find((r) => r.accountId === id)?._sum.amount ?? 0);
   return accounts.map((a) => {
@@ -85,7 +88,7 @@ export async function accountBalances(opts: { before?: Date } = {}) {
       .reduce((t, m) => ((IN_TYPES as readonly string[]).includes(m.type) ? t.plus(m._sum.amount ?? 0) : t.minus(m._sum.amount ?? 0)), D(0));
     // Before the opening date the account didn't exist yet.
     const opening = opts.before && opts.before <= a.openingDate ? D(0) : D(a.openingBalance);
-    return { ...a, methods: methodsOf(a), balance: opening.plus(of(fees, a.id)).plus(of(incomes, a.id)).minus(of(expenses, a.id)).plus(moved) };
+    return { ...a, methods: methodsOf(a), balance: opening.plus(of(fees, a.id)).plus(of(incomes, a.id)).minus(of(expenses, a.id)).plus(moved).minus(of(loans, a.id)).plus(of(repaid, a.id)) };
   });
 }
 
@@ -94,7 +97,7 @@ export async function accountBalance(accountId: string) {
 }
 
 export type Movement = {
-  id: string; kind: 'FEE' | 'INCOME' | 'EXPENSE' | 'OPENING' | (typeof IN_TYPES)[number] | 'WITHDRAWAL' | 'ADJUSTMENT_OUT' | 'TRANSFER_OUT';
+  id: string; kind: 'FEE' | 'INCOME' | 'EXPENSE' | 'OPENING' | 'ADVANCE' | 'LOAN_REPAYMENT' | (typeof IN_TYPES)[number] | 'WITHDRAWAL' | 'ADJUSTMENT_OUT' | 'TRANSFER_OUT';
   date: string; accountId: string; description: string; reference: string | null;
   in: Prisma.Decimal; out: Prisma.Decimal;
   /** Where to open the source record in the app. */
@@ -108,7 +111,7 @@ export async function movements(opts: { accountId?: string; from: Date; to: Date
   const tz = await schoolTimezone();
   const acc = opts.accountId ? { accountId: opts.accountId } : {};
   const range = { gte: opts.from, lte: opts.to };
-  const [fees, incomes, expenses, manual, opened] = await Promise.all([
+  const [fees, incomes, expenses, manual, opened, loans, repaid] = await Promise.all([
     prisma.payment.findMany({
       where: { status: 'SUCCESS', ...(opts.accountId ? acc : { accountId: { not: null } }), paidAt: { gte: zonedDayStart(toIso(opts.from), tz), lt: zonedDayStart(toIso(addDays(opts.to, 1)), tz) } },
       select: { id: true, accountId: true, amount: true, paidAt: true, receiptNo: true, reference: true, method: true, student: { select: { name: true } } },
@@ -117,6 +120,8 @@ export async function movements(opts: { accountId?: string; from: Date; to: Date
     prisma.expense.findMany({ where: { ...acc, status: 'APPROVED', expenseDate: range }, include: { category: { select: { name: true } } } }),
     prisma.moneyTransaction.findMany({ where: { ...acc, txDate: range } }),
     prisma.moneyAccount.findMany({ where: { ...(opts.accountId ? { id: opts.accountId } : {}), openingDate: range, openingBalance: { not: 0 } } }),
+    prisma.staffLoan.findMany({ where: { ...acc, issuedOn: range }, include: { staff: { select: { name: true } } } }),
+    prisma.loanRepayment.findMany({ where: { ...(opts.accountId ? acc : { accountId: { not: null } }), paidOn: range }, include: { loan: { select: { loanNo: true, staff: { select: { name: true } } } } } }),
   ]);
   const Z = D(0);
   const label: Record<string, string> = { DEPOSIT: 'Deposit', WITHDRAWAL: 'Withdrawal', ADJUSTMENT_IN: 'Adjustment (in)', ADJUSTMENT_OUT: 'Adjustment (out)', TRANSFER_IN: 'Transfer in', TRANSFER_OUT: 'Transfer out' };
@@ -133,6 +138,14 @@ export async function movements(opts: { accountId?: string; from: Date; to: Date
     ...expenses.map((e) => ({
       id: e.id, kind: 'EXPENSE' as const, date: toIso(e.expenseDate), accountId: e.accountId,
       description: `${e.category.name} — ${e.description}${e.paidTo ? ` (${e.paidTo})` : ''}`, reference: e.reference ? `${e.expenseNo} · ${e.reference}` : e.expenseNo, in: Z, out: D(e.amount), at: e.createdAt.getTime(),
+    })),
+    ...loans.map((l) => ({
+      id: l.id, kind: 'ADVANCE' as const, date: toIso(l.issuedOn), accountId: l.accountId,
+      description: `${l.kind === 'ADVANCE' ? 'Salary advance' : 'Staff loan'} — ${l.staff.name}`, reference: l.loanNo, in: Z, out: D(l.amount), link: '/payroll/loans', at: l.createdAt.getTime(),
+    })),
+    ...repaid.map((r) => ({
+      id: r.id, kind: 'LOAN_REPAYMENT' as const, date: toIso(r.paidOn), accountId: r.accountId!,
+      description: `Advance / loan paid back — ${r.loan.staff.name}`, reference: r.loan.loanNo, in: D(r.amount), out: Z, link: '/payroll/loans', at: r.createdAt.getTime(),
     })),
     ...manual.map((m) => {
       const isIn = (IN_TYPES as readonly string[]).includes(m.type);

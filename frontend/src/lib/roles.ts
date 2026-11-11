@@ -23,6 +23,11 @@ export const CAN = {
   viewFinance: ['OWNER', 'PRINCIPAL', 'ACCOUNTANT'],
   manageFinance: ['ACCOUNTANT'],
   approveExpense: ['OWNER'],
+  // Payroll: accountant prepares and pays, owner approves; staff see their own payslips.
+  viewPayroll: ['OWNER', 'PRINCIPAL', 'ACCOUNTANT'],
+  managePayroll: ['ACCOUNTANT'],
+  approvePayroll: ['OWNER'],
+  myPayslips: ['TEACHER', 'PRINCIPAL', 'ADMIN', 'ACCOUNTANT'],
   viewClasses: ['OWNER', 'PRINCIPAL', 'ADMIN', 'ACCOUNTANT', 'TEACHER'],
   manageClasses: ['PRINCIPAL', 'ADMIN'],
   markAttendance: ['TEACHER', 'PRINCIPAL', 'ADMIN'],

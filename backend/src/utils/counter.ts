@@ -9,7 +9,7 @@ type Tx = Pick<ScopedTx, 'counter'>;
  * takes a row lock, so concurrent callers get distinct values and a rollback
  * gives the number back.
  */
-export async function nextNumber(tx: Tx, key: 'receipt' | 'invoice' | 'admission' | 'employee' | 'expense' | 'income'): Promise<number> {
+export async function nextNumber(tx: Tx, key: 'receipt' | 'invoice' | 'admission' | 'employee' | 'expense' | 'income' | 'loan'): Promise<number> {
   const schoolId = currentSchoolId();
   const row = await tx.counter.upsert({
     where: { schoolId_key: { schoolId, key } },

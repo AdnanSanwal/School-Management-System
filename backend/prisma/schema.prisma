@@ -17,31 +17,31 @@ datasource db {
 // ─── Tenancy ─────────────────────────────────────────────────────────────────
 
 model School {
-  id        String   @id @default(uuid())
-  name      String
-  code      String   @unique // short slug, e.g. "greenfield"
-  address   String?  @db.Text
-  phone     String?
-  email     String?
-  logoUrl   String?  @db.VarChar(1024)
-  currency  String   @default("PKR")
-  timezone  String   @default("Asia/Karachi")
-  isActive  Boolean  @default(true)
+  id                     String           @id @default(uuid())
+  name                   String
+  code                   String           @unique // short slug, e.g. "greenfield"
+  address                String?          @db.Text
+  phone                  String?
+  email                  String?
+  logoUrl                String?          @db.VarChar(1024)
+  currency               String           @default("PKR")
+  timezone               String           @default("Asia/Karachi")
+  isActive               Boolean          @default(true)
   // Late fee: a one-time fine added to an invoice this many days after its due date (0 = off).
-  lateFeeAmount          Decimal  @default(0) @db.Decimal(12, 2)
-  lateFeeGraceDays       Int      @default(7)
+  lateFeeAmount          Decimal          @default(0) @db.Decimal(12, 2)
+  lateFeeGraceDays       Int              @default(7)
   // Monthly attendance % below which parents and the principal are alerted.
-  lowAttendanceThreshold Int      @default(75)
+  lowAttendanceThreshold Int              @default(75)
   // Library late fine per day (0 = no fines).
-  libraryFinePerDay      Decimal  @default(0) @db.Decimal(12, 2)
+  libraryFinePerDay      Decimal          @default(0) @db.Decimal(12, 2)
   // Expenses above this amount wait for the owner's approval (null = no approval needed).
-  expenseApprovalLimit   Decimal? @db.Decimal(12, 2)
+  expenseApprovalLimit   Decimal?         @db.Decimal(12, 2)
   // WhatsApp/SMS alerts to guardians' phones (see utils/messaging.ts).
   messagingEnabled       Boolean          @default(false)
   messagingChannel       MessagingChannel @default(SMS)
   messagingTypes         Json? // notification types also sent by SMS/WhatsApp, e.g. ["ATTENDANCE_ABSENT"]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt              DateTime         @default(now())
+  updatedAt              DateTime         @updatedAt
 
   academicYears AcademicYear[]
   users         User[]
@@ -58,11 +58,11 @@ model AcademicYear {
   isCurrent Boolean  @default(false)
   createdAt DateTime @default(now())
 
-  school           School              @relation(fields: [schoolId], references: [id])
-  subjectTeachers  SubjectAssignment[]
-  exams            Exam[]
-  feeStructures    FeeStructure[]
-  feeInvoices      FeeInvoice[]
+  school          School              @relation(fields: [schoolId], references: [id])
+  subjectTeachers SubjectAssignment[]
+  exams           Exam[]
+  feeStructures   FeeStructure[]
+  feeInvoices     FeeInvoice[]
 
   @@unique([schoolId, name])
   @@index([schoolId])
@@ -82,30 +82,30 @@ model Counter {
 // ─── People ──────────────────────────────────────────────────────────────────
 
 model User {
-  id                String         @id @default(uuid())
-  schoolId          String? // null only for SUPER_ADMIN (platform operator)
-  name              String
+  id                 String         @id @default(uuid())
+  schoolId           String? // null only for SUPER_ADMIN (platform operator)
+  name               String
   // Optional for staff created with a username (CR-05). Unique when present.
-  email             String?        @unique
+  email              String?        @unique
   // Sign-in name chosen by the admin (lowercase, unique on the platform). Optional for
   // accounts that sign in with email.
-  username          String?        @unique @db.VarChar(60)
-  phone             String?        @db.VarChar(32)
-  password          String
+  username           String?        @unique @db.VarChar(60)
+  phone              String?        @db.VarChar(32)
+  password           String
   // Set when an admin chose the password; the user must pick their own at next sign-in.
-  mustChangePassword Boolean       @default(false)
-  role              Role
-  isActive          Boolean        @default(true)
-  avatar            String?        @db.VarChar(1024)
-  mfaEnabled        Boolean        @default(false)
-  mfaSecret         String?        @db.Text
-  resetToken        String?
-  resetTokenExpires DateTime?
-  oauthProvider     OAuthProvider?
-  oauthId           String?
-  lastLoginAt       DateTime?
-  createdAt         DateTime       @default(now())
-  updatedAt         DateTime       @updatedAt
+  mustChangePassword Boolean        @default(false)
+  role               Role
+  isActive           Boolean        @default(true)
+  avatar             String?        @db.VarChar(1024)
+  mfaEnabled         Boolean        @default(false)
+  mfaSecret          String?        @db.Text
+  resetToken         String?
+  resetTokenExpires  DateTime?
+  oauthProvider      OAuthProvider?
+  oauthId            String?
+  lastLoginAt        DateTime?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
 
   school            School?            @relation(fields: [schoolId], references: [id])
   staff             Staff?
@@ -121,18 +121,18 @@ model User {
 }
 
 model Staff {
-  id            String      @id @default(uuid())
-  schoolId      String
-  userId        String?     @unique // non-teaching staff may have no login
-  employeeNo    String
-  name          String
-  phone         String?     @db.VarChar(32)
-  designation   String? // "Teacher", "Clerk", "Driver"...
-  department    String?
-  qualification String?
-  joiningDate   DateTime?   @db.Date
-  isTeacher     Boolean     @default(true)
-  status        StaffStatus @default(ACTIVE)
+  id                    String       @id @default(uuid())
+  schoolId              String
+  userId                String?      @unique // non-teaching staff may have no login
+  employeeNo            String
+  name                  String
+  phone                 String?      @db.VarChar(32)
+  designation           String? // "Teacher", "Clerk", "Driver"...
+  department            String?
+  qualification         String?
+  joiningDate           DateTime?    @db.Date
+  isTeacher             Boolean      @default(true)
+  status                StaffStatus  @default(ACTIVE)
   // ── HR profile ──
   cnic                  String?      @db.VarChar(20)
   dateOfBirth           DateTime?    @db.Date
@@ -147,18 +147,20 @@ model Staff {
   bankAccountTitle      String?      @db.VarChar(100)
   bankAccountNo         String?      @db.VarChar(40) // account number or IBAN
   leftOn                DateTime?    @db.Date
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
+  createdAt             DateTime     @default(now())
+  updatedAt             DateTime     @updatedAt
 
-  user              User?               @relation(fields: [userId], references: [id])
-  documents         StaffDocument[]
-  salaryStructures  SalaryStructure[]
-  classTeacherOf    Section[]
-  subjectsTaught    SubjectAssignment[]
-  timetable         TimetableSlot[]
-  attendance        StaffAttendance[]
-  leaveRequests     LeaveRequest[]
-  diaryEntries      DiaryEntry[]
+  user             User?               @relation(fields: [userId], references: [id])
+  documents        StaffDocument[]
+  salaryStructures SalaryStructure[]
+  classTeacherOf   Section[]
+  subjectsTaught   SubjectAssignment[]
+  timetable        TimetableSlot[]
+  attendance       StaffAttendance[]
+  leaveRequests    LeaveRequest[]
+  payrollLines     PayrollLine[]
+  loans            StaffLoan[]
+  diaryEntries     DiaryEntry[]
 
   @@unique([schoolId, employeeNo])
   @@index([schoolId])
@@ -300,16 +302,16 @@ model Student {
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 
-  user        User?               @relation(fields: [userId], references: [id])
-  section     Section?            @relation(fields: [sectionId], references: [id])
-  guardians   StudentGuardian[]
-  documents   StudentDocument[]
-  attendance  StudentAttendance[]
-  marks       Mark[]
-  examRemarks ExamRemark[]
-  concessions Concession[]
-  invoices    FeeInvoice[]
-  payments    Payment[]
+  user           User?               @relation(fields: [userId], references: [id])
+  section        Section?            @relation(fields: [sectionId], references: [id])
+  guardians      StudentGuardian[]
+  documents      StudentDocument[]
+  attendance     StudentAttendance[]
+  marks          Mark[]
+  examRemarks    ExamRemark[]
+  concessions    Concession[]
+  invoices       FeeInvoice[]
+  payments       Payment[]
   paymentClaims  PaymentClaim[]
   paymentIntents PaymentIntent[]
   promotions     PromotionRecord[]
@@ -362,13 +364,13 @@ model StudentDocument {
 // ─── Academic structure ──────────────────────────────────────────────────────
 
 model Class {
-  id        String   @id @default(uuid())
-  schoolId  String
-  name      String // "Class 8", "Nursery"
-  level     Int // ordering + promotion (Nursery=0, Class 1=1 ...)
+  id         String    @id @default(uuid())
+  schoolId   String
+  name       String // "Class 8", "Nursery"
+  level      Int // ordering + promotion (Nursery=0, Class 1=1 ...)
   // Archived classes are hidden everywhere but keep their history; they can be restored.
   archivedAt DateTime?
-  createdAt DateTime @default(now())
+  createdAt  DateTime  @default(now())
 
   sections      Section[]
   examSubjects  ExamSubject[]
@@ -1303,6 +1305,8 @@ model MoneyAccount {
   transactions MoneyTransaction[]
   expenses     Expense[]
   incomes      OtherIncome[]
+  loans        StaffLoan[]
+  repayments   LoanRepayment[]
 
   @@unique([schoolId, name])
   @@map("money_accounts")
@@ -1364,6 +1368,8 @@ model Expense {
   decidedById   String?
   decidedAt     DateTime?
   decisionNote  String?        @db.VarChar(300)
+  // Set on the expense a paid payroll run creates; such an expense can't be deleted by hand.
+  payrollRunId  String?        @unique
   createdAt     DateTime       @default(now())
 
   category FinanceCategory @relation(fields: [categoryId], references: [id])
@@ -1397,6 +1403,146 @@ model OtherIncome {
   @@index([schoolId, incomeDate])
   @@index([accountId])
   @@map("other_incomes")
+}
+
+// ─── Payroll ───
+
+// One month's salaries. DRAFT (accountant prepares and reviews) → SUBMITTED (waits for the
+// owner) → APPROVED → PAID (money leaves an account as a "Salaries" expense).
+model PayrollRun {
+  id           String        @id @default(uuid())
+  schoolId     String
+  period       String        @db.VarChar(7) // "2026-11"
+  status       PayrollStatus @default(DRAFT)
+  note         String?       @db.VarChar(300)
+  createdById  String?
+  submittedAt  DateTime?
+  decidedById  String?
+  decidedAt    DateTime?
+  decisionNote String?       @db.VarChar(300)
+  paidById     String?
+  paidAt       DateTime?
+  paymentDate  DateTime?     @db.Date
+  accountId    String? // the account the salaries were paid from
+  createdAt    DateTime      @default(now())
+
+  lines PayrollLine[]
+
+  @@unique([schoolId, period])
+  @@map("payroll_runs")
+}
+
+// One person's pay for the month. Pay details are copied in, so a payslip never changes
+// when the salary structure or the staff record is edited later.
+model PayrollLine {
+  id               String  @id @default(uuid())
+  schoolId         String
+  runId            String
+  staffId          String
+  name             String
+  employeeNo       String
+  designation      String?
+  department       String?
+  bankName         String? @db.VarChar(100)
+  bankAccountTitle String? @db.VarChar(100)
+  bankAccountNo    String? @db.VarChar(40)
+
+  basic           Decimal @db.Decimal(12, 2)
+  allowances      Json // [{ name, amount }]
+  fixedDeductions Json // [{ name, amount }] tax, EOBI...
+  gross           Decimal @db.Decimal(12, 2) // basic + allowances
+
+  daysInMonth      Int
+  absentDays       Decimal @default(0) @db.Decimal(4, 1) // from staff attendance (half day = 0.5)
+  unpaidLeaveDays  Decimal @default(0) @db.Decimal(4, 1) // approved leave that is not paid
+  notEmployedDays  Decimal @default(0) @db.Decimal(4, 1) // before joining / after leaving
+  // Days of pay actually deducted. Starts as the sum of the three above; the accountant may change it.
+  deductDays       Decimal @default(0) @db.Decimal(4, 1)
+  deductDaysManual Boolean @default(false)
+  absenceDeduction Decimal @default(0) @db.Decimal(12, 2)
+
+  loanDeduction   Decimal @default(0) @db.Decimal(12, 2)
+  loanManual      Boolean @default(false)
+  bonus           Decimal @default(0) @db.Decimal(12, 2)
+  otherDeduction  Decimal @default(0) @db.Decimal(12, 2)
+  remarks         String? @db.VarChar(300)
+  totalDeductions Decimal @db.Decimal(12, 2)
+  net             Decimal @db.Decimal(12, 2)
+
+  run        PayrollRun      @relation(fields: [runId], references: [id], onDelete: Cascade)
+  staff      Staff           @relation(fields: [staffId], references: [id])
+  repayments LoanRepayment[]
+
+  @@unique([runId, staffId])
+  @@index([schoolId])
+  @@index([staffId])
+  @@map("payroll_lines")
+}
+
+// Money given to a staff member ahead of salary: a one-off advance or a loan repaid in
+// monthly instalments. Recovered through payroll or paid back in cash.
+model StaffLoan {
+  id          String     @id @default(uuid())
+  schoolId    String
+  loanNo      String
+  staffId     String
+  kind        LoanKind   @default(ADVANCE)
+  amount      Decimal    @db.Decimal(12, 2)
+  issuedOn    DateTime   @db.Date
+  accountId   String // paid out of this account
+  installment Decimal    @db.Decimal(12, 2) // recovered from each salary
+  startPeriod String     @db.VarChar(7) // first payroll month that recovers it
+  note        String?    @db.VarChar(300)
+  status      LoanStatus @default(ACTIVE)
+  createdById String?
+  createdAt   DateTime   @default(now())
+
+  staff      Staff           @relation(fields: [staffId], references: [id])
+  account    MoneyAccount    @relation(fields: [accountId], references: [id])
+  repayments LoanRepayment[]
+
+  @@unique([schoolId, loanNo])
+  @@index([staffId])
+  @@index([accountId])
+  @@map("staff_loans")
+}
+
+model LoanRepayment {
+  id            String   @id @default(uuid())
+  schoolId      String
+  loanId        String
+  amount        Decimal  @db.Decimal(12, 2)
+  paidOn        DateTime @db.Date
+  payrollLineId String? // recovered from this payslip
+  accountId     String? // or paid back in cash into this account
+  note          String?  @db.VarChar(300)
+  createdAt     DateTime @default(now())
+
+  loan        StaffLoan     @relation(fields: [loanId], references: [id], onDelete: Cascade)
+  payrollLine PayrollLine?  @relation(fields: [payrollLineId], references: [id])
+  account     MoneyAccount? @relation(fields: [accountId], references: [id])
+
+  @@index([loanId])
+  @@index([accountId])
+  @@index([payrollLineId])
+  @@map("loan_repayments")
+}
+
+enum PayrollStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  PAID
+}
+
+enum LoanKind {
+  ADVANCE
+  LOAN
+}
+
+enum LoanStatus {
+  ACTIVE
+  SETTLED
 }
 
 enum MoneyAccountType {

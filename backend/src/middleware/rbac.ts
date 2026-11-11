@@ -21,6 +21,7 @@ export const PERMISSIONS = [
   // HR: lists and leave policy; who may see and set salaries.
   'hr.manage', 'salary.view', 'salary.manage',
   'finance.view', 'finance.manage', 'expense.approve',
+  'payroll.view', 'payroll.manage', 'payroll.approve',
   'class.view', 'class.manage',
   'attendance.student.mark', 'attendance.student.view', 'attendance.student.correct',
   'attendance.staff.mark', 'attendance.staff.view',
@@ -59,12 +60,12 @@ export const ROLE_PERMISSIONS: Record<Role, ReadonlySet<Permission>> = {
     'school.manage', 'users.manage', 'dashboard.owner',
     'reports.finance', 'reports.attendance', 'reports.academic',
     'transport.view', 'library.view', 'audit.view', 'salary.view',
-    'finance.view', 'expense.approve',
+    'finance.view', 'expense.approve', 'payroll.view', 'payroll.approve',
   ]),
 
   // Academic + administrative head; approvals. No fee collection or fee-structure edits.
   PRINCIPAL: new Set<Permission>([
-    ...EVERYONE_IN_SCHOOL, ...READ_ALL, 'audit.view', 'salary.view', 'finance.view',
+    ...EVERYONE_IN_SCHOOL, ...READ_ALL, 'audit.view', 'salary.view', 'finance.view', 'payroll.view',
     'users.manage', 'dashboard.principal',
     'student.manage', 'student.admit', 'student.status.request', 'student.status.approve',
     'staff.manage', 'class.manage',
@@ -106,6 +107,7 @@ export const ROLE_PERMISSIONS: Record<Role, ReadonlySet<Permission>> = {
     'staff.view', 'salary.view', 'leave.view',
     // Money accounts, expenses and other income.
     'finance.view', 'finance.manage',
+    'payroll.view', 'payroll.manage',
   ]),
 
   // Class-level; scoped to own sections.

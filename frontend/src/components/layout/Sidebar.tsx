@@ -12,7 +12,7 @@ import {
   UserCheck, Layers, Wallet, Receipt, AlertTriangle, BadgePercent, FileSpreadsheet, ClipboardCheck,
   KeyRound, School, Home, Megaphone, BookOpen, CalendarDays, PenLine, Clock, Inbox, FileBarChart, Plane,
   Building2, ArrowUpCircle, Bus, Library,
-  CalendarCheck, Banknote, SlidersHorizontal, PieChart, Landmark, TrendingDown, TrendingUp,
+  CalendarCheck, Banknote, SlidersHorizontal, PieChart, Landmark, TrendingDown, TrendingUp, HandCoins, ReceiptText, CircleDollarSign,
 } from 'lucide-react';
 import { can, Capability } from '@/lib/roles';
 
@@ -55,6 +55,9 @@ const navGroups: NavGroup[] = [
       { label: 'Leave', href: '/leave', icon: Plane, cap: 'applyLeave' },
       { label: 'Leave balances', href: '/hr/leave', icon: CalendarCheck, cap: 'viewLeaveBalances' },
       { label: 'Salaries', href: '/hr/salaries', icon: Banknote, cap: 'viewSalary' },
+      { label: 'Payroll', href: '/payroll', icon: CircleDollarSign, cap: 'viewPayroll' },
+      { label: 'Advances & loans', href: '/payroll/loans', icon: HandCoins, cap: 'viewPayroll' },
+      { label: 'My payslips', href: '/payroll/my', icon: ReceiptText, cap: 'myPayslips' },
       { label: 'HR settings', href: '/hr/settings', icon: SlidersHorizontal, cap: 'manageHr' },
     ],
   },

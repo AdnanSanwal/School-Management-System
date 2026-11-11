@@ -41,26 +41,33 @@ router.get('/summary', can('finance.view'), handler(async (req, res) => {
   const q = parseQuery(z.object({ month: period.default(toIso(today).slice(0, 7)) }), req);
   const { start, end } = periodRange(q.month);
   const tz = await schoolTimezone();
-  const [accounts, fees, incomes, expenses, pending] = await Promise.all([
+  const [accounts, fees, incomes, expenses, pending, advances, paidBack] = await Promise.all([
     accountBalances(),
     prisma.payment.aggregate({ where: { status: 'SUCCESS', paidAt: { gte: zonedDayStart(toIso(start), tz), lt: zonedDayStart(toIso(addDays(end, 1)), tz) } }, _sum: { amount: true } }),
     prisma.otherIncome.groupBy({ by: ['categoryId'], where: { incomeDate: { gte: start, lte: end } }, _sum: { amount: true } }),
     prisma.expense.groupBy({ by: ['categoryId'], where: { status: 'APPROVED', expenseDate: { gte: start, lte: end } }, _sum: { amount: true } }),
     prisma.expense.aggregate({ where: { status: 'PENDING' }, _count: true, _sum: { amount: true } }),
+    prisma.staffLoan.aggregate({ where: { issuedOn: { gte: start, lte: end } }, _sum: { amount: true } }),
+    prisma.loanRepayment.aggregate({ where: { accountId: { not: null }, paidOn: { gte: start, lte: end } }, _sum: { amount: true } }),
   ]);
   const cats = await prisma.financeCategory.findMany({ select: { id: true, name: true } });
   const name = (cid: string) => cats.find((c) => c.id === cid)?.name ?? 'Other';
   const byCat = (rows: { categoryId: string; _sum: { amount: Prisma.Decimal | null } }[]) =>
     rows.map((r) => ({ category: name(r.categoryId), amount: D(r._sum.amount ?? 0) })).sort((a, b) => b.amount.comparedTo(a.amount));
   const feeIncome = D(fees._sum.amount ?? 0);
-  const otherIncome = incomes.reduce((t, r) => t.plus(r._sum.amount ?? 0), D(0));
-  const totalExpense = expenses.reduce((t, r) => t.plus(r._sum.amount ?? 0), D(0));
+  // Money view: an advance counts when it is given, its cash repayment when it comes back.
+  const given = D(advances._sum.amount ?? 0);
+  const back = D(paidBack._sum.amount ?? 0);
+  const incomeRows = [...byCat(incomes), ...(back.gt(0) ? [{ category: 'Advances paid back', amount: back }] : [])];
+  const expenseRows = [...byCat(expenses), ...(given.gt(0) ? [{ category: 'Staff advances & loans', amount: given }] : [])].sort((a, b) => b.amount.comparedTo(a.amount));
+  const otherIncome = incomeRows.reduce((t, r) => t.plus(r.amount), D(0));
+  const totalExpense = expenseRows.reduce((t, r) => t.plus(r.amount), D(0));
   return sendSuccess(res, {
     month: q.month,
     accounts: accounts.filter((a) => a.isActive).map((a) => ({ id: a.id, name: a.name, type: a.type, balance: a.balance })),
     totalBalance: accounts.filter((a) => a.isActive).reduce((t, a) => t.plus(a.balance), D(0)),
-    income: { fees: feeIncome, other: otherIncome, total: feeIncome.plus(otherIncome), otherByCategory: byCat(incomes) },
-    expenses: { total: totalExpense, byCategory: byCat(expenses) },
+    income: { fees: feeIncome, other: otherIncome, total: feeIncome.plus(otherIncome), otherByCategory: incomeRows },
+    expenses: { total: totalExpense, byCategory: expenseRows },
     net: feeIncome.plus(otherIncome).minus(totalExpense),
     pendingExpenses: { count: pending._count, amount: D(pending._sum.amount ?? 0) },
   });
@@ -330,6 +337,7 @@ router.post('/expenses/:id/decision', can('expense.approve'), handler(async (req
 router.delete('/expenses/:id', can('finance.manage'), handler(async (req, res) => {
   const expense = await prisma.expense.findFirst({ where: { id: req.params.id } });
   if (!expense) throw new AppError('Expense not found', 404);
+  if (expense.payrollRunId) throw new AppError('This is a paid payroll. It can’t be deleted from here.', 409);
   await prisma.expense.delete({ where: { id: expense.id } });
   await deleteFile(expense.receiptKey);
   return sendSuccess(res, null, expense.status === 'APPROVED' ? `Expense removed; ${D(expense.amount).toFixed(0)} is back in the account` : 'Expense removed');

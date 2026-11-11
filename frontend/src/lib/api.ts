@@ -213,6 +213,51 @@ export const financeAPI = {
   deleteIncome: (id: string) => api.delete(`/finance/income/${id}`),
 };
 
+export type PayrollStatus = 'DRAFT' | 'SUBMITTED' | 'APPROVED' | 'PAID';
+export type PayPart = { name: string; amount: number };
+export type PayrollLine = {
+  id: string; staffId: string; name: string; employeeNo: string; designation: string | null; department: string | null;
+  bankName: string | null; bankAccountTitle: string | null; bankAccountNo: string | null;
+  basic: string; allowances: PayPart[]; fixedDeductions: PayPart[]; gross: string; daysInMonth: number;
+  absentDays: string; unpaidLeaveDays: string; notEmployedDays: string; deductDays: string; deductDaysManual: boolean;
+  absenceDeduction: string; loanDeduction: string; loanManual: boolean; bonus: string; otherDeduction: string;
+  remarks: string | null; totalDeductions: string; net: string;
+};
+export type PayrollRun = {
+  id: string; period: string; label: string; status: PayrollStatus; decisionNote: string | null; paymentDate: string | null;
+  account: string | null; createdBy: string | null; decidedBy: string | null; paidBy: string | null;
+  totals: { staff: number; gross: string; bonus: string; deductions: string; absence: string; loans: string; net: string };
+  lines: PayrollLine[]; missing: { id: string; name: string; employeeNo: string }[];
+};
+
+/** Payroll: monthly runs, payslips, advances and loans. */
+export const payrollAPI = {
+  runs: () => data<any[]>(api.get('/payroll/runs')),
+  prepare: (period: string) => api.post('/payroll/runs', { period }),
+  run: (id: string) => data<PayrollRun>(api.get(`/payroll/runs/${id}`)),
+  recalculate: (id: string, reset = false) => api.post(`/payroll/runs/${id}/recalculate`, { reset }),
+  updateLine: (id: string, body: any) => api.patch(`/payroll/lines/${id}`, body),
+  submit: (id: string) => api.post(`/payroll/runs/${id}/submit`),
+  decide: (id: string, approve: boolean, note?: string) => api.post(`/payroll/runs/${id}/decision`, { approve, note }),
+  reopen: (id: string) => api.post(`/payroll/runs/${id}/reopen`),
+  pay: (id: string, body: { accountId: string; paymentDate: string }) => api.post(`/payroll/runs/${id}/pay`, body),
+  remove: (id: string) => api.delete(`/payroll/runs/${id}`),
+  bankSheet: async (id: string, format: 'xlsx' | 'pdf') => {
+    const res = await api.get(`/payroll/runs/${id}/bank-sheet`, { params: { format }, responseType: 'blob' });
+    const name = /filename="([^"]+)"/.exec(res.headers['content-disposition'] ?? '')?.[1] ?? `salary-transfer.${format}`;
+    const url = URL.createObjectURL(res.data);
+    const a = document.createElement('a');
+    a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  },
+  payslip: (lineId: string) => data<any>(api.get(`/payroll/lines/${lineId}/payslip`)),
+  my: () => data<any>(api.get('/payroll/my')),
+  loans: (params?: { status?: string; staffId?: string }) => data<{ loans: any[]; totals: { outstanding: string; active: number } }>(api.get('/payroll/loans', { params })),
+  addLoan: (body: any) => api.post('/payroll/loans', body),
+  repayLoan: (id: string, body: any) => api.post(`/payroll/loans/${id}/repayments`, body),
+  deleteLoan: (id: string) => api.delete(`/payroll/loans/${id}`),
+};
+
 export const studentsAPI = {
   list: (params?: any) => page(api.get('/students', { params })),
   get: (id: string) => data(api.get(`/students/${id}`)),
