@@ -19,6 +19,10 @@ export const CAN = {
   viewSalary: ['OWNER', 'PRINCIPAL', 'ADMIN', 'ACCOUNTANT'],
   manageSalary: ['ADMIN'],
   viewLeaveBalances: ['OWNER', 'PRINCIPAL', 'ADMIN', 'ACCOUNTANT'],
+  // Finance: money accounts, expenses, other income.
+  viewFinance: ['OWNER', 'PRINCIPAL', 'ACCOUNTANT'],
+  manageFinance: ['ACCOUNTANT'],
+  approveExpense: ['OWNER'],
   viewClasses: ['OWNER', 'PRINCIPAL', 'ADMIN', 'ACCOUNTANT', 'TEACHER'],
   manageClasses: ['PRINCIPAL', 'ADMIN'],
   markAttendance: ['TEACHER', 'PRINCIPAL', 'ADMIN'],

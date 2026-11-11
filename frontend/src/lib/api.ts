@@ -173,6 +173,46 @@ export const hrAPI = {
   me: () => data<any>(api.get('/hr/me')),
 };
 
+export type MoneyAccount = {
+  id: string; name: string; type: 'CASH' | 'BANK' | 'WALLET'; accountNo: string | null; methods: string[];
+  openingBalance: string; openingDate: string; notes: string | null; isActive: boolean; balance: string;
+};
+export type FinanceCategory = { id: string; kind: 'EXPENSE' | 'INCOME'; name: string; isActive: boolean };
+export type MoneyMovement = {
+  id: string; kind: string; date: string; accountId: string; account: string; description: string; reference: string | null;
+  in: string; out: string; balance: string; link?: string; removable?: boolean;
+};
+export type FinanceStatement = { from: string; to: string; opening: string; closing: string; totalIn: string; totalOut: string; rows: MoneyMovement[] };
+
+/** Finance: money accounts, movements, expenses and other income. */
+export const financeAPI = {
+  summary: (month?: string) => data<any>(api.get('/finance/summary', { params: { month } })),
+  accounts: () => data<MoneyAccount[]>(api.get('/finance/accounts')),
+  addAccount: (body: any) => data(api.post('/finance/accounts', body)),
+  updateAccount: (id: string, body: any) => data(api.patch(`/finance/accounts/${id}`, body)),
+  addTransaction: (accountId: string, body: any) => data(api.post(`/finance/accounts/${accountId}/transactions`, body)),
+  transfer: (body: any) => data(api.post('/finance/transfers', body)),
+  deleteTransaction: (id: string) => api.delete(`/finance/transactions/${id}`),
+  statement: (params: { accountId?: string; from?: string; to?: string }) => data<FinanceStatement>(api.get('/finance/transactions', { params })),
+  categories: (kind?: 'EXPENSE' | 'INCOME') => data<FinanceCategory[]>(api.get('/finance/categories', { params: { kind } })),
+  addCategory: (kind: 'EXPENSE' | 'INCOME', name: string) => data(api.post('/finance/categories', { kind, name })),
+  updateCategory: (id: string, body: { name?: string; isActive?: boolean }) => data(api.patch(`/finance/categories/${id}`, body)),
+  settings: () => data<{ expenseApprovalLimit: string | null; canApprove: boolean }>(api.get('/finance/settings')),
+  saveSettings: (expenseApprovalLimit: number | null) => api.put('/finance/settings', { expenseApprovalLimit }),
+  expenses: (params?: any) => page(api.get('/finance/expenses', { params })),
+  addExpense: (body: Record<string, string | number | undefined>, file?: File | null) => {
+    const fd = new FormData();
+    Object.entries(body).forEach(([k, v]) => { if (v !== undefined && v !== '') fd.append(k, String(v)); });
+    if (file) fd.append('file', file);
+    return api.post('/finance/expenses', fd);
+  },
+  decideExpense: (id: string, approve: boolean, note?: string) => api.post(`/finance/expenses/${id}/decision`, { approve, note }),
+  deleteExpense: (id: string) => api.delete(`/finance/expenses/${id}`),
+  income: (params?: any) => page(api.get('/finance/income', { params })),
+  addIncome: (body: any) => api.post('/finance/income', body),
+  deleteIncome: (id: string) => api.delete(`/finance/income/${id}`),
+};
+
 export const studentsAPI = {
   list: (params?: any) => page(api.get('/students', { params })),
   get: (id: string) => data(api.get(`/students/${id}`)),

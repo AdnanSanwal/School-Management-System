@@ -16,7 +16,8 @@ import logger from './logger';
 
 export type NotificationType =
   | 'ATTENDANCE_ABSENT' | 'FEE_DUE' | 'FEE_PAID' | 'DIARY_POSTED' | 'NOTICE_PUBLISHED'
-  | 'RESULT_PUBLISHED' | 'LEAVE_REQUESTED' | 'LEAVE_DECIDED' | 'LOW_ATTENDANCE' | 'PAYMENT_CLAIM' | 'BROADCAST';
+  | 'RESULT_PUBLISHED' | 'LEAVE_REQUESTED' | 'LEAVE_DECIDED' | 'LOW_ATTENDANCE' | 'PAYMENT_CLAIM' | 'BROADCAST'
+  | 'EXPENSE_APPROVAL' | 'EXPENSE_DECIDED';
 
 export interface Message {
   type: NotificationType;

@@ -7,6 +7,7 @@ import { addDays, periodRange, schoolTimezone, schoolToday, toDate, toIso, zoned
 import { guardiansOf, notifyEach } from '../../utils/notify';
 import { messageFamilies } from '../../utils/messaging';
 import { currentAcademicYear } from '../../utils/scope';
+import { accountForMethod } from '../../utils/finance';
 import { allocate, applyConcessions, outstanding, totals, D } from './fees.calc';
 
 export interface GenerateOptions {
@@ -165,6 +166,7 @@ export async function collectPayment(input: CollectInput) {
       data: {
         schoolId, studentId: input.studentId, receiptNo, amount: D(input.amount), method: input.method,
         reference: input.reference, remarks: input.remarks, collectedById: input.collectedById,
+        accountId: await accountForMethod(tx, input.method),
       },
     });
     for (const p of parts) {

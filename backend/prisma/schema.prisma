@@ -34,6 +34,8 @@ model School {
   lowAttendanceThreshold Int      @default(75)
   // Library late fine per day (0 = no fines).
   libraryFinePerDay      Decimal  @default(0) @db.Decimal(12, 2)
+  // Expenses above this amount wait for the owner's approval (null = no approval needed).
+  expenseApprovalLimit   Decimal? @db.Decimal(12, 2)
   // WhatsApp/SMS alerts to guardians' phones (see utils/messaging.ts).
   messagingEnabled       Boolean          @default(false)
   messagingChannel       MessagingChannel @default(SMS)
@@ -840,13 +842,17 @@ model Payment {
   paidAt        DateTime      @default(now())
   collectedById String?
   remarks       String?
+  // Which cash/bank/wallet account received the money (set from the payment method).
+  accountId     String?
 
   student     Student             @relation(fields: [studentId], references: [id])
+  account     MoneyAccount?       @relation(fields: [accountId], references: [id])
   allocations PaymentAllocation[]
 
   @@unique([schoolId, receiptNo])
   @@index([schoolId, paidAt])
   @@index([studentId])
+  @@index([accountId])
   @@map("payments")
 }
 
@@ -1274,6 +1280,143 @@ enum InvoiceStatus {
   PARTIAL
   PAID
   CANCELLED
+}
+
+// ─── Finance: where the school's money sits and what moves through it ───
+
+// Cash in hand, a bank account, or a mobile wallet. Fee payments land in the account
+// whose `methods` include the payment method.
+model MoneyAccount {
+  id             String           @id @default(uuid())
+  schoolId       String
+  name           String           @db.VarChar(80)
+  type           MoneyAccountType @default(CASH)
+  accountNo      String?          @db.VarChar(40)
+  methods        Json // PaymentMethod[] this account receives, e.g. ["CASH"]
+  openingBalance Decimal          @default(0) @db.Decimal(14, 2)
+  openingDate    DateTime         @db.Date
+  notes          String?          @db.VarChar(300)
+  isActive       Boolean          @default(true)
+  createdAt      DateTime         @default(now())
+
+  payments     Payment[]
+  transactions MoneyTransaction[]
+  expenses     Expense[]
+  incomes      OtherIncome[]
+
+  @@unique([schoolId, name])
+  @@map("money_accounts")
+}
+
+// Money moved by hand: deposits, withdrawals, corrections and transfers between accounts.
+model MoneyTransaction {
+  id          String               @id @default(uuid())
+  schoolId    String
+  accountId   String
+  type        MoneyTransactionType
+  amount      Decimal              @db.Decimal(14, 2)
+  txDate      DateTime             @db.Date
+  description String?              @db.VarChar(300)
+  reference   String?              @db.VarChar(100)
+  transferId  String? // the two halves of a transfer share this id
+  createdById String?
+  createdAt   DateTime             @default(now())
+
+  account MoneyAccount @relation(fields: [accountId], references: [id])
+
+  @@index([schoolId, txDate])
+  @@index([accountId, txDate])
+  @@map("money_transactions")
+}
+
+// Expense and other-income headings ("Rent", "Utilities" / "Canteen rent", "Donations").
+model FinanceCategory {
+  id        String              @id @default(uuid())
+  schoolId  String
+  kind      FinanceCategoryKind
+  name      String              @db.VarChar(60)
+  isActive  Boolean             @default(true)
+  createdAt DateTime            @default(now())
+
+  expenses Expense[]
+  incomes  OtherIncome[]
+
+  @@unique([schoolId, kind, name])
+  @@map("finance_categories")
+}
+
+// Money the school spent. Only APPROVED expenses reduce the account; large ones wait
+// for the owner (School.expenseApprovalLimit).
+model Expense {
+  id            String         @id @default(uuid())
+  schoolId      String
+  expenseNo     String
+  categoryId    String
+  accountId     String
+  amount        Decimal        @db.Decimal(14, 2)
+  expenseDate   DateTime       @db.Date
+  paidTo        String?        @db.VarChar(120)
+  description   String         @db.VarChar(500)
+  reference     String?        @db.VarChar(100)
+  receiptKey    String?        @db.VarChar(512) // uploaded bill/receipt (see src/utils/storage.ts)
+  status        ApprovalStatus @default(APPROVED)
+  requestedById String?
+  decidedById   String?
+  decidedAt     DateTime?
+  decisionNote  String?        @db.VarChar(300)
+  createdAt     DateTime       @default(now())
+
+  category FinanceCategory @relation(fields: [categoryId], references: [id])
+  account  MoneyAccount    @relation(fields: [accountId], references: [id])
+
+  @@unique([schoolId, expenseNo])
+  @@index([schoolId, expenseDate])
+  @@index([accountId])
+  @@map("expenses")
+}
+
+// Money received that is not a student fee: canteen rent, uniform sales, donations.
+model OtherIncome {
+  id           String   @id @default(uuid())
+  schoolId     String
+  incomeNo     String
+  categoryId   String
+  accountId    String
+  amount       Decimal  @db.Decimal(14, 2)
+  incomeDate   DateTime @db.Date
+  receivedFrom String?  @db.VarChar(120)
+  description  String   @db.VarChar(500)
+  reference    String?  @db.VarChar(100)
+  createdById  String?
+  createdAt    DateTime @default(now())
+
+  category FinanceCategory @relation(fields: [categoryId], references: [id])
+  account  MoneyAccount    @relation(fields: [accountId], references: [id])
+
+  @@unique([schoolId, incomeNo])
+  @@index([schoolId, incomeDate])
+  @@index([accountId])
+  @@map("other_incomes")
+}
+
+enum MoneyAccountType {
+  CASH
+  BANK
+  WALLET
+}
+
+enum MoneyTransactionType {
+  DEPOSIT
+  WITHDRAWAL
+  ADJUSTMENT_IN
+  ADJUSTMENT_OUT
+  TRANSFER_IN
+  TRANSFER_OUT
+}
+
+enum FinanceCategoryKind {
+  EXPENSE
+  INCOME
 }
 
 enum PaymentMethod {

@@ -12,7 +12,7 @@ import {
   UserCheck, Layers, Wallet, Receipt, AlertTriangle, BadgePercent, FileSpreadsheet, ClipboardCheck,
   KeyRound, School, Home, Megaphone, BookOpen, CalendarDays, PenLine, Clock, Inbox, FileBarChart, Plane,
   Building2, ArrowUpCircle, Bus, Library,
-  CalendarCheck, Banknote, SlidersHorizontal,
+  CalendarCheck, Banknote, SlidersHorizontal, PieChart, Landmark, TrendingDown, TrendingUp,
 } from 'lucide-react';
 import { can, Capability } from '@/lib/roles';
 
@@ -79,7 +79,7 @@ const navGroups: NavGroup[] = [
     ],
   },
   {
-    title: 'Finance',
+    title: 'Fees',
     items: [
       { label: 'Collect fee', href: '/fees', icon: Wallet, cap: 'collectFees' },
       { label: 'Collections', href: '/fees/payments', icon: Receipt, cap: 'viewFees' },
@@ -87,6 +87,15 @@ const navGroups: NavGroup[] = [
       { label: 'Invoices', href: '/fees/invoices', icon: FileSpreadsheet, cap: 'viewFees' },
       { label: 'Concessions', href: '/fees/concessions', icon: BadgePercent, cap: 'viewFees' },
       { label: 'Fee structure', href: '/fees/structure', icon: Layers, cap: 'viewFees' },
+    ],
+  },
+  {
+    title: 'Finance',
+    items: [
+      { label: 'Finance overview', href: '/finance', icon: PieChart, cap: 'viewFinance' },
+      { label: 'Accounts', href: '/finance/accounts', icon: Landmark, cap: 'viewFinance' },
+      { label: 'Expenses', href: '/finance/expenses', icon: TrendingDown, cap: 'viewFinance' },
+      { label: 'Other income', href: '/finance/income', icon: TrendingUp, cap: 'viewFinance' },
     ],
   },
   {
