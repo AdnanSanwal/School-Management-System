@@ -4,6 +4,7 @@ import { sendError } from '../utils/apiResponse';
 import { isRevoked } from '../utils/sessions';
 import { tenantStorage, TenantContext } from '../config/tenancy';
 import { roleOverrides } from '../utils/rolePermissions';
+import { licenceStatus, LOCKED_MESSAGE } from '../utils/licence';
 
 export interface AuthRequest extends Request {
   user?: JwtPayload;
@@ -14,6 +15,8 @@ export interface AuthRequest extends Request {
  * tenant context, so the scoped Prisma client only sees that school's rows.
  */
 const PASSWORD_CHANGE_ALLOWED = /^\/api\/v1\/auth\/(me|change-password|logout)$/;
+// A school whose subscription has run out can still sign in, see why, and sign out.
+const LOCKED_ALLOWED = /^\/api\/v1\/(auth\/|licence(\/|$))/;
 
 export async function authenticate(req: AuthRequest, res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization;
@@ -39,6 +42,11 @@ export async function authenticate(req: AuthRequest, res: Response, next: NextFu
   if (user.role === 'SUPER_ADMIN') ctx = { kind: 'system' };
   else if (user.schoolId) ctx = { kind: 'tenant', schoolId: user.schoolId, roles: await roleOverrides(user.schoolId) };
   else return sendError(res, 'Token has no school', 401);
+
+  if (ctx.kind === 'tenant' && !LOCKED_ALLOWED.test(req.originalUrl.split('?')[0])) {
+    const licence = await licenceStatus(ctx.schoolId);
+    if (licence.state === 'LOCKED') return res.status(402).json({ success: false, code: 'LICENCE_LOCKED', message: LOCKED_MESSAGE, licence });
+  }
 
   req.user = user;
   tenantStorage.run(ctx, () => next());

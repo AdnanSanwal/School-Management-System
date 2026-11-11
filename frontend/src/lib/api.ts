@@ -1,5 +1,5 @@
 import axios, { type InternalAxiosRequestConfig } from 'axios';
-import { useAuthStore } from '@/store/authStore';
+import { useAuthStore, type LicenceStatus } from '@/store/authStore';
 import { activity } from '@/lib/activity';
 
 declare module 'axios' {
@@ -44,6 +44,13 @@ api.interceptors.response.use(
   async (error) => {
     if (error.response?.status === 403 && error.response.data?.code === 'PASSWORD_CHANGE_REQUIRED' && typeof window !== 'undefined' && location.pathname !== '/change-password') {
       window.location.href = '/change-password';
+      return Promise.reject(error);
+    }
+    // The school's subscription has run out: everything but the subscription page is closed.
+    if (error.response?.status === 402 && error.response.data?.code === 'LICENCE_LOCKED' && typeof window !== 'undefined') {
+      const user = useAuthStore.getState().user;
+      if (user) useAuthStore.setState({ user: { ...user, licence: error.response.data.licence } });
+      if (location.pathname !== '/licence') window.location.href = '/licence';
       return Promise.reject(error);
     }
     const original = error.config;
@@ -442,8 +449,17 @@ export type ReportView = {
   totals?: Record<string, string | number | null>; notes?: string[];
 };
 
+/** The school's own subscription: status for everyone, payments and usage for those who run the school. */
+export const licenceAPI = {
+  get: () => data<{ status: LicenceStatus; activeStudents?: number; payments?: { id: string; amount: string; currency: string; paidOn: string; coversUntil: string; method: string | null; reference: string | null; note: string | null }[] }>(api.get('/licence')),
+};
+
 export const platformAPI = {
   schools: () => data<any[]>(api.get('/platform/schools')),
+  licence: (id: string) => data<any>(api.get(`/platform/schools/${id}/licence`)),
+  saveLicence: (id: string, body: any) => api.patch(`/platform/schools/${id}/licence`, body),
+  addPayment: (id: string, body: any) => api.post(`/platform/schools/${id}/licence/payments`, body),
+  deletePayment: (id: string, paymentId: string) => api.delete(`/platform/schools/${id}/licence/payments/${paymentId}`),
   create: (body: any) => data(api.post('/platform/schools', body)),
   setActive: (id: string, isActive: boolean) => data(api.patch(`/platform/schools/${id}/status`, { isActive })),
 };

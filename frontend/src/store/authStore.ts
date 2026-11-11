@@ -3,6 +3,12 @@ import { persist } from 'zustand/middleware';
 
 export type Role = 'SUPER_ADMIN' | 'OWNER' | 'PRINCIPAL' | 'ADMIN' | 'ACCOUNTANT' | 'TEACHER' | 'PARENT' | 'STUDENT';
 
+/** The school's subscription, as worked out by the server. */
+export type LicenceStatus = {
+  state: 'ACTIVE' | 'DUE_SOON' | 'GRACE' | 'LOCKED'; plan: string | null; paidUntil: string | null; daysLeft: number | null;
+  lockDate: string | null; graceDays: number; notifyDays: number; maxStudents: number | null; message: string | null; summary: string;
+};
+
 interface User {
   id: string;
   name: string;
@@ -14,6 +20,7 @@ interface User {
   school?: { id: string; name: string; code: string; logoUrl?: string | null; currency: string } | null;
   /** What this user may do in their school (the school can tune its staff roles). */
   permissions?: string[];
+  licence?: LicenceStatus | null;
 }
 
 interface AuthState {

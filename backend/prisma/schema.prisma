@@ -38,6 +38,14 @@ model School {
   expenseApprovalLimit   Decimal?         @db.Decimal(12, 2)
   // Accounting: nothing dated in or before this month ("2026-10") can be added, changed or removed.
   booksClosedThrough     String?          @db.VarChar(7)
+  // Subscription (set by the platform admin; see src/utils/licence.ts). No paid-until date = no end date.
+  licencePlan            String?          @db.VarChar(60)
+  licencePaidUntil       DateTime?        @db.Date
+  licenceGraceDays       Int              @default(7)
+  licenceNotifyDays      Int              @default(10)
+  licenceOverride        Boolean          @default(false) // keep the school on whatever the date says
+  licenceMessage         String?          @db.VarChar(300)
+  maxStudents            Int? // most active students the plan allows (null = no limit)
   // WhatsApp/SMS alerts to guardians' phones (see utils/messaging.ts).
   messagingEnabled       Boolean          @default(false)
   messagingChannel       MessagingChannel @default(SMS)
@@ -1405,6 +1413,25 @@ model OtherIncome {
   @@index([schoolId, incomeDate])
   @@index([accountId])
   @@map("other_incomes")
+}
+
+// A subscription payment recorded by the platform admin; it moves the school's paid-until date.
+model LicencePayment {
+  id              String    @id @default(uuid())
+  schoolId        String
+  amount          Decimal   @db.Decimal(12, 2)
+  currency        String    @default("PKR") @db.VarChar(8)
+  paidOn          DateTime  @db.Date
+  coversUntil     DateTime  @db.Date // the paid-until date after this payment
+  paidUntilBefore DateTime? @db.Date // what it was before, so a mistaken payment can be undone
+  method          String?   @db.VarChar(40)
+  reference       String?   @db.VarChar(100)
+  note            String?   @db.VarChar(300)
+  recordedById    String?
+  createdAt       DateTime  @default(now())
+
+  @@index([schoolId, paidOn])
+  @@map("licence_payments")
 }
 
 // A school's own change to what a role may do: a permission added to, or taken from,

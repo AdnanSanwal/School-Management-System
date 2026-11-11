@@ -8,6 +8,9 @@ import { useAuthStore } from '@/store/authStore';
 import { useQuery } from '@tanstack/react-query';
 import { authAPI } from '@/lib/api';
 import { allowedIn } from '@/lib/roles';
+import Link from 'next/link';
+import { AlertTriangle } from 'lucide-react';
+import { formatDate } from '@/lib/utils';
 
 /**
  * Keeps the signed-in user's details fresh (name, school, and what they may do), so a change
@@ -22,6 +25,24 @@ function useSessionRefresh() {
     const next = { ...current, ...data };
     if (JSON.stringify(next) !== JSON.stringify(current)) useAuthStore.setState({ user: next });
   }, [data]);
+}
+
+/** Tells the people who run the school when the subscription is about to end or has ended. */
+function LicenceBanner() {
+  const user = useAuthStore((s) => s.user);
+  const l = user?.licence;
+  if (!l || !user || !['OWNER', 'PRINCIPAL', 'ADMIN', 'ACCOUNTANT'].includes(user.role)) return null;
+  if (l.state !== 'DUE_SOON' && l.state !== 'GRACE') return null;
+  const grace = l.state === 'GRACE';
+  return (
+    <Link href="/licence" className={`flex items-center justify-center gap-2 px-4 py-2 text-sm print:hidden ${grace ? 'bg-red-600 text-white hover:bg-red-700' : 'bg-amber-100 text-amber-900 hover:bg-amber-200'}`}>
+      <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+      <span>{grace
+        ? <>The subscription ended on {formatDate(l.paidUntil!)}. The system will lock on <b>{formatDate(l.lockDate!)}</b> unless it is renewed.</>
+        : <>The subscription ends {l.daysLeft === 0 ? 'today' : <>on <b>{formatDate(l.paidUntil!)}</b> ({l.daysLeft} day{l.daysLeft === 1 ? '' : 's'} left)</>}. Please renew it in time.</>}</span>
+      <span className="underline">Details</span>
+    </Link>
+  );
 }
 
 interface DashboardLayoutProps {
@@ -46,19 +67,24 @@ export function DashboardLayout({ children, title, allowedRoles, subtitle, actio
       router.replace('/change-password');
       return;
     }
+    if (user?.licence?.state === 'LOCKED') {
+      router.replace('/licence');
+      return;
+    }
     if (allowedRoles && user && !allowedIn(allowedRoles, user.role)) {
       router.replace('/unauthorized');
     }
   }, [allowedRoles, isAuthenticated, router, user]);
 
   // Must set their own password first: render nothing (no requests) while redirecting.
-  if (user?.mustChangePassword) return null;
+  if (user?.mustChangePassword || user?.licence?.state === 'LOCKED') return null;
 
   return (
     <div className="relative flex h-screen overflow-hidden bg-gradient-to-br from-slate-50 via-indigo-50/40 to-violet-50/40">
       <Sidebar />
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         <Header title={title} />
+        <LicenceBanner />
         <main className="flex-1 overflow-y-auto">
           <div className="p-6 max-w-screen-2xl mx-auto animate-fade-in">
             {/* Optional page header with actions */}

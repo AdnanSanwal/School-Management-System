@@ -1,3 +1,4 @@
+import { licenceStatus } from '../../utils/licence';
 import { Router } from 'express';
 import { z } from 'zod';
 import { Prisma } from '@prisma/client';
@@ -168,6 +169,10 @@ router.post('/', can('student.admit'), handler(async (req, res) => {
   if (fee !== undefined && fee !== null && !hasPermission(me(req).role, 'student.fee.set')) throw new AppError('You cannot set fees', 403);
   await ensureInSchool(prisma.section, body.sectionId, 'Section');
   if (guardians.filter((g) => g.isPrimary).length > 1) throw new AppError('Only one primary guardian', 422);
+  const { maxStudents } = await licenceStatus(currentSchoolId());
+  if (maxStudents !== null && await prisma.student.count({ where: { status: 'ACTIVE' } }) >= maxStudents) {
+    throw new AppError(`Your plan allows ${maxStudents} active students and you have reached it. Ask your provider to raise the limit.`, 409);
+  }
   if (!guardians.some((g) => g.isPrimary)) guardians[0].isPrimary = true;
 
   const schoolId = currentSchoolId();

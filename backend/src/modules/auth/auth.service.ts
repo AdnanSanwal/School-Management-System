@@ -10,6 +10,7 @@ import { sendEmail } from '../../utils/email';
 import { endAllSessions, endSession, newSessionId, saveSession, storedRefreshToken } from '../../utils/sessions';
 import { normalizeUsername, usernameProblem, isUsernameTaken } from '../../utils/usernames';
 import { permissionsFor } from '../../utils/rolePermissions';
+import { licenceStatus } from '../../utils/licence';
 
 // Auth runs before a tenant is known (login, refresh, reset) or concerns only
 // the caller's own User row, so it uses the unscoped client and filters by user id.
@@ -19,9 +20,10 @@ const publicUser = {
   school: { select: { id: true, name: true, code: true, logoUrl: true, currency: true } },
 } as const;
 
-/** The profile plus what this user may do in their school (the web and mobile apps show menus from it). */
+/** The profile plus what this user may do in their school and the school's subscription (the apps show menus and notices from them). */
 async function withPermissions<T extends { role: string; school: { id: string } | null }>(profile: T) {
-  return { ...profile, permissions: await permissionsFor(profile?.role ?? '', profile?.school?.id) };
+  const schoolId = profile?.school?.id;
+  return { ...profile, permissions: await permissionsFor(profile?.role ?? '', schoolId), licence: schoolId ? await licenceStatus(schoolId) : null };
 }
 
 /** Blocks disabled users and users of disabled schools. */
