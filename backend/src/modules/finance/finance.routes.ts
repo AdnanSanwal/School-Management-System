@@ -14,7 +14,7 @@ import { formatNumber, nextNumber } from '../../utils/counter';
 import { notify } from '../../utils/notify';
 import { assertKind, deleteFile, saveFile, signedUrl } from '../../utils/storage';
 import { uploadOne } from '../files/files.routes';
-import { accountBalances, assertCanPay, ensureFinanceSetup, movements } from '../../utils/finance';
+import { accountBalances, assertBooksOpen, assertCanPay, ensureFinanceSetup, movements } from '../../utils/finance';
 import { D } from '../fees/fees.calc';
 
 // Finance: money accounts, hand-entered movements and transfers, expenses (with approval
@@ -30,8 +30,10 @@ router.use((req, _res, next) => {
 });
 
 const positive = money.refine((v) => v > 0, 'must be more than 0');
+/** A date for a new entry: not in the future, not in a closed month. */
 const notFuture = async (iso: string, what: string) => {
   if (toDate(iso) > await schoolToday()) throw new AppError(`${what} can’t be in the future`, 422);
+  await assertBooksOpen(iso);
 };
 
 // ─── Overview ───
@@ -105,6 +107,7 @@ router.post('/accounts', can('finance.manage'), handler(async (req, res) => {
   const b = parseBody(accountBody, req);
   if (await prisma.moneyAccount.findFirst({ where: { name: b.name } })) throw new AppError(`An account called “${b.name}” already exists`, 409);
   const openingDate = b.openingDate ? toDate(b.openingDate) : await schoolToday();
+  if (b.openingBalance) await assertBooksOpen(openingDate);
   await claimMethods(null, b.methods);
   const account = await prisma.moneyAccount.create({
     data: { schoolId: currentSchoolId(), name: b.name, type: b.type, accountNo: b.accountNo || null, methods: b.methods, openingBalance: b.openingBalance, openingDate, notes: b.notes || null },
@@ -120,6 +123,10 @@ router.patch('/accounts/:id', can('finance.manage'), handler(async (req, res) =>
   if (b.isActive === false) {
     const balance = (await accountBalances()).find((a) => a.id === account.id)!.balance;
     if (!balance.isZero()) throw new AppError(`${account.name} still holds ${balance.toFixed(0)}. Transfer it out before closing the account.`, 409);
+  }
+  if (b.openingBalance !== undefined || b.openingDate) {
+    const changes = (b.openingBalance !== undefined && !D(b.openingBalance).eq(account.openingBalance)) || (b.openingDate && b.openingDate !== toIso(account.openingDate));
+    if (changes) { await assertBooksOpen(account.openingDate); if (b.openingDate) await assertBooksOpen(b.openingDate); }
   }
   if (b.methods) await claimMethods(account.id, b.methods);
   const { openingDate, ...rest } = b;
@@ -175,6 +182,7 @@ router.post('/transfers', can('finance.manage'), handler(async (req, res) => {
 router.delete('/transactions/:id', can('finance.manage'), handler(async (req, res) => {
   const tx = await prisma.moneyTransaction.findFirst({ where: { id: req.params.id } });
   if (!tx) throw new AppError('Entry not found', 404);
+  await assertBooksOpen(tx.txDate);
   await prisma.moneyTransaction.deleteMany({ where: tx.transferId ? { transferId: tx.transferId } : { id: tx.id } });
   return sendSuccess(res, null, tx.transferId ? 'Transfer removed from both accounts' : 'Entry removed');
 }));
@@ -319,7 +327,7 @@ router.post('/expenses/:id/decision', can('expense.approve'), handler(async (req
   const expense = await prisma.expense.findFirst({ where: { id: req.params.id }, include: expenseInclude });
   if (!expense) throw new AppError('Expense not found', 404);
   if (expense.status !== 'PENDING') throw new AppError('This expense was already decided', 409);
-  if (b.approve) await assertCanPay(expense.accountId, expense.amount, 'this expense');
+  if (b.approve) { await assertBooksOpen(expense.expenseDate); await assertCanPay(expense.accountId, expense.amount, 'this expense'); }
   const { count } = await prisma.expense.updateMany({
     where: { id: expense.id, status: 'PENDING' },
     data: { status: b.approve ? 'APPROVED' : 'REJECTED', decidedById: me(req).id, decidedAt: new Date(), decisionNote: b.note || null },
@@ -338,6 +346,7 @@ router.delete('/expenses/:id', can('finance.manage'), handler(async (req, res) =
   const expense = await prisma.expense.findFirst({ where: { id: req.params.id } });
   if (!expense) throw new AppError('Expense not found', 404);
   if (expense.payrollRunId) throw new AppError('This is a paid payroll. It can’t be deleted from here.', 409);
+  if (expense.status === 'APPROVED') await assertBooksOpen(expense.expenseDate);
   await prisma.expense.delete({ where: { id: expense.id } });
   await deleteFile(expense.receiptKey);
   return sendSuccess(res, null, expense.status === 'APPROVED' ? `Expense removed; ${D(expense.amount).toFixed(0)} is back in the account` : 'Expense removed');
@@ -394,6 +403,7 @@ router.post('/income', can('finance.manage'), handler(async (req, res) => {
 router.delete('/income/:id', can('finance.manage'), handler(async (req, res) => {
   const income = await prisma.otherIncome.findFirst({ where: { id: req.params.id } });
   if (!income) throw new AppError('Income entry not found', 404);
+  await assertBooksOpen(income.incomeDate);
   await assertCanPay(income.accountId, income.amount, 'removing this income');
   await prisma.otherIncome.delete({ where: { id: income.id } });
   return sendSuccess(res, null, 'Income entry removed');

@@ -1,7 +1,8 @@
 import { Prisma, PaymentMethod } from '@prisma/client';
 import prisma, { ScopedTx } from '../config/database';
 import { currentSchoolId } from '../config/tenancy';
-import { addDays, dayInTimezone, schoolTimezone, schoolToday, toIso, zonedDayStart } from './dates';
+import { addDays, dayInTimezone, periodOf, schoolTimezone, schoolToday, toDate, toIso, zonedDayStart } from './dates';
+import { AppError } from '../middleware/errorHandler';
 import { currentAcademicYear } from './scope';
 import { D } from '../modules/fees/fees.calc';
 
@@ -10,6 +11,7 @@ import { D } from '../modules/fees/fees.calc';
 //   opening + fee payments + other income + deposits/transfers in
 //           − approved expenses − withdrawals/transfers out
 //           − staff advances/loans given + their repayments in cash
+//           ± journal entries made by hand on the account
 
 const DEFAULT_ACCOUNTS: { name: string; type: 'CASH' | 'BANK' | 'WALLET'; methods: PaymentMethod[] }[] = [
   { name: 'Cash in hand', type: 'CASH', methods: ['CASH'] },
@@ -73,7 +75,7 @@ export async function accountBalances(opts: { before?: Date } = {}) {
   const tz = await schoolTimezone();
   const dateLt = opts.before ? { lt: opts.before } : undefined;
   const paidLt = opts.before ? { lt: zonedDayStart(toIso(opts.before), tz) } : undefined;
-  const [accounts, fees, incomes, expenses, manual, loans, repaid] = await Promise.all([
+  const [accounts, fees, incomes, expenses, manual, loans, repaid, journals] = await Promise.all([
     prisma.moneyAccount.findMany({ orderBy: [{ isActive: 'desc' }, { createdAt: 'asc' }] }),
     prisma.payment.groupBy({ by: ['accountId'], where: { status: 'SUCCESS', accountId: { not: null }, ...(paidLt ? { paidAt: paidLt } : {}) }, _sum: { amount: true } }),
     prisma.otherIncome.groupBy({ by: ['accountId'], where: dateLt ? { incomeDate: dateLt } : {}, _sum: { amount: true } }),
@@ -81,6 +83,7 @@ export async function accountBalances(opts: { before?: Date } = {}) {
     prisma.moneyTransaction.groupBy({ by: ['accountId', 'type'], where: dateLt ? { txDate: dateLt } : {}, _sum: { amount: true } }),
     prisma.staffLoan.groupBy({ by: ['accountId'], where: dateLt ? { issuedOn: dateLt } : {}, _sum: { amount: true } }),
     prisma.loanRepayment.groupBy({ by: ['accountId'], where: { accountId: { not: null }, ...(dateLt ? { paidOn: dateLt } : {}) }, _sum: { amount: true } }),
+    prisma.journalLine.groupBy({ by: ['moneyAccountId'], where: { moneyAccountId: { not: null }, ...(dateLt ? { date: dateLt } : {}) }, _sum: { debit: true, credit: true } }),
   ]);
   const of = (rows: { accountId: string | null; _sum: { amount: Prisma.Decimal | null } }[], id: string) => D(rows.find((r) => r.accountId === id)?._sum.amount ?? 0);
   return accounts.map((a) => {
@@ -88,7 +91,9 @@ export async function accountBalances(opts: { before?: Date } = {}) {
       .reduce((t, m) => ((IN_TYPES as readonly string[]).includes(m.type) ? t.plus(m._sum.amount ?? 0) : t.minus(m._sum.amount ?? 0)), D(0));
     // Before the opening date the account didn't exist yet.
     const opening = opts.before && opts.before <= a.openingDate ? D(0) : D(a.openingBalance);
-    return { ...a, methods: methodsOf(a), balance: opening.plus(of(fees, a.id)).plus(of(incomes, a.id)).minus(of(expenses, a.id)).plus(moved).minus(of(loans, a.id)).plus(of(repaid, a.id)) };
+    const j = journals.find((x) => x.moneyAccountId === a.id);
+    const journal = D(j?._sum.debit ?? 0).minus(j?._sum.credit ?? 0);
+    return { ...a, methods: methodsOf(a), balance: opening.plus(of(fees, a.id)).plus(of(incomes, a.id)).minus(of(expenses, a.id)).plus(moved).minus(of(loans, a.id)).plus(of(repaid, a.id)).plus(journal) };
   });
 }
 
@@ -97,7 +102,7 @@ export async function accountBalance(accountId: string) {
 }
 
 export type Movement = {
-  id: string; kind: 'FEE' | 'INCOME' | 'EXPENSE' | 'OPENING' | 'ADVANCE' | 'LOAN_REPAYMENT' | (typeof IN_TYPES)[number] | 'WITHDRAWAL' | 'ADJUSTMENT_OUT' | 'TRANSFER_OUT';
+  id: string; kind: 'FEE' | 'INCOME' | 'EXPENSE' | 'OPENING' | 'ADVANCE' | 'LOAN_REPAYMENT' | 'JOURNAL' | (typeof IN_TYPES)[number] | 'WITHDRAWAL' | 'ADJUSTMENT_OUT' | 'TRANSFER_OUT';
   date: string; accountId: string; description: string; reference: string | null;
   in: Prisma.Decimal; out: Prisma.Decimal;
   /** Where to open the source record in the app. */
@@ -111,7 +116,7 @@ export async function movements(opts: { accountId?: string; from: Date; to: Date
   const tz = await schoolTimezone();
   const acc = opts.accountId ? { accountId: opts.accountId } : {};
   const range = { gte: opts.from, lte: opts.to };
-  const [fees, incomes, expenses, manual, opened, loans, repaid] = await Promise.all([
+  const [fees, incomes, expenses, manual, opened, loans, repaid, journals] = await Promise.all([
     prisma.payment.findMany({
       where: { status: 'SUCCESS', ...(opts.accountId ? acc : { accountId: { not: null } }), paidAt: { gte: zonedDayStart(toIso(opts.from), tz), lt: zonedDayStart(toIso(addDays(opts.to, 1)), tz) } },
       select: { id: true, accountId: true, amount: true, paidAt: true, receiptNo: true, reference: true, method: true, student: { select: { name: true } } },
@@ -122,6 +127,7 @@ export async function movements(opts: { accountId?: string; from: Date; to: Date
     prisma.moneyAccount.findMany({ where: { ...(opts.accountId ? { id: opts.accountId } : {}), openingDate: range, openingBalance: { not: 0 } } }),
     prisma.staffLoan.findMany({ where: { ...acc, issuedOn: range }, include: { staff: { select: { name: true } } } }),
     prisma.loanRepayment.findMany({ where: { ...(opts.accountId ? acc : { accountId: { not: null } }), paidOn: range }, include: { loan: { select: { loanNo: true, staff: { select: { name: true } } } } } }),
+    prisma.journalLine.findMany({ where: { ...(opts.accountId ? { moneyAccountId: opts.accountId } : { moneyAccountId: { not: null } }), date: range }, include: { entry: true } }),
   ]);
   const Z = D(0);
   const label: Record<string, string> = { DEPOSIT: 'Deposit', WITHDRAWAL: 'Withdrawal', ADJUSTMENT_IN: 'Adjustment (in)', ADJUSTMENT_OUT: 'Adjustment (out)', TRANSFER_IN: 'Transfer in', TRANSFER_OUT: 'Transfer out' };
@@ -147,6 +153,10 @@ export async function movements(opts: { accountId?: string; from: Date; to: Date
       id: r.id, kind: 'LOAN_REPAYMENT' as const, date: toIso(r.paidOn), accountId: r.accountId!,
       description: `Advance / loan paid back — ${r.loan.staff.name}`, reference: r.loan.loanNo, in: D(r.amount), out: Z, link: '/payroll/loans', at: r.createdAt.getTime(),
     })),
+    ...journals.map((j) => ({
+      id: j.id, kind: 'JOURNAL' as const, date: toIso(j.date), accountId: j.moneyAccountId!, description: `Journal — ${j.entry.description}`,
+      reference: j.entry.entryNo, in: D(j.debit), out: D(j.credit), link: '/accounting/journal', at: j.entry.createdAt.getTime(),
+    })),
     ...manual.map((m) => {
       const isIn = (IN_TYPES as readonly string[]).includes(m.type);
       return {
@@ -164,7 +174,16 @@ export async function assertCanPay(accountId: string, amount: Prisma.Decimal.Val
   const account = (await accountBalances()).find((a) => a.id === accountId);
   if (!account) return;
   if (account.balance.lt(amount)) {
-    const { AppError } = await import('../middleware/errorHandler');
     throw new AppError(`${account.name} has only ${account.balance.toFixed(0)}; ${what} needs ${D(amount).toFixed(0)}. Record the deposit or correct the opening balance first.`, 409);
+  }
+}
+
+/** Refuses anything dated in a month whose books are closed. */
+export async function assertBooksOpen(date: Date | string) {
+  const school = await prisma.school.findUniqueOrThrow({ where: { id: currentSchoolId() }, select: { booksClosedThrough: true } });
+  const closed = school.booksClosedThrough;
+  if (closed && periodOf(typeof date === 'string' ? toDate(date) : date) <= closed) {
+    const label = new Intl.DateTimeFormat('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${closed}-01T00:00:00Z`));
+    throw new AppError(`The books are closed up to ${label}. Use a later date, or ask the owner to reopen the month.`, 409);
   }
 }

@@ -12,7 +12,7 @@ import {
   UserCheck, Layers, Wallet, Receipt, AlertTriangle, BadgePercent, FileSpreadsheet, ClipboardCheck,
   KeyRound, School, Home, Megaphone, BookOpen, CalendarDays, PenLine, Clock, Inbox, FileBarChart, Plane,
   Building2, ArrowUpCircle, Bus, Library,
-  CalendarCheck, Banknote, SlidersHorizontal, PieChart, Landmark, TrendingDown, TrendingUp, HandCoins, ReceiptText, CircleDollarSign,
+  CalendarCheck, Banknote, SlidersHorizontal, PieChart, Landmark, TrendingDown, TrendingUp, HandCoins, ReceiptText, CircleDollarSign, Scale, BookText, ListTree,
 } from 'lucide-react';
 import { can, Capability } from '@/lib/roles';
 
@@ -99,6 +99,9 @@ const navGroups: NavGroup[] = [
       { label: 'Accounts', href: '/finance/accounts', icon: Landmark, cap: 'viewFinance' },
       { label: 'Expenses', href: '/finance/expenses', icon: TrendingDown, cap: 'viewFinance' },
       { label: 'Other income', href: '/finance/income', icon: TrendingUp, cap: 'viewFinance' },
+      { label: 'Statements', href: '/accounting', icon: Scale, cap: 'viewFinance' },
+      { label: 'Journal', href: '/accounting/journal', icon: BookText, cap: 'viewFinance' },
+      { label: 'Chart of accounts', href: '/accounting/chart', icon: ListTree, cap: 'viewFinance' },
     ],
   },
   {

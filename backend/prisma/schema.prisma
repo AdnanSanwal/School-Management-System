@@ -36,6 +36,8 @@ model School {
   libraryFinePerDay      Decimal          @default(0) @db.Decimal(12, 2)
   // Expenses above this amount wait for the owner's approval (null = no approval needed).
   expenseApprovalLimit   Decimal?         @db.Decimal(12, 2)
+  // Accounting: nothing dated in or before this month ("2026-10") can be added, changed or removed.
+  booksClosedThrough     String?          @db.VarChar(7)
   // WhatsApp/SMS alerts to guardians' phones (see utils/messaging.ts).
   messagingEnabled       Boolean          @default(false)
   messagingChannel       MessagingChannel @default(SMS)
@@ -1403,6 +1405,78 @@ model OtherIncome {
   @@index([schoolId, incomeDate])
   @@index([accountId])
   @@map("other_incomes")
+}
+
+// ─── Accounting ledger ───
+// The ledger is worked out from the records themselves (fee payments, expenses, income,
+// payroll, advances, transfers), so it can never disagree with them. Only the chart of
+// accounts and hand-made journal entries are stored.
+
+model LedgerAccount {
+  id             String            @id @default(uuid())
+  schoolId       String
+  code           String            @db.VarChar(10)
+  name           String            @db.VarChar(100)
+  type           LedgerAccountType
+  // Built-in accounts: FEE_INCOME, STAFF_ADVANCES, OPENING_EQUITY, OWNER, ADJUSTMENT_GAIN, ADJUSTMENT_LOSS.
+  systemKey      String?           @db.VarChar(30)
+  // An account that mirrors a money account or an expense / income category follows its name.
+  moneyAccountId String?           @unique
+  categoryId     String?           @unique
+  isActive       Boolean           @default(true)
+  createdAt      DateTime          @default(now())
+
+  lines JournalLine[]
+
+  @@unique([schoolId, code])
+  @@unique([schoolId, systemKey])
+  @@map("ledger_accounts")
+}
+
+// A journal entry made by hand (everything else posts itself).
+model JournalEntry {
+  id          String   @id @default(uuid())
+  schoolId    String
+  entryNo     String
+  date        DateTime @db.Date
+  description String   @db.VarChar(300)
+  reference   String?  @db.VarChar(100)
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  lines JournalLine[]
+
+  @@unique([schoolId, entryNo])
+  @@index([schoolId, date])
+  @@map("journal_entries")
+}
+
+model JournalLine {
+  id             String   @id @default(uuid())
+  schoolId       String
+  entryId        String
+  accountId      String
+  debit          Decimal  @default(0) @db.Decimal(14, 2)
+  credit         Decimal  @default(0) @db.Decimal(14, 2)
+  // Copied from the entry / account so balances can be summed without joins.
+  date           DateTime @db.Date
+  moneyAccountId String?
+
+  entry   JournalEntry  @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  account LedgerAccount @relation(fields: [accountId], references: [id])
+
+  @@index([schoolId, date])
+  @@index([accountId])
+  @@index([moneyAccountId])
+  @@map("journal_lines")
+}
+
+enum LedgerAccountType {
+  ASSET
+  LIABILITY
+  EQUITY
+  INCOME
+  EXPENSE
 }
 
 // ─── Payroll ───

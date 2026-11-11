@@ -258,6 +258,29 @@ export const payrollAPI = {
   deleteLoan: (id: string) => api.delete(`/payroll/loans/${id}`),
 };
 
+export type LedgerAccountType = 'ASSET' | 'LIABILITY' | 'EQUITY' | 'INCOME' | 'EXPENSE';
+export type LedgerAccountRow = { id: string; code: string; name: string; type: LedgerAccountType; isActive: boolean; link: 'MONEY' | 'CATEGORY' | 'SYSTEM' | null; systemKey: string | null; balance: string; journalLines: number };
+export type StatementRow = { id: string; code: string; name: string; type: LedgerAccountType; amount: string };
+export type JournalEntryView = { id: string; kind: string; date: string; reference: string | null; description: string; manual?: boolean; lines: { accountId: string; code: string; name: string; debit: string; credit: string }[] };
+
+/** Accounting: chart of accounts, journal, statements, month closing. */
+export const ledgerAPI = {
+  accounts: () => data<LedgerAccountRow[]>(api.get('/ledger/accounts')),
+  addAccount: (body: { name: string; type: string; code?: string }) => api.post('/ledger/accounts', body),
+  updateAccount: (id: string, body: { name?: string; code?: string; isActive?: boolean }) => api.patch(`/ledger/accounts/${id}`, body),
+  deleteAccount: (id: string) => api.delete(`/ledger/accounts/${id}`),
+  journal: (params: { from?: string; to?: string }) => data<{ from: string; to: string; total: string; entries: JournalEntryView[] }>(api.get('/ledger/journal', { params })),
+  accountLedger: (id: string, params: { from?: string; to?: string }) => data<any>(api.get(`/ledger/accounts/${id}/ledger`, { params })),
+  trialBalance: (asOf?: string) => data<{ asOf: string; rows: (StatementRow & { debit: string; credit: string })[]; debit: string; credit: string; balanced: boolean }>(api.get('/ledger/trial-balance', { params: { asOf } })),
+  incomeStatement: (params: { from?: string; to?: string }) => data<{ from: string; to: string; income: { rows: StatementRow[]; total: string }; expenses: { rows: StatementRow[]; total: string }; surplus: string }>(api.get('/ledger/income-statement', { params })),
+  balanceSheet: (asOf?: string) => data<{ asOf: string; assets: { rows: StatementRow[]; total: string }; liabilities: { rows: StatementRow[]; total: string }; equity: { rows: StatementRow[]; surplus: string; total: string }; liabilitiesAndEquity: string; balanced: boolean }>(api.get('/ledger/balance-sheet', { params: { asOf } })),
+  addJournal: (body: any) => api.post('/ledger/journals', body),
+  deleteJournal: (id: string) => api.delete(`/ledger/journals/${id}`),
+  closing: () => data<{ closedThrough: string | null; closedLabel: string | null; canCloseThrough: string | null; canClose: boolean; canReopen: boolean }>(api.get('/ledger/closing')),
+  close: (period: string) => api.post('/ledger/close', { period }),
+  reopen: (period: string) => api.post('/ledger/reopen', { period }),
+};
+
 export const studentsAPI = {
   list: (params?: any) => page(api.get('/students', { params })),
   get: (id: string) => data(api.get(`/students/${id}`)),

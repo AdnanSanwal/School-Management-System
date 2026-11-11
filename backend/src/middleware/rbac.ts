@@ -22,6 +22,7 @@ export const PERMISSIONS = [
   'hr.manage', 'salary.view', 'salary.manage',
   'finance.view', 'finance.manage', 'expense.approve',
   'payroll.view', 'payroll.manage', 'payroll.approve',
+  'books.reopen',
   'class.view', 'class.manage',
   'attendance.student.mark', 'attendance.student.view', 'attendance.student.correct',
   'attendance.staff.mark', 'attendance.staff.view',
@@ -60,7 +61,7 @@ export const ROLE_PERMISSIONS: Record<Role, ReadonlySet<Permission>> = {
     'school.manage', 'users.manage', 'dashboard.owner',
     'reports.finance', 'reports.attendance', 'reports.academic',
     'transport.view', 'library.view', 'audit.view', 'salary.view',
-    'finance.view', 'expense.approve', 'payroll.view', 'payroll.approve',
+    'finance.view', 'expense.approve', 'payroll.view', 'payroll.approve', 'books.reopen',
   ]),
 
   // Academic + administrative head; approvals. No fee collection or fee-structure edits.

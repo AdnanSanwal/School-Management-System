@@ -12,7 +12,7 @@ import { periodOf, periodRange, schoolToday, toDate, toIso } from '../../utils/d
 import { formatNumber, nextNumber } from '../../utils/counter';
 import { notify } from '../../utils/notify';
 import { staffForUser } from '../../utils/scope';
-import { assertCanPay, ensureFinanceSetup } from '../../utils/finance';
+import { assertBooksOpen, assertCanPay, ensureFinanceSetup } from '../../utils/finance';
 import { buildLines, lineTotals, monthLabel, outstandingLoans, runTotals } from '../../utils/payroll';
 import { toPdf, toXlsx } from '../../utils/tableReport';
 import { D } from '../fees/fees.calc';
@@ -186,6 +186,7 @@ router.post('/runs/:id/pay', can('payroll.manage'), handler(async (req, res) => 
   const run = await runOr404(req.params.id);
   if (run.status !== 'APPROVED') throw new AppError(run.status === 'PAID' ? 'This payroll is already paid' : 'The owner has not approved this payroll yet', 409);
   if (toDate(b.paymentDate) > await schoolToday()) throw new AppError('The payment date can’t be in the future', 422);
+  await assertBooksOpen(b.paymentDate);
   const account = await prisma.moneyAccount.findFirst({ where: { id: b.accountId, isActive: true } });
   if (!account) throw new AppError('Choose the account to pay from', 422);
   const lines = await prisma.payrollLine.findMany({ where: { runId: run.id }, include: { staff: { select: { userId: true } } } });
@@ -367,6 +368,7 @@ router.post('/loans', can('payroll.manage'), handler(async (req, res) => {
   if (!staff) throw new AppError('Choose an active staff member', 422);
   if (!account) throw new AppError('Choose the account it is paid from', 422);
   if (toDate(b.issuedOn) > await schoolToday()) throw new AppError('The date can’t be in the future', 422);
+  await assertBooksOpen(b.issuedOn);
   // An advance comes back in one go; a loan in the instalments given.
   const installment = b.kind === 'ADVANCE' ? b.installment ?? b.amount : b.installment;
   if (!installment) throw new AppError('Enter the monthly instalment', 422);
@@ -391,6 +393,7 @@ router.post('/loans/:id/repayments', can('payroll.manage'), handler(async (req, 
   if (D(b.amount).gt(loan.outstanding)) throw new AppError(`Only ${loan.outstanding.toFixed(0)} is still owed`, 422);
   if (toDate(b.paidOn) > await schoolToday()) throw new AppError('The date can’t be in the future', 422);
   if (toDate(b.paidOn) < loan.issuedOn) throw new AppError('It can’t be paid back before it was given', 422);
+  await assertBooksOpen(b.paidOn);
   const account = await prisma.moneyAccount.findFirst({ where: { id: b.accountId, isActive: true } });
   if (!account) throw new AppError('Choose the account that received it', 422);
   await assertStillCovers(loan.staffId, b.amount);
@@ -406,6 +409,7 @@ router.delete('/loans/:id', can('payroll.manage'), handler(async (req, res) => {
   const loan = await prisma.staffLoan.findFirst({ where: { id: req.params.id }, include: { _count: { select: { repayments: true } } } });
   if (!loan) throw new AppError('Not found', 404);
   if (loan._count.repayments) throw new AppError('Part of this has already been paid back, so it can’t be deleted', 409);
+  await assertBooksOpen(loan.issuedOn);
   await assertStillCovers(loan.staffId, loan.amount);
   await prisma.staffLoan.delete({ where: { id: loan.id } });
   return sendSuccess(res, null, `${loan.loanNo} deleted; ${D(loan.amount).toFixed(0)} is back in the account`);
