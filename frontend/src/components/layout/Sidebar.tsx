@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useQueryClient } from '@tanstack/react-query';
 import { prefetchPage } from '@/lib/prefetch';
@@ -125,11 +125,17 @@ const navGroups: NavGroup[] = [
   },
 ];
 
+// Every page renders its own DashboardLayout, so the sidebar mounts afresh on each
+// navigation. Keep its scroll position and collapsed state here so they survive that.
+const kept = { scrollTop: 0, collapsed: false };
+
 export function Sidebar() {
   const pathname = usePathname();
   const { user } = useAuthStore();
   const qc = useQueryClient();
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsedState] = useState(kept.collapsed);
+  const setCollapsed = (f: (c: boolean) => boolean) => setCollapsedState((c) => (kept.collapsed = f(c)));
+  const navRef = useRef<HTMLElement>(null);
 
   const role = user?.role || '';
 
@@ -156,6 +162,20 @@ export function Sidebar() {
   })).filter(g => g.items.length > 0);
 
   const allHrefs = dedupedGroups.flatMap((g) => g.items.map((i) => i.href));
+
+  // Put the menu back where the user left it, before the browser paints.
+  useLayoutEffect(() => {
+    const nav = navRef.current;
+    if (!nav || allHrefs.length === 0) return;
+    nav.scrollTop = kept.scrollTop;
+    // If the open page's link is out of view (e.g. reached from elsewhere), bring it in.
+    const active = nav.querySelector<HTMLElement>('[aria-current="page"]');
+    if (active) {
+      const a = active.getBoundingClientRect(), n = nav.getBoundingClientRect();
+      if (a.top < n.top || a.bottom > n.bottom) active.scrollIntoView({ block: 'nearest' });
+    }
+    // Re-run once the links exist: on the first render the signed-in user may not be loaded yet.
+  }, [pathname, allHrefs.length]);
 
   return (
     <aside
@@ -191,7 +211,7 @@ export function Sidebar() {
       </button>
 
       {/* Nav */}
-      <nav className="flex-1 overflow-y-auto scrollbar-hide py-3 px-2">
+      <nav ref={navRef} onScroll={(e) => { kept.scrollTop = e.currentTarget.scrollTop; }} onClickCapture={(e) => { kept.scrollTop = e.currentTarget.scrollTop; }} className="flex-1 overflow-y-auto scrollbar-hide py-3 px-2">
         {dedupedGroups.map((group) => (
           <div key={group.title} className="mb-1">
             {!collapsed && (
