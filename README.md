@@ -30,6 +30,7 @@ and owners.
 - [Run with Docker](#run-with-docker)
 - [Configuration](#configuration)
 - [HR, finance, roles and subscriptions](#hr-finance-roles-and-subscriptions)
+- [Roles and logins](#roles-and-logins)
 - [Adding a real school](#adding-a-real-school)
 - [Deploy to a server](#deploy-to-a-server)
 - [Tests](#tests)
@@ -295,9 +296,8 @@ Every school gets all of these; what a person sees depends on their role, not on
 
 **Roles and permissions** (owner → Settings → Roles & permissions)
 
-- The owner chooses what Principal, Office admin, Accountant and Teacher may do in their school.
-  Changes apply at once, to that school only. The owner always keeps full access; parents and
-  students only ever see their own information.
+- The owner chooses what each role may do in their school and which logins each role may create.
+  Changes apply at once, to that school only. See [Roles and logins](#roles-and-logins).
 
 **Subscriptions** (platform admin → Schools → Subscription)
 
@@ -306,6 +306,82 @@ Every school gets all of these; what a person sees depends on their role, not on
 - The school sees a notice before the end date and during the grace days. After that it is
   **locked**: people can sign in and see why, but nothing else works until it is renewed. Nothing is
   deleted. A school with no paid-until date never expires.
+
+## Roles and logins
+
+### The roles
+
+There are eight fixed roles. A person has exactly one, set on their login. A school cannot invent
+new roles; it tunes what the existing ones may do.
+
+| Role | Who they are | What they see |
+|---|---|---|
+| Platform admin | The provider | All schools and their subscriptions; nothing inside a school |
+| Owner | The school's owner | Everything in their school; approves payroll and large expenses |
+| Principal | Academic and administrative head | Whole school; approves leave, results, concessions |
+| Office admin | Front office | Admissions, staff records, fees, settings |
+| Accountant | Finance | Fees, expenses, payroll, the books |
+| Teacher | Class or subject teacher | Only their own classes |
+| Parent | Guardian | Only their own children |
+| Student | Pupil | Only their own record |
+
+### Who can create which logins
+
+The owner decides this per role under **Settings → Roles & permissions → May create logins for**.
+
+| Creator | Standard | What the owner can allow |
+|---|---|---|
+| Platform admin | A school with its first owner | (fixed) |
+| Owner | Every school role, including another owner | (fixed) |
+| Principal | Office admin, Accountant, Teacher, Parent, Student | Any of these, or fewer |
+| Office admin | Accountant, Teacher, Parent, Student | Any of these, or fewer |
+| Accountant | Nobody | Teacher, Parent, Student |
+| Teacher | Nobody | Parent, Student |
+| Parent, Student | Nobody | (fixed) |
+
+- A role can only be allowed to create roles below it. Only an owner can create an owner.
+- Whoever may create a role may also disable those logins and reset their passwords. Nobody can
+  change their own account this way.
+- A role allowed to create nothing does not see **Users & logins**.
+- Platform admins are not created from the app; see
+  [docs/DEPLOY.md](docs/DEPLOY.md#4-first-login-the-platform-admin).
+
+### How a login is created
+
+Every login is tied to the right record, so it sees the right data.
+
+| For | Where | Linked to |
+|---|---|---|
+| Owner | Platform admin → Schools → New school; or an owner under Users & logins | The school |
+| Principal, Office admin, Accountant | Users & logins → Add login → Office user; or the Staff page | A staff record (created automatically) |
+| Teacher | Staff page (when adding staff, or "Give login"); or Users & logins → Add login → Teacher | Their staff record |
+| Parent | Student profile → Create parent login; or Users & logins → Add login → Parent | The guardian, so it covers all their children |
+| Student | Student profile → Create student login; or Users & logins → Add login → Student | That student |
+
+The creator sets a username (or email) and a starting password. The person must choose their own
+password the first time they sign in. Changing someone's role signs them out everywhere.
+
+### What a role may do
+
+Each role has a standard set of permissions. The owner can change it per school under
+**Settings → Roles & permissions**; all seven school roles are listed there.
+
+- **Principal, Office admin, Accountant, Teacher**: the owner ticks or unticks what each may do.
+- **Parent, Student**: their own view (profile, attendance, diary, results) is always on. Fees,
+  homework ticks, transport and library can be switched. Fees are off for students as standard and
+  can be switched on.
+- **Owner**: always full access; this cannot be limited, and only the owner opens this screen.
+- **Guard rails**: approvals (payroll, large expenses, results, concessions, timetable, reopening a
+  closed month) can be given only to the principal. Teachers stay inside their own classes and can
+  gain only a few school-wide jobs (notices, the calendar, the library).
+- Everyone can read notices, the calendar and the timetable.
+
+### What parents and students get
+
+- **Web**: "My children" (parent) or "My school record" (student) with overview, attendance
+  calendar, diary and homework, exams and results, timetable, library and transport, plus fees
+  where allowed. A parent with several children switches between them.
+- **Mobile app**: the same, plus paying fees online for parents.
 
 ## Adding a real school
 
