@@ -46,6 +46,8 @@ export const PERMISSIONS = [
 
 export type Permission = (typeof PERMISSIONS)[number];
 
+const OWNER_EXCLUDED: Permission[] = ['platform.manage', 'diary.post', 'leave.apply', 'fee.pay', 'homework.mark'];
+
 const EVERYONE_IN_SCHOOL: Permission[] = ['notice.view', 'calendar.view', 'timetable.view', 'exam.view'];
 
 const READ_ALL: Permission[] = [
@@ -56,14 +58,11 @@ const READ_ALL: Permission[] = [
 export const ROLE_PERMISSIONS: Record<Role, ReadonlySet<Permission>> = {
   SUPER_ADMIN: new Set<Permission>(['platform.manage']),
 
-  // Business owner: sees everything, reports; no day-to-day entry.
-  OWNER: new Set<Permission>([
-    ...EVERYONE_IN_SCHOOL, ...READ_ALL,
-    'school.manage', 'users.manage', 'dashboard.owner',
-    'reports.finance', 'reports.attendance', 'reports.academic',
-    'transport.view', 'library.view', 'audit.view', 'salary.view',
-    'finance.view', 'expense.approve', 'payroll.view', 'payroll.approve', 'books.reopen', 'roles.manage',
-  ]),
+  // Business owner: full rights over everything in the school — every permission a staff
+  // role can hold, plus the owner's own (roles, approvals, closed months). Left out are only
+  // personal actions that belong to a person, not a rank: posting to the diary as the
+  // teacher, applying for one's own leave, and a parent's online payment / homework ticks.
+  OWNER: new Set<Permission>(PERMISSIONS.filter((p) => !OWNER_EXCLUDED.includes(p))),
 
   // Academic + administrative head; approvals. No fee collection or fee-structure edits.
   PRINCIPAL: new Set<Permission>([

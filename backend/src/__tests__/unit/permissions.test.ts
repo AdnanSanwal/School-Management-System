@@ -2,12 +2,14 @@ import { hasPermission, ROLE_PERMISSIONS, PERMISSIONS } from '../../middleware/r
 
 // Checks the key rules from the ERP spec's role tables (sections 4–11).
 describe('role permissions follow the ERP spec', () => {
-  it('owner can view and report but does not do day-to-day entry', () => {
-    expect(hasPermission('OWNER', 'dashboard.owner')).toBe(true);
-    expect(hasPermission('OWNER', 'reports.finance')).toBe(true);
-    expect(hasPermission('OWNER', 'attendance.staff.view')).toBe(true);
-    expect(hasPermission('OWNER', 'fee.collect')).toBe(false);
-    expect(hasPermission('OWNER', 'attendance.student.mark')).toBe(false);
+  it('owner has full rights in the school, except personal actions and the platform', () => {
+    for (const p of ['dashboard.owner', 'reports.finance', 'student.manage', 'student.status.approve', 'staff.manage', 'fee.collect',
+      'attendance.student.mark', 'marks.enter', 'exam.approve', 'payroll.manage', 'finance.manage', 'roles.manage'] as const) {
+      expect(hasPermission('OWNER', p)).toBe(true);
+    }
+    for (const p of ['platform.manage', 'diary.post', 'leave.apply', 'fee.pay', 'homework.mark'] as const) {
+      expect(hasPermission('OWNER', p)).toBe(false);
+    }
   });
 
   it('principal approves but does not collect fees or edit fee structure', () => {

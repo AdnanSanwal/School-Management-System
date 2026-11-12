@@ -96,10 +96,12 @@ const CAP_PERMISSIONS: Partial<Record<Capability, string[]>> = {
   publishNotices: ['notice.publish'], viewDiary: ['diary.view'], postDiary: ['diary.post'], manageCalendar: ['calendar.manage'],
   manageExams: ['exam.manage'], approveExams: ['exam.approve'], enterMarks: ['marks.enter', 'exam.manage'], viewResults: ['marks.view', 'exam.manage'],
   manageTimetable: ['timetable.manage'], promotion: ['promotion.run'],
+  approvals: ['leave.approve', 'fee.concession.approve', 'fee.collect'], waiveFine: ['fee.concession.approve'],
+  applyFines: ['fee.invoice.generate'], lowAttendanceAlerts: ['attendance.student.correct'],
   viewTransport: ['transport.view'], manageTransport: ['transport.manage'], viewLibrary: ['library.view'], manageLibrary: ['library.manage'],
 };
-/** Roles a school can tune. */
-const TUNED_ROLES = ['PRINCIPAL', 'ADMIN', 'ACCOUNTANT', 'TEACHER'];
+/** Roles whose menus follow the server's permission list: the staff roles a school can tune, and the owner (full rights). */
+const TUNED_ROLES = ['OWNER', 'PRINCIPAL', 'ADMIN', 'ACCOUNTANT', 'TEACHER'];
 
 // Each list remembers its capability, so `allowedRoles={CAN.viewFees}` can follow the school's settings too.
 for (const [cap, roles] of Object.entries(CAN)) Object.defineProperty(roles, 'capability', { value: cap, enumerable: false });

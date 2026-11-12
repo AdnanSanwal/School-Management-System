@@ -86,7 +86,7 @@ d('Finance: accounts, expenses, income (database)', () => {
     const cash = await account('Cash in hand');
     const body = { type: 'DEPOSIT', amount: 10, txDate: today, description: 'x x' };
     expect((await as('PRINCIPAL').post(`/finance/accounts/${cash.id}/transactions`, body)).status).toBe(403);
-    expect((await as('OWNER').post(`/finance/accounts/${cash.id}/transactions`, body)).status).toBe(403);
+    expect((await as('TEACHER').post(`/finance/accounts/${cash.id}/transactions`, body)).status).toBe(403);
   });
 
   it('accounts: add with an opening balance, one account per payment method, no duplicates', async () => {

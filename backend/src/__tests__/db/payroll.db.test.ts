@@ -146,7 +146,7 @@ d('Payroll (database)', () => {
     expect((await C.patch(`/payroll/lines/${ids.lineSana}`, { loanDeduction: 6001 })).status).toBe(422); // owes 6,000
     expect((await C.patch(`/payroll/lines/${ids.lineSana}`, { otherDeduction: dim * 1000 })).status).toBe(422);
     expect((await C.patch(`/payroll/lines/${ids.lineSana}`, { deductDays: 40 })).status).toBe(422);
-    expect((await as('OWNER').patch(`/payroll/lines/${ids.lineSana}`, { bonus: 1 })).status).toBe(403);
+    expect((await as('PRINCIPAL').patch(`/payroll/lines/${ids.lineSana}`, { bonus: 1 })).status).toBe(403); // sees payroll, doesn't prepare it
 
     // A new absence appears: Bilal's line picks it up, Sana's hand-set days stay.
     await basePrisma.staffAttendance.create({ data: { schoolId: t.school.id, staffId: ids.bilal, date: day(18), status: 'ABSENT' } });
@@ -198,7 +198,7 @@ d('Payroll (database)', () => {
     expect(short.body.message).toMatch(/Cash in hand has only 13000/);
     await C.post(`/finance/accounts/${ids.cash}/transactions`, { type: 'DEPOSIT', amount: net, txDate: today, description: 'For salaries' });
 
-    expect((await as('OWNER').post(`/payroll/runs/${ids.run}/pay`, { accountId: ids.cash, paymentDate: today })).status).toBe(403);
+    expect((await as('PRINCIPAL').post(`/payroll/runs/${ids.run}/pay`, { accountId: ids.cash, paymentDate: today })).status).toBe(403);
     const paid = await C.post(`/payroll/runs/${ids.run}/pay`, { accountId: ids.cash, paymentDate: today });
     expect(paid.status).toBe(200);
     expect(await run()).toMatchObject({ status: 'PAID', account: 'Cash in hand', paymentDate: today });

@@ -91,20 +91,18 @@ d('Production hardening (database)', () => {
   });
 
   it('every change lands in the audit trail; owners can read it, others cannot', async () => {
-    const res = await request(app).post('/api/v1/academics/classes').set('Authorization', `Bearer ${owner.token}`).send({ name: 'Audit Class', level: 3, sections: ['A'] });
-    // Owners can't manage classes; use the principal for a successful change.
-    const principal = await t.user('PRINCIPAL');
-    const ok = res.status < 400 ? res : await request(app).post('/api/v1/academics/classes').set('Authorization', `Bearer ${principal.token}`).send({ name: 'Audit Class', level: 3, sections: ['A'] });
+    // The owner has full rights, so the owner's own change is recorded under their name.
+    const ok = await request(app).post('/api/v1/academics/classes').set('Authorization', `Bearer ${owner.token}`).send({ name: 'Audit Class', level: 3, sections: ['A'] });
     expect(ok.status).toBeLessThan(400);
     await new Promise((r) => setTimeout(r, 300)); // written after the response
     const rows = await basePrisma.auditLog.findMany({ where: { schoolId: t.school.id, action: 'POST /academics/classes' } });
     expect(rows.length).toBeGreaterThanOrEqual(1);
-    expect(rows[0]).toMatchObject({ entity: 'academics', userId: principal.id });
+    expect(rows[0]).toMatchObject({ entity: 'academics', userId: owner.id });
     expect(JSON.stringify(rows[0].meta)).not.toMatch(/Audit Class/); // never the request body
 
     const list = await request(app).get('/api/v1/audit').set('Authorization', `Bearer ${owner.token}`);
     expect(list.status).toBe(200);
-    expect(list.body.data.some((r: any) => r.action === 'POST /academics/classes' && r.user?.id === principal.id)).toBe(true);
+    expect(list.body.data.some((r: any) => r.action === 'POST /academics/classes' && r.user?.id === owner.id)).toBe(true);
     // (The accountant above was deactivated, which rightly voided their old tokens: use a fresh one.)
     const teacher = await t.user('TEACHER', 'auditteacher');
     expect((await request(app).get('/api/v1/audit').set('Authorization', `Bearer ${teacher.token}`)).status).toBe(403);
