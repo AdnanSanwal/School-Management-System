@@ -7,7 +7,7 @@ import { authenticate } from '../../middleware/auth';
 import { can } from '../../middleware/rbac';
 import { AppError } from '../../middleware/errorHandler';
 import { sendSuccess, sendPaginated } from '../../utils/apiResponse';
-import { handler, parseBody, parseQuery, paginationSchema, paging, dateOnly, id, me } from '../../utils/http';
+import { handler, parseBody, parseQuery, paginationSchema, paging, dateOnly, id, me, patchOf } from '../../utils/http';
 import { toDate, toIso, schoolToday } from '../../utils/dates';
 import { assertSectionAccess, assertStudentAccess, ensureInSchool, isSchoolWide, staffForUser, studentScope, teacherSectionIds } from '../../utils/scope';
 import { assertKind, deleteFile, MIME, saveFile, signedUrl } from '../../utils/storage';
@@ -166,7 +166,7 @@ async function ownEntry(user: JwtPayload, entryId: string) {
 }
 
 router.patch('/:id', can('diary.post'), handler(async (req, res) => {
-  const body = parseBody(entryBody.omit({ sectionId: true, date: true }).partial().strict(), req);
+  const body = parseBody(patchOf(entryBody.omit({ sectionId: true, date: true })).strict(), req);
   await ownEntry(me(req), req.params.id);
   await ensureInSchool(prisma.subject, body.subjectId, 'Subject');
   const updated = await prisma.diaryEntry.update({

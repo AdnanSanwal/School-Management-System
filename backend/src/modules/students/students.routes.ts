@@ -8,7 +8,7 @@ import { authenticate } from '../../middleware/auth';
 import { can, hasPermission } from '../../middleware/rbac';
 import { AppError } from '../../middleware/errorHandler';
 import { sendSuccess, sendPaginated } from '../../utils/apiResponse';
-import { handler, parseBody, parseQuery, paginationSchema, paging, dateOnly, id, me } from '../../utils/http';
+import { handler, parseBody, parseQuery, paginationSchema, paging, dateOnly, id, me, patchOf } from '../../utils/http';
 import { toDate, schoolToday } from '../../utils/dates';
 import { createAccount } from '../../utils/accounts';
 import { formatNumber, nextNumber } from '../../utils/counter';
@@ -219,7 +219,7 @@ router.put('/:id/monthly-fee', can('student.fee.set'), handler(async (req, res) 
 }));
 
 router.patch('/:id', can('student.manage'), handler(async (req, res) => {
-  const { dateOfBirth, admissionDate, ...body } = parseBody(studentFields.partial().strict(), req);
+  const { dateOfBirth, admissionDate, ...body } = parseBody(patchOf(studentFields).strict(), req);
   if (body.sectionId) await ensureInSchool(prisma.section, body.sectionId, 'Section');
   const student = await prisma.student.update({
     where: { id: req.params.id },

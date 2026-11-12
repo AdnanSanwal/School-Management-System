@@ -15,7 +15,7 @@ export default function ApprovalsScreen() {
   const qc = useQueryClient();
   const q = useQuery({ queryKey: ['approvals'], queryFn: API.approvals });
   const decide = useMutation({
-    mutationFn: ({ kind, id, approve }: { kind: Kind; id: string; approve: boolean }) =>
+    mutationFn: ({ kind, id, approve }: { kind: Kind; id: string; approve: boolean }): Promise<unknown> =>
       kind === 'leave' ? API.decideLeave(id, approve) : kind === 'concession' ? API.decideConcession(id, approve) : API.decideClaim(id, approve),
     onSuccess: (_r, v) => { qc.invalidateQueries({ queryKey: ['approvals'] }); qc.invalidateQueries({ queryKey: ['dashboard'] }); say(v.approve ? 'Approved' : 'Rejected'); },
     onError: (e) => say('Could not save', apiError(e)),

@@ -8,7 +8,7 @@ import { authenticate } from '../../middleware/auth';
 import { can, hasPermission } from '../../middleware/rbac';
 import { AppError } from '../../middleware/errorHandler';
 import { sendSuccess } from '../../utils/apiResponse';
-import { handler, parseBody, parseQuery, id, money, me } from '../../utils/http';
+import { handler, parseBody, parseQuery, id, money, me, patchOf } from '../../utils/http';
 import { assertStudentAccess, isSchoolWide, studentScope } from '../../utils/scope';
 import { assertKind, deleteFile, saveFile, signedUrl } from '../../utils/storage';
 import { guardiansOf, notify, notifyEach } from '../../utils/notify';
@@ -146,7 +146,7 @@ router.post('/accounts', can('fee.structure.manage'), handler(async (req, res) =
 }));
 
 router.patch('/accounts/:id', can('fee.structure.manage'), handler(async (req, res) => {
-  const b = parseBody(accountBody.partial().strict(), req);
+  const b = parseBody(patchOf(accountBody).strict(), req);
   return sendSuccess(res, await prisma.paymentAccount.update({ where: { id: req.params.id }, data: b }), 'Account updated');
 }));
 

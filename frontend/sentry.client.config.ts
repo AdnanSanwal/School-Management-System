@@ -14,7 +14,6 @@ Sentry.init({
   replaysSessionSampleRate: 0,
   replaysOnErrorSampleRate: 0,
   // Don't send the query string or form contents.
-  sendDefaultPii: false,
   integrations: dsn ? [Sentry.feedbackIntegration({ colorScheme: 'system', showBranding: false })] : [],
   debug: false,
 });

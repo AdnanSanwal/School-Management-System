@@ -7,7 +7,7 @@ import { authenticate } from '../../middleware/auth';
 import { can, hasPermission } from '../../middleware/rbac';
 import { AppError } from '../../middleware/errorHandler';
 import { sendSuccess, sendPaginated } from '../../utils/apiResponse';
-import { handler, parseBody, parseQuery, paginationSchema, paging, dateOnly, id, me } from '../../utils/http';
+import { handler, parseBody, parseQuery, paginationSchema, paging, dateOnly, id, me, patchOf } from '../../utils/http';
 import { addDays, schoolToday, toDate, toIso } from '../../utils/dates';
 import { assertStudentAccess, studentScope } from '../../utils/scope';
 import { D } from '../fees/fees.calc';
@@ -63,7 +63,7 @@ router.post('/books', can('library.manage'), handler(async (req, res) => {
 }));
 
 router.patch('/books/:id', can('library.manage'), handler(async (req, res) => {
-  const b = parseBody(bookBody.partial().strict(), req);
+  const b = parseBody(patchOf(bookBody).strict(), req);
   if (b.copies !== undefined) {
     const out = (await openCounts([req.params.id])).get(req.params.id) ?? 0;
     if (b.copies < out) throw new AppError(`${out} copies are issued right now; copies can't go below that`, 409);

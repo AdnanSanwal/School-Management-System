@@ -6,7 +6,7 @@ import { authenticate } from '../../middleware/auth';
 import { can, hasPermission } from '../../middleware/rbac';
 import { AppError } from '../../middleware/errorHandler';
 import { sendSuccess } from '../../utils/apiResponse';
-import { handler, parseBody, id, money, me } from '../../utils/http';
+import { handler, parseBody, id, money, me, patchOf } from '../../utils/http';
 import { schoolToday, toIso } from '../../utils/dates';
 import { assertStudentAccess, ensureInSchool, isSchoolWide } from '../../utils/scope';
 
@@ -51,7 +51,7 @@ router.post('/routes', can('transport.manage'), handler(async (req, res) => {
 }));
 
 router.patch('/routes/:id', can('transport.manage'), handler(async (req, res) => {
-  const b = parseBody(routeBody.partial().strict(), req);
+  const b = parseBody(patchOf(routeBody).strict(), req);
   if (b.monthlyFee && b.monthlyFee > 0) await transportFeeHead();
   const route = await prisma.transportRoute.update({ where: { id: req.params.id }, data: b });
   return sendSuccess(res, route, 'Route updated. New fees apply to invoices generated from now on.');

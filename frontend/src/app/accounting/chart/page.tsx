@@ -73,7 +73,7 @@ function AccountModal({ account, onClose }: { account: LedgerAccountRow | null; 
   const refresh = useFinanceRefresh();
   const [f, setF] = useState({ name: account?.name ?? '', type: account?.type ?? 'ASSET', code: account?.code ?? '', isActive: account?.isActive ?? true });
   const save = useMutation({
-    mutationFn: () => (account
+    mutationFn: (): Promise<{ data: { message: string } }> => (account
       ? ledgerAPI.updateAccount(account.id, { name: f.name.trim(), code: f.code.trim() || undefined, isActive: f.isActive })
       : ledgerAPI.addAccount({ name: f.name.trim(), type: f.type, code: f.code.trim() || undefined })),
     onSuccess: (r) => { toast.success(r.data.message); refresh(); onClose(); }, onError: financeError,

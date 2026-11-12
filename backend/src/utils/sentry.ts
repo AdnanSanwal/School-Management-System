@@ -29,15 +29,14 @@ export function initSentry(app: Express) {
       ...(profiling ? [profiling] : []),
     ],
     tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.2 : 1.0,
-    profilesSampleRate: profiling ? 1.0 : 0,
+    profileSessionSampleRate: profiling ? 1.0 : 0,
     environment: process.env.NODE_ENV || 'development',
-    sendDefaultPii: false,
   });
 
   logger.info('Sentry initialized');
 }
 
-// Sentry v8 express error handler — registers on app directly
+// Sentry's express error handler — registers on app directly
 export function setupSentryErrorHandler(app: Express) {
   if (!process.env.SENTRY_DSN) return;
   Sentry.setupExpressErrorHandler(app);

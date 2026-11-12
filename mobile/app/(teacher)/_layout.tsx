@@ -2,7 +2,7 @@ import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../lib/theme';
 
-const icon = (name: keyof typeof Ionicons.glyphMap) => ({ color, size }: { color: string; size: number }) => <Ionicons name={name} color={color} size={size} />;
+const icon = (name: keyof typeof Ionicons.glyphMap) => function TabIcon({ color, size }: { color: unknown; size: number }) { return <Ionicons name={name} color={typeof color === 'string' ? color : undefined} size={size} />; };
 
 // Spec §8: the teacher app should be simple and fast — attendance, diary (marks & timetable come in Phase 3).
 export default function TeacherTabs() {

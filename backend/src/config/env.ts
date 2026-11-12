@@ -6,13 +6,13 @@ import { z } from 'zod';
  * running with a guessable secret). In development it only warns.
  */
 const PLACEHOLDER = /change[-_ ]?me|your_|example|secret_key|min_32|^test$/i;
-const secret = (name: string) => z.string({ required_error: `${name} is required` })
+const secret = (name: string) => z.string({ error: `${name} is required` })
   .min(32, `${name} must be at least 32 characters (use: openssl rand -hex 32)`)
   .refine((v) => !PLACEHOLDER.test(v), `${name} still has the example value`);
 
 const prodSchema = z.object({
   DATABASE_URL: z.string().startsWith('mysql://', 'DATABASE_URL must be a mysql:// URL'),
-  REDIS_URL: z.string({ required_error: 'REDIS_URL is required in production (sessions, rate limits, job locks)' }).min(1),
+  REDIS_URL: z.string({ error: 'REDIS_URL is required in production (sessions, rate limits, job locks)' }).min(1, 'REDIS_URL is required in production (sessions, rate limits, job locks)'),
   JWT_SECRET: secret('JWT_SECRET'),
   REFRESH_TOKEN_SECRET: secret('REFRESH_TOKEN_SECRET'),
   AES_SECRET_KEY: z.string().regex(/^[0-9a-fA-F]{64}$/, 'AES_SECRET_KEY must be exactly 64 hex characters'),
@@ -27,5 +27,5 @@ export function validateEnv(env: NodeJS.ProcessEnv = process.env): { ok: true } 
     return missing.length ? { ok: false, problems: missing.map((k) => `${k} is required`) } : { ok: true };
   }
   const r = prodSchema.safeParse(env);
-  return r.success ? { ok: true } : { ok: false, problems: r.error.errors.map((e) => e.message) };
+  return r.success ? { ok: true } : { ok: false, problems: r.error.issues.map((e) => e.message) };
 }

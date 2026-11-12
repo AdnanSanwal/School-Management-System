@@ -19,7 +19,7 @@ type Reply = { status: number; message: string; errors?: { field: string; messag
 function classify(err: any): Reply | null {
   if (err instanceof AppError) return { status: err.statusCode, message: err.message };
   if (err instanceof ZodError) {
-    return { status: 422, message: 'Validation error', errors: err.errors.map((e) => ({ field: e.path.join('.'), message: e.message })) };
+    return { status: 422, message: 'Validation error', errors: err.issues.map((e) => ({ field: e.path.join('.'), message: e.message })) };
   }
   if (err instanceof MulterError) {
     return err.code === 'LIMIT_FILE_SIZE' ? { status: 413, message: 'File is larger than 5 MB' } : { status: 422, message: err.message };

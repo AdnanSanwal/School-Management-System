@@ -61,7 +61,7 @@ export function BottomSheet({ visible, onClose, children, snapHeight = SCREEN_H 
 
 const styles = StyleSheet.create({
   overlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(0,0,0,0.45)',
   },
   sheet: {

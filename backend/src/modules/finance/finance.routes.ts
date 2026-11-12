@@ -8,7 +8,7 @@ import { authenticate } from '../../middleware/auth';
 import { can, hasPermission } from '../../middleware/rbac';
 import { AppError } from '../../middleware/errorHandler';
 import { sendSuccess } from '../../utils/apiResponse';
-import { handler, parseBody, parseQuery, paginationSchema, paging, dateOnly, id, money, period, me } from '../../utils/http';
+import { handler, parseBody, parseQuery, paginationSchema, paging, dateOnly, id, money, period, me, patchOf } from '../../utils/http';
 import { addDays, periodRange, schoolTimezone, schoolToday, toDate, toIso, zonedDayStart } from '../../utils/dates';
 import { formatNumber, nextNumber } from '../../utils/counter';
 import { notify } from '../../utils/notify';
@@ -116,7 +116,7 @@ router.post('/accounts', can('finance.manage'), handler(async (req, res) => {
 }));
 
 router.patch('/accounts/:id', can('finance.manage'), handler(async (req, res) => {
-  const b = parseBody(accountBody.partial().strict(), req);
+  const b = parseBody(patchOf(accountBody).strict(), req);
   const account = await prisma.moneyAccount.findFirst({ where: { id: req.params.id } });
   if (!account) throw new AppError('Account not found', 404);
   if (b.name && b.name !== account.name && await prisma.moneyAccount.findFirst({ where: { name: b.name } })) throw new AppError(`An account called “${b.name}” already exists`, 409);
@@ -278,7 +278,7 @@ router.get('/expenses', can('finance.view'), handler(async (req, res) => {
 // Multipart so a photo of the bill can be attached as "file" (optional).
 router.post('/expenses', can('finance.manage'), uploadOne, handler(async (req, res) => {
   const b = parseBody(z.object({
-    categoryId: id, accountId: id, amount: z.coerce.number().pipe(positive), expenseDate: dateOnly,
+    categoryId: id, accountId: id, amount: positive, expenseDate: dateOnly,
     description: z.string().trim().min(2).max(500),
     paidTo: z.string().trim().max(120).optional(), reference: z.string().trim().max(100).optional(),
   }), req);

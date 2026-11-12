@@ -138,7 +138,7 @@ export default function PayScreen() {
                 disabled={!selected.length || reference.trim().length < 4 || !Number(amount) || !method} />
             </Card>
           )}
-          {!options.data?.gateway && !accounts.length && <Card><Muted>Online payment isn't set up by the school yet. Please pay at the school office.</Muted></Card>}
+          {!options.data?.gateway && !accounts.length && <Card><Muted>Online payment isn’t set up by the school yet. Please pay at the school office.</Muted></Card>}
         </>
       )}
 

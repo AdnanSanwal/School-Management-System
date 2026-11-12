@@ -15,6 +15,7 @@ export async function registerForPushNotifications(): Promise<string | null> {
   if (Platform.OS === 'android') {
     await Notifications.setNotificationChannelAsync('default', {
       name: 'School updates',
+      // eslint-disable-next-line import/namespace -- exported by expo-notifications; the lint resolver can't see it
       importance: Notifications.AndroidImportance.HIGH,
       vibrationPattern: [0, 250, 250, 250],
     });

@@ -3,7 +3,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../lib/theme';
 import { allowed, useAuthStore } from '../../store/authStore';
 
-const icon = (name: keyof typeof Ionicons.glyphMap) => ({ color, size }: { color: string; size: number }) => <Ionicons name={name} color={color} size={size} />;
+const icon = (name: keyof typeof Ionicons.glyphMap) => function TabIcon({ color, size }: { color: unknown; size: number }) { return <Ionicons name={name} color={typeof color === 'string' ? color : undefined} size={size} />; };
 
 // Spec §10: Bottom Tabs: Home | Attendance | Fees | Diary | More
 export default function FamilyTabs() {

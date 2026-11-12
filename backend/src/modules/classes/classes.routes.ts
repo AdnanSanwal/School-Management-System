@@ -6,7 +6,7 @@ import { authenticate } from '../../middleware/auth';
 import { can } from '../../middleware/rbac';
 import { AppError } from '../../middleware/errorHandler';
 import { sendSuccess } from '../../utils/apiResponse';
-import { handler, parseBody, id, me } from '../../utils/http';
+import { handler, parseBody, id, me, patchOf } from '../../utils/http';
 import { currentAcademicYear, ensureInSchool, isSchoolWide, teacherSectionIds } from '../../utils/scope';
 
 // Classes, sections, subjects and who teaches what (spec: Class & Section).
@@ -59,7 +59,7 @@ router.post('/classes', can('class.manage'), handler(async (req, res) => {
 }));
 
 router.patch('/classes/:id', can('class.manage'), handler(async (req, res) => {
-  const body = parseBody(classBody.partial().strict(), req);
+  const body = parseBody(patchOf(classBody).strict(), req);
   const cls = await prisma.class.update({ where: { id: req.params.id }, data: body });
   return sendSuccess(res, cls, 'Class updated');
 }));
@@ -146,7 +146,7 @@ router.post('/subjects', can('class.manage'), handler(async (req, res) => {
 }));
 
 router.patch('/subjects/:id', can('class.manage'), handler(async (req, res) => {
-  const body = parseBody(subjectBody.partial().strict(), req);
+  const body = parseBody(patchOf(subjectBody).strict(), req);
   return sendSuccess(res, await prisma.subject.update({ where: { id: req.params.id }, data: body }), 'Subject updated');
 }));
 

@@ -255,7 +255,7 @@ router.get('/:type', can('school.view'), handler(async (req, res) => {
   }
   const { format, ...rest } = req.query;
   const fmtParam = z.enum(['pdf', 'xlsx', 'view']).default('pdf').parse(format);
-  const q = def.params.parse(rest);
+  const q = def.params.parse(rest) as Record<string, unknown>;
   const school = await prisma.school.findUniqueOrThrow({ where: { id: currentSchoolId() }, select: { name: true, currency: true } });
   const report = { ...(await def.build({ user, q, school })), school: school.name, currency: school.currency };
   // CR-02: the same table as JSON, shown on screen. Never a file download.

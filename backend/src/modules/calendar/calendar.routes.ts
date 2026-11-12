@@ -7,7 +7,7 @@ import { authenticate } from '../../middleware/auth';
 import { can } from '../../middleware/rbac';
 import { AppError } from '../../middleware/errorHandler';
 import { sendSuccess } from '../../utils/apiResponse';
-import { handler, parseBody, parseQuery, dateOnly, me } from '../../utils/http';
+import { handler, parseBody, parseQuery, dateOnly, me, patchOf } from '../../utils/http';
 import { addDays, schoolToday, toDate, toIso } from '../../utils/dates';
 
 // Holidays & events (spec module 10: Holidays & Calendar).
@@ -51,7 +51,7 @@ router.post('/', can('calendar.manage'), handler(async (req, res) => {
 }));
 
 router.patch('/:id', can('calendar.manage'), handler(async (req, res) => {
-  const b = parseBody(eventBody.partial().strict(), req);
+  const b = parseBody(patchOf(eventBody).strict(), req);
   const cur = await prisma.calendarEvent.findFirst({ where: { id: req.params.id } });
   if (!cur) throw new AppError('Event not found', 404);
   const start = b.startDate ?? toIso(cur.startDate);

@@ -37,3 +37,18 @@ export const id = z.string().uuid();
 export const dateOnly = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'expected YYYY-MM-DD');
 export const period = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'expected YYYY-MM');
 export const money = z.coerce.number().nonnegative().max(100_000_000).multipleOf(0.01);
+
+/**
+ * The schema for a partial update (PATCH): every field optional, and NO defaults.
+ * zod's own `.partial()` keeps `.default()` values, so a field that was not sent would
+ * come back filled with its default and silently overwrite what is stored.
+ */
+export function patchOf<T extends z.ZodRawShape>(schema: z.ZodObject<T>) {
+  const shape: Record<string, ZodTypeAny> = {};
+  for (const [key, field] of Object.entries(schema.shape)) {
+    let f = field as ZodTypeAny;
+    while (f instanceof z.ZodDefault) f = f.unwrap() as ZodTypeAny;
+    shape[key] = f.optional();
+  }
+  return z.object(shape) as unknown as z.ZodObject<{ [K in keyof T]: z.ZodOptional<T[K]> }>;
+}

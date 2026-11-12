@@ -7,7 +7,7 @@ import { authenticate } from '../../middleware/auth';
 import { can, hasPermission } from '../../middleware/rbac';
 import { AppError } from '../../middleware/errorHandler';
 import { sendSuccess, sendPaginated } from '../../utils/apiResponse';
-import { handler, parseBody, parseQuery, paginationSchema, paging, dateOnly, me } from '../../utils/http';
+import { handler, parseBody, parseQuery, paginationSchema, paging, dateOnly, me, patchOf } from '../../utils/http';
 import { schoolToday, toDate, toIso } from '../../utils/dates';
 import { currentAcademicYear } from '../../utils/scope';
 import { leaveBalances, salariesOn } from '../../utils/hr';
@@ -131,7 +131,7 @@ router.post('/', can('staff.manage'), handler(async (req, res) => {
   return sendSuccess(res, result, 'Staff member added', 201);
 }));
 
-const staffUpdate = staffBody.omit({ login: true, isTeacher: true }).partial().extend({
+const staffUpdate = patchOf(staffBody.omit({ login: true, isTeacher: true })).extend({
   isTeacher: z.boolean().optional(),
   status: z.enum(['ACTIVE', 'LEFT']).optional(),
 }).strict();

@@ -7,7 +7,7 @@ import { authenticate } from '../../middleware/auth';
 import { can } from '../../middleware/rbac';
 import { AppError } from '../../middleware/errorHandler';
 import { sendSuccess, sendPaginated } from '../../utils/apiResponse';
-import { handler, parseBody, parseQuery, paginationSchema, paging, dateOnly, period, money, id, me } from '../../utils/http';
+import { handler, parseBody, parseQuery, paginationSchema, paging, dateOnly, period, money, id, me, patchOf } from '../../utils/http';
 import { toDate, toIso, addDays, schoolToday, schoolTimezone, zonedDayStart } from '../../utils/dates';
 import { assertStudentAccess, currentAcademicYear, ensureInSchool, isSchoolWide, studentScope } from '../../utils/scope';
 import { applyLateFines, collectPayment, defaulters, generateInvoices, receipt, sendFeeReminders, STUDENT_MONTHLY_FEE_HEAD } from './fees.service';
@@ -44,7 +44,7 @@ router.post('/heads', can('fee.structure.manage'), handler(async (req, res) => {
 }));
 
 router.patch('/heads/:id', can('fee.structure.manage'), handler(async (req, res) => {
-  const body = parseBody(headBody.partial().strict(), req);
+  const body = parseBody(patchOf(headBody).strict(), req);
   return sendSuccess(res, await prisma.feeHead.update({ where: { id: req.params.id }, data: body }), 'Fee head updated');
 }));
 

@@ -57,9 +57,6 @@ const nextConfig = {
   ...(process.env.NEXT_DIST_DIR ? { distDir: process.env.NEXT_DIST_DIR } : {}),
   // standalone output for Docker; Netlify handles its own bundling without it
   ...(process.env.NEXT_OUTPUT === 'standalone' ? { output: 'standalone' } : {}),
-  experimental: {
-    instrumentationHook: true,
-  },
   images: {
     remotePatterns: [
       { protocol: 'http',  hostname: 'localhost' },

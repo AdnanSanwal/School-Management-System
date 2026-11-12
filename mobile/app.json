@@ -6,14 +6,30 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
-    "ios": { "supportsTablet": true, "bundleIdentifier": "com.schoolerp.app" },
-    "android": { "package": "com.schoolerp.app" },
-    "web": { "bundler": "metro" },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.schoolerp.app"
+    },
+    "android": {
+      "package": "com.schoolerp.app"
+    },
+    "web": {
+      "bundler": "metro"
+    },
     "plugins": [
       "expo-router",
       "expo-secure-store",
-      ["expo-notifications", { "color": "#4f46e5" }]
+      [
+        "expo-notifications",
+        {
+          "color": "#4f46e5"
+        }
+      ],
+      "expo-font",
+      "expo-status-bar"
     ],
-    "experiments": { "typedRoutes": false }
+    "experiments": {
+      "typedRoutes": false
+    }
   }
 }

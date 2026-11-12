@@ -249,7 +249,7 @@ Backend settings live in `backend/.env` (template: `.env.example`).
 | `JOBS_ENABLED`, `JOBS_RUN_HOUR` | | Daily automation after this hour, school time: late fees every day; fee reminders and low-attendance alerts on Mondays. Default on, 9 |
 | `PUSH_DISABLED` | | `true` skips sending push (notifications are still saved in the app) |
 | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` | | Browser push. Generate with `npx web-push generate-vapid-keys` |
-| `SENDGRID_API_KEY`, `EMAIL_FROM` | | Password-reset and broadcast emails |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` (or `SENDGRID_API_KEY`), `EMAIL_FROM` | | Password-reset and broadcast emails, through any SMTP server or SendGrid |
 | `MESSAGING_PROVIDER` | | WhatsApp/SMS alerts to parents: `twilio`, `test` (logs only, for development) or empty (off). Each school then turns alerts on in **School settings** |
 | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_PHONE_NUMBER`, `TWILIO_WHATSAPP_FROM` | | Twilio account; `TWILIO_WHATSAPP_FROM` like `whatsapp:+14155238886` for WhatsApp |
 | `DEFAULT_COUNTRY_CODE` | | Turns local numbers like `0300…` into international ones. Default `92` (Pakistan) |
