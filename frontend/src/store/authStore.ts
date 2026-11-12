@@ -22,6 +22,10 @@ interface User {
   permissions?: string[];
   /** Roles this user may create logins for (set by the owner under Roles & permissions). */
   creatableRoles?: string[];
+  /** The school-defined role this user holds (its permissions replace the standard role's). */
+  customRole?: { id: string; name: string } | null;
+  /** School-defined roles this user may give out, each built on a standard role. */
+  customRoles?: { id: string; name: string; baseRole: string }[];
   licence?: LicenceStatus | null;
 }
 

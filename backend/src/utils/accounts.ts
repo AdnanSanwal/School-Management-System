@@ -7,6 +7,7 @@ import { AppError } from '../middleware/errorHandler';
 import { basePrisma } from '../config/database';
 import { normalizeUsername, usernameProblem, isUsernameTaken } from './usernames';
 import { tenantStorage, RoleOverrides } from '../config/tenancy';
+import { forgetCustomRoles } from './rolePermissions';
 
 /**
  * Who may create and manage which logins.
@@ -49,6 +50,13 @@ export function assertCanManageRole(actorRole: string, target: Role) {
   if (!canManageRole(actorRole, target)) throw new AppError(`You cannot manage ${target} accounts`, 403);
 }
 
+/** The custom role must belong to this school and be built on the login's role. */
+export async function assertCustomRole(customRoleId: string, role: Role) {
+  const r = await basePrisma.customRole.findFirst({ where: { id: customRoleId, schoolId: currentSchoolId() }, select: { baseRole: true, name: true } });
+  if (!r) throw new AppError('That role no longer exists', 422);
+  if (r.baseRole !== role) throw new AppError(`“${r.name}” is built on a different role`, 422);
+}
+
 /** Readable one-time password, e.g. "Kite-7342-Moon". Shown once to the admin. */
 export function temporaryPassword(): string {
   const words = ['Kite', 'Moon', 'Lake', 'Star', 'Rose', 'Hill', 'Tree', 'Bird', 'Rain', 'Sand'];
@@ -63,6 +71,8 @@ export interface NewAccount {
   username?: string | null;
   phone?: string | null;
   role: Role;
+  /** A school-defined role built on `role` (Settings → Roles & permissions). */
+  customRoleId?: string | null;
   password?: string;
 }
 
@@ -72,6 +82,7 @@ export interface NewAccount {
  */
 export async function createAccount(tx: Pick<ScopedTx, 'user'>, actorRole: string, a: NewAccount) {
   assertCanManageRole(actorRole, a.role);
+  if (a.customRoleId) await assertCustomRole(a.customRoleId, a.role);
   const email = a.email ? a.email.toLowerCase().trim() : null;
   const username = a.username ? normalizeUsername(a.username) : null;
   if (!email && !username) throw new AppError('Give the login a username or an email', 422);
@@ -93,11 +104,13 @@ export async function createAccount(tx: Pick<ScopedTx, 'user'>, actorRole: strin
       username,
       phone: a.phone ?? null,
       role: a.role,
+      customRoleId: a.customRoleId || null,
       password: await hashPassword(plain),
       // Someone else chose this password: the person picks their own at first sign-in.
       mustChangePassword: true,
     },
     select: { id: true, name: true, email: true, username: true, role: true },
   });
+  if (a.customRoleId) forgetCustomRoles(currentSchoolId());
   return { user, temporaryPassword: a.password ? undefined : plain };
 }

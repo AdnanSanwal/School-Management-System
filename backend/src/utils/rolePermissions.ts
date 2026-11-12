@@ -152,7 +152,66 @@ export async function roleOverrides(schoolId: string): Promise<RoleOverrides> {
 
 export const forgetRoleOverrides = (schoolId: string) => { cache.delete(schoolId); };
 
-/** Everything a user of this role may do in this school. */
-export async function permissionsFor(role: string, schoolId?: string | null): Promise<Permission[]> {
+/** Everything a user of this role may do in this school (their custom role's list, if they have one). */
+export async function permissionsFor(role: string, schoolId?: string | null, userId?: string): Promise<Permission[]> {
+  if (schoolId && userId) {
+    const custom = await customRoleOf(schoolId, userId);
+    if (custom && custom.baseRole === role) return PERMISSIONS.filter((p) => custom.perms.has(p));
+  }
   return effectivePermissions(role, schoolId ? await roleOverrides(schoolId) : undefined);
 }
+
+// ─── Custom (school-defined) access roles ─────────────────────────────────────
+// e.g. "Receptionist" built on Office admin. The owner picks the permissions from what its
+// base role can be given; the parts of the base role that aren't on the settings screen
+// (its dashboard, notices, calendar, creating logins…) come with it.
+
+export type CustomRoleInfo = { id: string; name: string; baseRole: Role; perms: ReadonlySet<Permission> };
+
+/** Permissions the owner can tick for a custom role built on `base`. */
+export function customChoices(base: Role): Permission[] {
+  return PERMISSIONS.filter((p) => PERMISSION_INFO[p] && (ROLE_PERMISSIONS[base].has(p) || grantable(base, p)));
+}
+
+/** A custom role's full list: what the owner ticked plus the base role's fixed parts. */
+export function customPermissions(base: Role, chosen: string[], overrides?: RoleOverrides): Permission[] {
+  const allowed = new Set(customChoices(base));
+  const fixed = effectivePermissions(base, overrides).filter((p) => !PERMISSION_INFO[p]);
+  return PERMISSIONS.filter((p) => fixed.includes(p) || (allowed.has(p) && chosen.includes(p)));
+}
+
+const customCache = new Map<string, { at: number; roles: Map<string, CustomRoleInfo>; byUser: Map<string, string> }>();
+
+async function customRoles(schoolId: string) {
+  const hit = customCache.get(schoolId);
+  if (hit && Date.now() - hit.at < TTL_MS) return hit;
+  const [rows, users, overrides] = await Promise.all([
+    basePrisma.customRole.findMany({ where: { schoolId } }),
+    basePrisma.user.findMany({ where: { schoolId, customRoleId: { not: null } }, select: { id: true, customRoleId: true } }),
+    roleOverrides(schoolId),
+  ]);
+  const roles = new Map<string, CustomRoleInfo>();
+  for (const r of rows ?? []) {
+    const chosen = Array.isArray(r.permissions) ? (r.permissions as string[]) : [];
+    roles.set(r.id, { id: r.id, name: r.name, baseRole: r.baseRole, perms: new Set(customPermissions(r.baseRole, chosen, overrides)) });
+  }
+  const byUser = new Map<string, string>();
+  for (const u of users ?? []) if (u.customRoleId) byUser.set(u.id, u.customRoleId);
+  const entry = { at: Date.now(), roles, byUser };
+  customCache.set(schoolId, entry);
+  return entry;
+}
+
+/** The custom role this user holds in the school, if any. */
+export async function customRoleOf(schoolId: string, userId: string): Promise<CustomRoleInfo | undefined> {
+  const c = await customRoles(schoolId);
+  const id = c.byUser.get(userId);
+  return id ? c.roles.get(id) : undefined;
+}
+
+/** All of the school's custom roles. */
+export async function customRoleList(schoolId: string): Promise<CustomRoleInfo[]> {
+  return [...(await customRoles(schoolId)).roles.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+export const forgetCustomRoles = (schoolId: string) => { customCache.delete(schoolId); };

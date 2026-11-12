@@ -9,13 +9,14 @@ import { can, hasPermission } from '../../middleware/rbac';
 import { AppError } from '../../middleware/errorHandler';
 import { sendSuccess, sendPaginated } from '../../utils/apiResponse';
 import { handler, parseBody, parseQuery, paginationSchema, paging, dateOnly, id, me, patchOf } from '../../utils/http';
-import { toDate, schoolToday } from '../../utils/dates';
+import { toDate, toIso, schoolToday } from '../../utils/dates';
 import { createAccount } from '../../utils/accounts';
-import { formatNumber, nextNumber } from '../../utils/counter';
+import { formatNumber } from '../../utils/counter';
 import { attendanceSummary } from '../../utils/attendanceStats';
 import { assertStudentAccess, ensureInSchool, isSchoolWide, studentScope, currentAcademicYear } from '../../utils/scope';
 import { assertKind, deleteFile, MIME, saveFile, signedUrl } from '../../utils/storage';
 import { uploadOne } from '../files/files.routes';
+import { activityFor, audit } from '../../utils/audit';
 
 // Students, admission, guardians/siblings and documents (spec: Student Management).
 
@@ -24,11 +25,13 @@ router.use(authenticate);
 
 type Tx = ScopedTx;
 
+const STUDENT_STATUS_LABEL: Record<string, string> = { ACTIVE: 'Active', LEFT: 'Left', TRANSFERRED: 'Transferred', GRADUATED: 'Graduated' };
+
 // ─── List & profile ───
 
 router.get('/', can('student.view'), handler(async (req, res) => {
   const q = parseQuery(paginationSchema.extend({
-    search: z.string().max(100).optional(),
+    search: z.string().trim().max(100).optional(),
     sectionId: id.optional(),
     classId: id.optional(),
     status: z.enum(['ACTIVE', 'LEFT', 'TRANSFERRED', 'GRADUATED', 'ALL']).default('ACTIVE'),
@@ -39,13 +42,14 @@ router.get('/', can('student.view'), handler(async (req, res) => {
       q.status === 'ALL' ? {} : { status: q.status },
       q.sectionId ? { sectionId: q.sectionId } : {},
       q.classId ? { section: { classId: q.classId } } : {},
-      q.search
-        ? { OR: [
-            { name: { contains: q.search } },
-            { admissionNo: { contains: q.search } },
-            { guardians: { some: { guardian: { phone: { contains: q.search } } } } },
-          ] }
-        : {},
+      // Every word of the search must match one of: student name, admission no., roll no.,
+      // or a parent/guardian's name, phone or CNIC ("ali khan" finds "Ali Raza Khan").
+      ...(q.search ? q.search.split(/\s+/).filter(Boolean).slice(0, 5) : []).map((w) => ({ OR: [
+        { name: { contains: w } },
+        { admissionNo: { contains: w } },
+        { rollNo: { contains: w } },
+        { guardians: { some: { guardian: { OR: [{ name: { contains: w } }, { phone: { contains: w } }, { cnic: { contains: w } }] } } } },
+      ] })),
     ],
   };
   const [rows, total] = await Promise.all([
@@ -60,6 +64,15 @@ router.get('/', can('student.view'), handler(async (req, res) => {
     prisma.student.count({ where }),
   ]);
   return sendPaginated(res, rows.map(({ guardians, ...s }) => ({ ...s, primaryGuardian: guardians[0]?.guardian ?? null })), total, q.page, q.limit);
+}));
+
+/** The next suggested admission number (the form starts with it; the office may change it). */
+router.get('/next-admission-no', can('student.admit'), handler(async (_req, res) => {
+  const row = await prisma.counter.findFirst({ where: { key: 'admission' }, select: { value: true } });
+  let n = (row?.value ?? 0) + 1;
+  // Skip numbers already used by hand.
+  while (await prisma.student.findFirst({ where: { admissionNo: formatNumber('ADM', n, 5) }, select: { id: true } })) n += 1;
+  return sendSuccess(res, { admissionNo: formatNumber('ADM', n, 5) });
 }));
 
 router.get('/:id', can('student.view'), handler(async (req, res) => {
@@ -102,6 +115,7 @@ router.get('/:id', can('student.view'), handler(async (req, res) => {
     relation: g.relation, isPrimary: g.isPrimary,
     guardian: fullContacts ? g.guardian : { id: g.guardian.id, name: g.guardian.name },
   }));
+  if (isSchoolWide(user) || hasPermission(user.role, 'student.manage')) extras.activity = await activityFor('students', student.id);
   const { photoKey, documents, ...rest } = student;
   return sendSuccess(res, { ...rest, photo: signedUrl(photoKey) ?? student.photoUrl, documents: documents.map(withFileUrl), guardians, ...extras });
 }));
@@ -125,7 +139,7 @@ const guardianInput = z.union([
 
 const studentFields = z.object({
   name: z.string().min(2).max(100),
-  admissionNo: z.string().min(1).max(30).optional(),
+  admissionNo: z.string({ error: 'Admission number is required' }).trim().min(1, 'Admission number is required').max(30),
   rollNo: z.string().max(20).optional(),
   gender: z.enum(['MALE', 'FEMALE', 'OTHER']).optional(),
   dateOfBirth: dateOnly.optional(),
@@ -178,7 +192,17 @@ router.post('/', can('student.admit'), handler(async (req, res) => {
   const schoolId = currentSchoolId();
   const today = await schoolToday();
   const result = await transaction(async (tx) => {
-    const admissionNo = body.admissionNo ?? formatNumber('ADM', await nextNumber(tx, 'admission'), 5);
+    const admissionNo = body.admissionNo;
+    if (await tx.student.findFirst({ where: { admissionNo }, select: { id: true } })) {
+      throw new AppError(`Admission number ${admissionNo} is already used by another student`, 409);
+    }
+    // Using the suggested number moves the sequence on, so the next suggestion is the one after.
+    const m = /^ADM-(\d+)$/.exec(admissionNo);
+    if (m) {
+      const n = Number(m[1]);
+      const row = await tx.counter.findFirst({ where: { key: 'admission' }, select: { value: true } });
+      if (!row || row.value < n) await tx.counter.upsert({ where: { schoolId_key: { schoolId, key: 'admission' } }, create: { schoolId, key: 'admission', value: n }, update: { value: n } });
+    }
     const student = await tx.student.create({
       data: {
         ...body, schoolId, admissionNo,
@@ -238,20 +262,31 @@ router.post('/:id/status', can('student.manage'), handler(async (req, res) => {
     date: dateOnly.optional(),
     reason: z.string().max(300).optional(),
   }), req);
+  const before = await prisma.student.findFirst({ where: { id: req.params.id }, select: { id: true, name: true, status: true, admissionNo: true } });
+  if (!before) throw new AppError('Student not found', 404);
+  if (before.status === body.status) throw new AppError(`${before.name} is already ${STUDENT_STATUS_LABEL[body.status].toLowerCase()}`, 409);
   const leaving = body.status !== 'ACTIVE';
+  if (!leaving) {
+    const { maxStudents } = await licenceStatus(currentSchoolId());
+    if (maxStudents !== null && await prisma.student.count({ where: { status: 'ACTIVE' } }) >= maxStudents) {
+      throw new AppError(`Your plan allows ${maxStudents} active students and you have reached it.`, 409);
+    }
+  }
+  const effective = body.date ? toDate(body.date) : await schoolToday();
+  // Only the status changes: fees, attendance, marks, documents and history all stay.
   const student = await transaction(async (tx) => {
     const s = await tx.student.update({
-      where: { id: req.params.id },
-      data: {
-        status: body.status,
-        leftOn: leaving ? (body.date ? toDate(body.date) : await schoolToday()) : null,
-        leftReason: leaving ? body.reason ?? null : null,
-      },
+      where: { id: before.id },
+      data: { status: body.status, leftOn: leaving ? effective : null, leftReason: leaving ? body.reason ?? null : null },
     });
     if (s.userId) await tx.user.update({ where: { id: s.userId }, data: { isActive: !leaving } });
     return s;
   });
-  return sendSuccess(res, student, leaving ? 'Student marked as left' : 'Student re-activated');
+  await audit(req, {
+    action: 'Status changed', entity: 'students', entityId: before.id,
+    meta: { name: before.name, admissionNo: before.admissionNo, from: before.status, to: body.status, fromLabel: STUDENT_STATUS_LABEL[before.status], toLabel: STUDENT_STATUS_LABEL[body.status], effective: toIso(effective), reason: body.reason ?? null },
+  });
+  return sendSuccess(res, student, `${before.name} is now ${STUDENT_STATUS_LABEL[body.status].toLowerCase()}`);
 }));
 
 // ─── Guardians ───

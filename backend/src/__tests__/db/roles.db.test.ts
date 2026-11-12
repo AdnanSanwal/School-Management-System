@@ -199,7 +199,7 @@ d('Roles & permissions (database)', () => {
   it('a student login is linked to the student and sees only that student', async () => {
     const O = as(tok.OWNER);
     const cls = await O.post('/roles/ADMIN/reset').then(() => as(tok.ADMIN).post('/academics/classes', { name: 'Class 9', level: 9, sections: ['A'] }));
-    const admit = (name: string, phone: string) => as(tok.ADMIN).post('/students', { name, sectionId: cls.body.data.sections[0].id, monthlyFee: 2000, guardians: [{ name: `${name} Parent`, phone, relation: 'FATHER', isPrimary: true }] });
+    const admit = (name: string, phone: string) => as(tok.ADMIN).post('/students', { admissionNo: `T-${Math.random().toString(36).slice(2, 10)}`, name, sectionId: cls.body.data.sections[0].id, monthlyFee: 2000, guardians: [{ name: `${name} Parent`, phone, relation: 'FATHER', isPrimary: true }] });
     ids.zara = (await admit('Zara Student', '03007770001')).body.data.student.id;
     ids.omar = (await admit('Omar Student', '03007770002')).body.data.student.id;
 

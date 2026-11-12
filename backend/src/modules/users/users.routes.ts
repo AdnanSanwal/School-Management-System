@@ -10,7 +10,8 @@ import { can } from '../../middleware/rbac';
 import { AppError } from '../../middleware/errorHandler';
 import { sendSuccess, sendPaginated } from '../../utils/apiResponse';
 import { handler, parseBody, parseQuery, paginationSchema, paging, me } from '../../utils/http';
-import { assertCanManageRole, createAccount, temporaryPassword } from '../../utils/accounts';
+import { assertCanManageRole, assertCustomRole, createAccount, temporaryPassword } from '../../utils/accounts';
+import { forgetCustomRoles } from '../../utils/rolePermissions';
 import { currentSchoolId } from '../../config/tenancy';
 import { formatNumber, nextNumber } from '../../utils/counter';
 
@@ -26,6 +27,7 @@ const schoolRoles = z.enum(['OWNER', 'PRINCIPAL', 'ADMIN', 'ACCOUNTANT', 'TEACHE
 
 const userSelect = {
   id: true, name: true, email: true, username: true, phone: true, role: true, isActive: true, mustChangePassword: true, lastLoginAt: true, createdAt: true,
+  customRole: { select: { id: true, name: true } },
   staff: { select: { id: true, employeeNo: true } },
   guardian: { select: { id: true } },
   student: { select: { id: true, admissionNo: true } },
@@ -34,13 +36,16 @@ const userSelect = {
 router.get('/', handler(async (req, res) => {
   const q = parseQuery(paginationSchema.extend({
     role: schoolRoles.optional(),
-    search: z.string().max(100).optional(),
+    search: z.string().trim().max(100).optional(),
     active: z.enum(['true', 'false']).optional(),
   }), req);
   const where = {
     role: q.role ?? { not: Role.SUPER_ADMIN },
     ...(q.active ? { isActive: q.active === 'true' } : {}),
-    ...(q.search ? { OR: [{ name: { contains: q.search } }, { email: { contains: q.search } }, { username: { contains: q.search } }, { phone: { contains: q.search } }] } : {}),
+    ...(q.search ? { OR: [
+      { name: { contains: q.search } }, { email: { contains: q.search } }, { username: { contains: q.search } }, { phone: { contains: q.search } },
+      { staff: { employeeNo: { contains: q.search } } }, { student: { admissionNo: { contains: q.search } } },
+    ] } : {}),
   };
   const [rows, total] = await Promise.all([
     prisma.user.findMany({ where, select: userSelect, orderBy: { name: 'asc' }, ...paging(q) }),
@@ -55,6 +60,7 @@ const createBody = z.object({
   username: z.string().min(3).max(40).optional(),
   phone: z.string().max(32).optional(),
   role: schoolRoles,
+  customRoleId: z.string().uuid().optional().nullable(),
   password: z.string().min(8).max(100).optional(),
 }).refine((b) => b.email || b.username, { message: 'Give the login a username or an email', path: ['username'] });
 
@@ -101,6 +107,8 @@ const updateBody = z.object({
   name: z.string().min(2).max(100).optional(),
   phone: z.string().max(32).nullable().optional(),
   role: schoolRoles.optional(),
+  // A school-defined role built on the (new) role; null = the standard role.
+  customRoleId: z.string().uuid().nullable().optional(),
   isActive: z.boolean().optional(),
 }).strict();
 
@@ -108,7 +116,12 @@ router.patch('/:id', handler(async (req, res) => {
   const body = parseBody(updateBody, req);
   const target = await loadManageable(me(req), req.params.id);
   if (body.role) assertCanManageRole(me(req).role, body.role);
-  const user = await prisma.user.update({ where: { id: target.id }, data: body, select: userSelect });
+  const role = body.role ?? target.role;
+  if (body.customRoleId) await assertCustomRole(body.customRoleId, role);
+  // Moving to another standard role drops a custom role built on the old one.
+  const data = { ...body, ...(body.role && body.role !== target.role && body.customRoleId === undefined ? { customRoleId: null } : {}) };
+  const user = await prisma.user.update({ where: { id: target.id }, data, select: userSelect });
+  if (data.customRoleId !== undefined) forgetCustomRoles(currentSchoolId());
   // Deactivation or role change: end existing sessions so it takes effect now.
   if (body.isActive === false || body.role) await endAllSessions(target.id);
   return sendSuccess(res, user, 'User updated');

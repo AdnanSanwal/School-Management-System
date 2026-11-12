@@ -64,9 +64,17 @@ export default function AdmissionPage() {
     setLookup('');
   };
 
+  // Admission number is compulsory (CR-02). The form starts with the next number; the office may change it.
+  const nextNo = useQuery({ queryKey: ['students', 'next-admission-no'], queryFn: studentsAPI.nextAdmissionNo, staleTime: 0 });
+  const [admTouched, setAdmTouched] = useState(false);
+  const [admServerError, setAdmServerError] = useState('');
+  const admissionNo = admTouched ? s.admissionNo : (s.admissionNo || nextNo.data?.admissionNo || '');
+  const admError = admServerError || (admTouched && !admissionNo.trim() ? 'Admission number is required' : '');
+
   const admit = useMutation({
     mutationFn: () => studentsAPI.admit({
       ...Object.fromEntries(Object.entries(s).filter(([, v]) => v !== '')),
+      admissionNo: admissionNo.trim(),
       ...(setsFee && fee !== '' ? { monthlyFee: Number(fee) } : {}),
       guardians: guardians.map((g) => g.kind === 'existing'
         ? { guardianId: g.guardianId, relation: g.relation, isPrimary: g.isPrimary }
@@ -79,12 +87,25 @@ export default function AdmissionPage() {
       if (res.parentLogins.length) setDone(res);
       else router.push(`/students/${res.student.id}`);
     },
-    onError: (e) => toast.error(apiError(e, 'Admission failed')),
+    onError: (e) => {
+      const msg = apiError(e, 'Admission failed');
+      if (/admission number/i.test(msg)) { setAdmTouched(true); setAdmServerError(msg); }
+      toast.error(msg);
+    },
   });
+  const submit = () => {
+    if (!admissionNo.trim()) {
+      setAdmTouched(true);
+      toast.error('Enter the admission number');
+      document.getElementById('admission-no')?.focus();
+      return;
+    }
+    admit.mutate();
+  };
 
   return (
     <DashboardLayout title="New admission" allowedRoles={CAN.admitStudents} subtitle="Student details, class and guardians">
-      <form className="space-y-6" onSubmit={(e) => { e.preventDefault(); admit.mutate(); }}>
+      <form className="space-y-6" onSubmit={(e) => { e.preventDefault(); submit(); }}>
         <div className="card">
           <h3 className="section-title mb-4">Student</h3>
           <div className="grid gap-4 md:grid-cols-3">
@@ -97,7 +118,16 @@ export default function AdmissionPage() {
             </Field>
             <Field label="Date of birth"><input type="date" className="input" value={s.dateOfBirth} onChange={set('dateOfBirth')} /></Field>
             <Field label="Roll no."><input className="input" value={s.rollNo} onChange={set('rollNo')} /></Field>
-            <Field label="Admission no." hint="Leave blank to number automatically"><input className="input" value={s.admissionNo} onChange={set('admissionNo')} /></Field>
+            <div>
+              <label htmlFor="admission-no" className="mb-1.5 block text-sm font-medium text-gray-700">Admission no. <span className="text-red-500">*</span></label>
+              <input id="admission-no" className={`input font-mono ${admError ? 'border-red-400 ring-1 ring-red-200' : ''}`} required maxLength={30}
+                value={admissionNo} aria-invalid={!!admError} aria-describedby="admission-no-msg"
+                onChange={(e) => { setAdmTouched(true); setAdmServerError(''); setS({ ...s, admissionNo: e.target.value }); }}
+                onBlur={() => setAdmTouched(true)} />
+              <p id="admission-no-msg" className={`mt-1 text-xs ${admError ? 'text-red-600' : 'text-gray-500'}`}>
+                {admError || (nextNo.data && admissionNo === nextNo.data.admissionNo ? 'Next number suggested — you can change it' : 'Required, must be unique')}
+              </p>
+            </div>
             <Field label="Blood group"><input className="input" value={s.bloodGroup} onChange={set('bloodGroup')} maxLength={8} /></Field>
             {setsFee && (
               <Field label="Monthly Fee *" hint={classMonthly !== undefined

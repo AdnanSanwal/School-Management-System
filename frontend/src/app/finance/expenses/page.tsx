@@ -10,6 +10,7 @@ import { Empty, Field, Modal, Spinner, Stat, StatusBadge } from '@/components/ui
 import { financeAPI, apiError } from '@/lib/api';
 import { CAN } from '@/lib/roles';
 import { formatDate, todayIso } from '@/lib/utils';
+import { SearchInput, NoMatches, cleanTerm, useDebounced } from '@/components/ui/SearchInput';
 import { CategoryModal, financeError, useAccounts, useCategories, useFinance, useFinanceRefresh } from '@/components/finance/shared';
 
 export default function ExpensesPage() {
@@ -22,13 +23,15 @@ function Expenses() {
   const params = useSearchParams();
   const today = todayIso();
   const pendingOnly = params.get('status') === 'PENDING';
-  const [f, setF] = useState({ from: pendingOnly ? '' : `${today.slice(0, 7)}-01`, to: pendingOnly ? '' : today, categoryId: '', status: pendingOnly ? 'PENDING' : '', search: '' });
+  const [f, setF] = useState({ from: pendingOnly ? '' : `${today.slice(0, 7)}-01`, to: pendingOnly ? '' : today, categoryId: '', status: pendingOnly ? 'PENDING' : '' });
+  const [search, setSearch] = useState('');
+  const term = useDebounced(cleanTerm(search), 250);
   const [page, setPage] = useState(1);
   const [adding, setAdding] = useState(false);
   const [cats, setCats] = useState(false);
   const categories = useCategories('EXPENSE');
   const set = (patch: Partial<typeof f>) => { setF({ ...f, ...patch }); setPage(1); };
-  const query = Object.fromEntries(Object.entries({ ...f, page, limit: 25 }).filter(([, v]) => v !== ''));
+  const query = Object.fromEntries(Object.entries({ ...f, search: term, page, limit: 25 }).filter(([, v]) => v !== ''));
   const { data, isLoading, error } = useQuery({ queryKey: ['finance', 'expenses', query], queryFn: () => financeAPI.expenses(query), placeholderData: keepPreviousData, meta: { quiet: true } });
   const decide = useMutation({
     mutationFn: (v: { id: string; approve: boolean; note?: string }) => financeAPI.decideExpense(v.id, v.approve, v.note),
@@ -58,9 +61,10 @@ function Expenses() {
             <option value="">All categories</option>{(categories.data ?? []).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label>
           <label><span className="label">Status</span><select className="select w-44" value={f.status} onChange={(e) => set({ status: e.target.value })}>
             <option value="">All</option><option value="APPROVED">Approved</option><option value="PENDING">Waiting for approval</option><option value="REJECTED">Rejected</option></select></label>
-          <label className="min-w-[12rem] flex-1"><span className="label">Search</span><input className="input" placeholder="Details, paid to, number" value={f.search} onChange={(e) => set({ search: e.target.value })} /></label>
+          <label className="min-w-[12rem] flex-1"><span className="label">Search</span><SearchInput placeholder="Details, paid to, number, category" value={search} onChange={(v) => { setSearch(v); setPage(1); }} aria-label="Search expenses" /></label>
         </div>
-        {isLoading ? <Spinner /> : error ? <p className="text-sm text-red-600">{apiError(error)}</p> : rows.length === 0 ? <Empty title="No expenses match" /> : (
+        {isLoading ? <Spinner /> : error ? <p className="text-sm text-red-600">{apiError(error)}</p> : rows.length === 0 && term ? <NoMatches term={term} what="expenses" onClear={() => setSearch('')}>{f.from || f.to ? 'Only entries between the dates above are searched.' : undefined}</NoMatches>
+          : rows.length === 0 ? <Empty title="No expenses in these dates" /> : (
           <div className="table-container">
             <table className="table">
               <thead><tr><th>Date</th><th>No.</th><th>Category</th><th>Details</th><th>Paid from</th><th className="text-right">Amount</th><th>Status</th><th /></tr></thead>

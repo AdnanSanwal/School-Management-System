@@ -254,14 +254,14 @@ router.put('/settings', can('expense.approve'), handler(async (req, res) => {
 router.get('/expenses', can('finance.view'), handler(async (req, res) => {
   const q = parseQuery(paginationSchema.extend({
     from: dateOnly.optional(), to: dateOnly.optional(), categoryId: id.optional(), accountId: id.optional(),
-    status: z.enum(['PENDING', 'APPROVED', 'REJECTED']).optional(), search: z.string().max(100).optional(),
+    status: z.enum(['PENDING', 'APPROVED', 'REJECTED']).optional(), search: z.string().trim().max(100).optional(),
   }), req);
   const where: Prisma.ExpenseWhereInput = {
     ...(q.from || q.to ? { expenseDate: { ...(q.from ? { gte: toDate(q.from) } : {}), ...(q.to ? { lte: toDate(q.to) } : {}) } } : {}),
     ...(q.categoryId ? { categoryId: q.categoryId } : {}),
     ...(q.accountId ? { accountId: q.accountId } : {}),
     ...(q.status ? { status: q.status } : {}),
-    ...(q.search ? { OR: [{ description: { contains: q.search } }, { paidTo: { contains: q.search } }, { expenseNo: { contains: q.search } }, { reference: { contains: q.search } }] } : {}),
+    ...(q.search ? { OR: [{ description: { contains: q.search } }, { paidTo: { contains: q.search } }, { expenseNo: { contains: q.search } }, { reference: { contains: q.search } }, { category: { name: { contains: q.search } } }] } : {}),
   };
   const [rows, total, sum] = await Promise.all([
     prisma.expense.findMany({ where, include: expenseInclude, orderBy: [{ expenseDate: 'desc' }, { createdAt: 'desc' }], ...paging(q) }),
@@ -357,12 +357,12 @@ router.delete('/expenses/:id', can('finance.manage'), handler(async (req, res) =
 const incomeInclude = { category: { select: { id: true, name: true } }, account: { select: { id: true, name: true } } } satisfies Prisma.OtherIncomeInclude;
 
 router.get('/income', can('finance.view'), handler(async (req, res) => {
-  const q = parseQuery(paginationSchema.extend({ from: dateOnly.optional(), to: dateOnly.optional(), categoryId: id.optional(), accountId: id.optional(), search: z.string().max(100).optional() }), req);
+  const q = parseQuery(paginationSchema.extend({ from: dateOnly.optional(), to: dateOnly.optional(), categoryId: id.optional(), accountId: id.optional(), search: z.string().trim().max(100).optional() }), req);
   const where: Prisma.OtherIncomeWhereInput = {
     ...(q.from || q.to ? { incomeDate: { ...(q.from ? { gte: toDate(q.from) } : {}), ...(q.to ? { lte: toDate(q.to) } : {}) } } : {}),
     ...(q.categoryId ? { categoryId: q.categoryId } : {}),
     ...(q.accountId ? { accountId: q.accountId } : {}),
-    ...(q.search ? { OR: [{ description: { contains: q.search } }, { receivedFrom: { contains: q.search } }, { incomeNo: { contains: q.search } }] } : {}),
+    ...(q.search ? { OR: [{ description: { contains: q.search } }, { receivedFrom: { contains: q.search } }, { incomeNo: { contains: q.search } }, { reference: { contains: q.search } }, { category: { name: { contains: q.search } } }] } : {}),
   };
   const [rows, total, sum] = await Promise.all([
     prisma.otherIncome.findMany({ where, include: incomeInclude, orderBy: [{ incomeDate: 'desc' }, { createdAt: 'desc' }], ...paging(q) }),

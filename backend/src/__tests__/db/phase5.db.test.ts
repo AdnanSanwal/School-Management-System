@@ -67,7 +67,7 @@ d('Phase 5 API (database)', () => {
     await A.put(`/academics/sections/${ids.s1}/subjects`, { assignments: [{ subjectId: ids.subject, teacherId: ids.staff }] });
 
     for (const [key, sec, phone] of [['k1', ids.s1, '0300-5550101'], ['k2', ids.s1, '03005550102'], ['k3', ids.s2, '03005550103']]) {
-      const r = await A.post('/students', {
+      const r = await A.post('/students', { admissionNo: `T-${Math.random().toString(36).slice(2, 10)}`,
         name: `Kid ${key}`, sectionId: sec,
         guardians: [{ name: `Parent ${key}`, phone, relation: 'FATHER', ...(key === 'k1' ? { loginEmail: `p5parent.${t.code}@test.local` } : {}) }],
       });

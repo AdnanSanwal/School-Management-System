@@ -64,7 +64,7 @@ d('Phase 4 API (database)', () => {
     await request(app).patch(`/api/v1/academics/sections/${ids.sec}`).set({ Authorization: `Bearer ${tok.ADMIN}` }).send({ classTeacherId: ids.staff });
 
     for (const [i, key] of ['P1', 'P2'].entries()) {
-      const r = await A.post('/students', {
+      const r = await A.post('/students', { admissionNo: `T-${Math.random().toString(36).slice(2, 10)}`,
         name: `Child ${key}`, sectionId: ids.sec,
         guardians: [{ name: `Parent ${key}`, phone: `0300555000${i}`, relation: 'FATHER', loginEmail: `${key.toLowerCase()}.${t.code}@test.local` }],
       });

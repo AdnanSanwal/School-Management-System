@@ -9,6 +9,7 @@ import { can } from '../../middleware/rbac';
 import { validate } from '../../middleware/validate';
 import { sendSuccess } from '../../utils/apiResponse';
 import { AppError } from '../../middleware/errorHandler';
+import { DEFAULT_DESIGNATIONS } from '../../utils/staffStatus';
 
 // Platform (SaaS operator) endpoints: onboard and suspend schools.
 // SUPER_ADMIN only; runs in system context, so it uses the unscoped client.
@@ -69,6 +70,8 @@ router.post('/schools', validate(createSchoolSchema), async (req: AuthRequest, r
         data: { ...school, licencePlan: licence?.plan || null, licencePaidUntil: licence?.paidUntil ? toDate(licence.paidUntil) : null, maxStudents: licence?.maxStudents ?? null },
       });
       await tx.academicYear.create({ data: { ...academicYear, schoolId: s.id, isCurrent: true } });
+      // The standard job titles for the staff forms (the school can change the list).
+      await tx.designation.createMany({ data: DEFAULT_DESIGNATIONS.map((name) => ({ schoolId: s.id, name })), skipDuplicates: true });
       const o = await tx.user.create({
         data: { schoolId: s.id, role: 'OWNER', name: owner.name, email: owner.email.toLowerCase(), phone: owner.phone, password, mustChangePassword: true },
         select: { id: true, name: true, email: true, role: true },

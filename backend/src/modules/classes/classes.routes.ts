@@ -8,6 +8,7 @@ import { AppError } from '../../middleware/errorHandler';
 import { sendSuccess } from '../../utils/apiResponse';
 import { handler, parseBody, id, me, patchOf } from '../../utils/http';
 import { currentAcademicYear, ensureInSchool, isSchoolWide, teacherSectionIds } from '../../utils/scope';
+import { onRoll } from '../../utils/staffStatus';
 
 // Classes, sections, subjects and who teaches what (spec: Class & Section).
 
@@ -111,7 +112,7 @@ const sectionUpdate = z.object({
 router.patch('/sections/:id', can('class.manage'), handler(async (req, res) => {
   const body = parseBody(sectionUpdate, req);
   if (body.classTeacherId) {
-    const t = await prisma.staff.findFirst({ where: { id: body.classTeacherId, isTeacher: true, status: 'ACTIVE' } });
+    const t = await prisma.staff.findFirst({ where: { id: body.classTeacherId, isTeacher: true, status: onRoll } });
     if (!t) throw new AppError('Class teacher must be an active teacher', 422);
   }
   const section = await prisma.section.update({
@@ -176,7 +177,7 @@ router.put('/sections/:id/subjects', can('class.manage'), handler(async (req, re
   if (subjectIds.length !== assignments.length) throw new AppError('Each subject can appear only once', 422);
   const [subjects, teachers] = await Promise.all([
     prisma.subject.count({ where: { id: { in: subjectIds } } }),
-    prisma.staff.count({ where: { id: { in: teacherIds }, isTeacher: true, status: 'ACTIVE' } }),
+    prisma.staff.count({ where: { id: { in: teacherIds }, isTeacher: true, status: onRoll } }),
   ]);
   if (subjects !== subjectIds.length || teachers !== teacherIds.length) throw new AppError('Unknown subject or teacher', 422);
 

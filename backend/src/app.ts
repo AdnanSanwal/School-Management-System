@@ -50,6 +50,7 @@ import libraryRoutes from './modules/library/library.routes';
 import messagingRoutes from './modules/messaging/messaging.routes';
 import notificationRoutes from './modules/notifications/notification.routes';
 import pushRoutes from './modules/push/push.routes';
+import searchRoutes from './modules/search/search.routes';
 
 const app = express();
 app.disable('x-powered-by');
@@ -170,6 +171,7 @@ app.use(`${api}/messaging`, messagingRoutes);
 app.use(`${api}/report-cards`, reportCardPdfRouter);
 app.use(`${api}/notifications`, notificationRoutes);
 app.use(`${api}/push`, pushRoutes);
+app.use(`${api}/search`, searchRoutes);
 
 // Sentry v8 error handler (must be before custom error handler)
 setupSentryErrorHandler(app);

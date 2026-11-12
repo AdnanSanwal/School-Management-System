@@ -3,8 +3,9 @@
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { AlertTriangle, Info, Search } from 'lucide-react';
+import { AlertTriangle, Info } from 'lucide-react';
 import { Modal, Spinner, Empty } from '@/components/ui/kit';
+import { SearchInput, NoMatches, matchesSearch } from '@/components/ui/SearchInput';
 import { dashboardAPI, apiError } from '@/lib/api';
 import { formatDate, formatDateTime, formatMoney, formatPeriod } from '@/lib/utils';
 
@@ -27,10 +28,12 @@ const statusLabel = (s: string) => s.replace('_', ' ').toLowerCase();
 export function DetailsModal({ kind, currency, onClose }: { kind: DetailKind; currency: string; onClose: () => void }) {
   const q = useQuery({ queryKey: ['dashboard-details', kind], queryFn: () => dashboardAPI.details(kind) });
   const [search, setSearch] = useState('');
-  const term = search.trim().toLowerCase();
+  const term = search.trim();
   const rows: any[] = useMemo(() => {
     const all: any[] = q.data?.rows ?? [];
-    return term ? all.filter((r) => JSON.stringify(r).toLowerCase().includes(term)) : all;
+    // Match what is shown (names, numbers, class, status…), not field names or record IDs:
+    // the old JSON search matched every row for words like "student" or "class".
+    return term ? all.filter((r) => matchesSearch(term, visibleValues(r))) : all;
   }, [q.data, term]);
 
   return (
@@ -40,21 +43,27 @@ export function DetailsModal({ kind, currency, onClose }: { kind: DetailKind; cu
           {kind !== 'alerts' && (
             <div className="flex flex-wrap items-center justify-between gap-2">
               <Summary kind={kind} d={q.data} currency={currency} />
-              <div className="relative w-56 max-w-full">
-                <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
-                <input className="input pl-9" placeholder="Search" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Search this list" />
-              </div>
+              <SearchInput className="w-64 max-w-full" placeholder="Name, number, class…" value={search} onChange={setSearch} aria-label="Search this list" />
             </div>
           )}
           <div className="max-h-[60vh] overflow-auto">
             {kind === 'alerts' ? <Alerts groups={q.data.groups} onClose={onClose} />
-              : !rows.length ? <Empty title={term ? 'Nothing matches' : 'Nothing to show yet'} />
+              : !rows.length ? (term ? <NoMatches term={term} onClear={() => setSearch('')} /> : <Empty title="Nothing to show yet" />)
               : <Table kind={kind} rows={rows} currency={currency} onClose={onClose} />}
           </div>
         </div>
       )}
     </Modal>
   );
+}
+
+/** A row's values without IDs: { studentId, student: 'Ali', months: ['2026-05'] } → ['Ali', ['2026-05'], …]. */
+function visibleValues(row: unknown): unknown[] {
+  if (!row || typeof row !== 'object') return [row];
+  return Object.entries(row as Record<string, unknown>)
+    .filter(([k]) => k !== 'id' && !/Id$/.test(k))
+    // Statuses are shown as words: NOT_MARKED → "not marked".
+    .map(([, v]) => (v && typeof v === 'object' && !Array.isArray(v) ? visibleValues(v) : typeof v === 'string' && v.includes('_') ? [v, v.replace(/_/g, ' ')] : v));
 }
 
 function Summary({ kind, d, currency }: { kind: DetailKind; d: any; currency: string }) {

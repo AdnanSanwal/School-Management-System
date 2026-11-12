@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Spinner, Empty } from '@/components/ui/kit';
+import { SearchInput, NoMatches, matchesSearch } from '@/components/ui/SearchInput';
 import { hrAPI, apiError } from '@/lib/api';
 import { CAN } from '@/lib/roles';
 import { LEAVE_LABEL } from '@/components/hr/LeaveCard';
@@ -14,14 +15,15 @@ export default function LeaveBalancesPage() {
   const { data, isLoading, error } = useQuery({ queryKey: ['hr', 'leave-balances'], queryFn: hrAPI.leaveBalances });
   const [search, setSearch] = useState('');
   const types = (data?.staff[0]?.balances ?? []).filter((b) => b.isPaid).map((b) => b.type);
-  const term = search.trim().toLowerCase();
-  const rows = (data?.staff ?? []).filter((s) => !term || `${s.name} ${s.employeeNo} ${s.designation ?? ''}`.toLowerCase().includes(term));
+  const term = search.trim();
+  const rows = (data?.staff ?? []).filter((s) => matchesSearch(term, s.name, s.employeeNo, s.designation));
 
   return (
     <DashboardLayout title="Leave balances" allowedRoles={CAN.viewLeaveBalances} subtitle={data ? `Academic year ${data.year} · used / allowed` : undefined}>
       <div className="card space-y-3">
-        <input className="input max-w-xs" placeholder="Search staff" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Search staff" />
-        {isLoading ? <Spinner /> : error ? <p className="text-sm text-red-600">{apiError(error)}</p> : rows.length === 0 ? <Empty title="No staff found" /> : (
+        <SearchInput className="w-72 max-w-full" placeholder="Name, employee no., designation" value={search} onChange={setSearch} aria-label="Search staff" />
+        {isLoading ? <Spinner /> : error ? <p className="text-sm text-red-600">{apiError(error)}</p>
+          : rows.length === 0 ? (term ? <NoMatches term={term} what="staff" onClear={() => setSearch('')} /> : <Empty title="No staff found" />) : (
           <div className="table-container">
             <table className="table">
               <thead><tr><th>Staff</th>{types.map((t) => <th key={t} className="text-right">{LEAVE_LABEL[t] ?? t}</th>)}<th className="text-right">Pending</th><th className="text-right">Unpaid days</th></tr></thead>

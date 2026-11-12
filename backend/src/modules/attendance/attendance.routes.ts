@@ -14,6 +14,7 @@ import { attendanceSummary, countStatuses } from '../../utils/attendanceStats';
 import { guardiansOf, notifyEach } from '../../utils/notify';
 import { messageFamilies } from '../../utils/messaging';
 import { sendLowAttendanceAlerts } from './lowAttendance';
+import { onRoll } from '../../utils/staffStatus';
 
 // Student and staff attendance (spec: Attendance; Teacher → Mark Attendance).
 
@@ -173,7 +174,7 @@ router.get('/staff', can('attendance.staff.view', 'attendance.staff.mark'), hand
   const q = parseQuery(z.object({ date: dateOnly.optional() }), req);
   const date = q.date ? toDate(q.date) : await schoolToday();
   const [staff, marks, leaves] = await Promise.all([
-    prisma.staff.findMany({ where: { status: 'ACTIVE' }, select: { id: true, name: true, employeeNo: true, designation: true, isTeacher: true }, orderBy: { name: 'asc' } }),
+    prisma.staff.findMany({ where: { status: onRoll }, select: { id: true, name: true, employeeNo: true, designation: true, isTeacher: true }, orderBy: { name: 'asc' } }),
     prisma.staffAttendance.findMany({ where: { date } }),
     prisma.leaveRequest.findMany({ where: { status: 'APPROVED', fromDate: { lte: date }, toDate: { gte: date } }, select: { staffId: true } }),
   ]);
@@ -204,7 +205,7 @@ router.put('/staff', can('attendance.staff.mark'), handler(async (req, res) => {
   const date = await resolveMarkDate(user.role, body.date, 'attendance.staff.mark');
   const ids = [...new Set(body.records.map((r) => r.staffId))];
   if (ids.length !== body.records.length) throw new AppError('Duplicate staff member in records', 422);
-  if ((await prisma.staff.count({ where: { id: { in: ids }, status: 'ACTIVE' } })) !== ids.length) {
+  if ((await prisma.staff.count({ where: { id: { in: ids }, status: onRoll } })) !== ids.length) {
     throw new AppError('Some staff members are not active', 422);
   }
   const schoolId = currentSchoolId();

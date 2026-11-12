@@ -37,7 +37,7 @@ d('concurrent writes across schools (database)', () => {
       const st = await request(app).post('/api/v1/staff').set(h).send({ name: 'Concurrent Teacher' });
       const students: string[] = [];
       for (let i = 0; i < 6; i++) {
-        const r = await request(app).post('/api/v1/students').set(h).send({
+        const r = await request(app).post('/api/v1/students').set(h).send({ admissionNo: `T-${Math.random().toString(36).slice(2, 10)}`,
           name: `Kid ${i}`, sectionId: cls.body.data.sections[0].id, guardians: [{ name: `Parent ${i}`, phone: `0300${name}${i}000`.slice(0, 11), relation: 'FATHER' }],
         });
         students.push(r.body.data.student.id);

@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import { hashPassword } from '../utils/password';
 import { PrismaClient, AttendanceStatus, Role, DayOfWeek } from '@prisma/client';
+import { DEFAULT_DESIGNATIONS } from '../utils/staffStatus';
 
 /**
  * Demo data for ERP v2: one full school ("greenfield") with a login for every
@@ -34,6 +35,7 @@ async function seedGreenfield(hash: string) {
     data: { name: 'Greenfield Public School', code: 'greenfield', phone: '042-35761234', address: 'Model Town, Lahore' },
   });
   const schoolId = school.id;
+  await prisma.designation.createMany({ data: DEFAULT_DESIGNATIONS.map((name) => ({ schoolId, name })), skipDuplicates: true });
   const year = await prisma.academicYear.create({
     data: { schoolId, name: '2026-27', startDate: day('2026-04-01'), endDate: day('2027-03-31'), isCurrent: true },
   });

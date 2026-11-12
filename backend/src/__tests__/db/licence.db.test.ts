@@ -148,7 +148,7 @@ d('Licensing (database)', () => {
   it('the plan’s student limit stops admissions beyond it', async () => {
     const A = as(tok.ADMIN);
     const cls = await A.post('/academics/classes', { name: 'Class 1', level: 1, sections: ['A'] });
-    const admit = (name: string, phone: string) => A.post('/students', { name, sectionId: cls.body.data.sections[0].id, guardians: [{ name: 'Parent', phone, relation: 'FATHER', isPrimary: true }] });
+    const admit = (name: string, phone: string) => A.post('/students', { admissionNo: `T-${Math.random().toString(36).slice(2, 10)}`, name, sectionId: cls.body.data.sections[0].id, guardians: [{ name: 'Parent', phone, relation: 'FATHER', isPrimary: true }] });
     expect((await admit('First', '03001110001')).status).toBe(201);
     await set({ maxStudents: 1 });
     const full = await admit('Second', '03001110002');

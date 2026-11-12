@@ -11,6 +11,7 @@ import { addDays, dayInTimezone, schoolTimezone, schoolToday, toIso, zonedDaySta
 import { attendanceSummary } from '../../utils/attendanceStats';
 import { currentAcademicYear } from '../../utils/scope';
 import { D } from '../fees/fees.calc';
+import { onRoll } from '../../utils/staffStatus';
 
 // Owner / Principal / Admin / Accountant home screen (spec §5 Owner Dashboard).
 // Each block is included only if the viewer's role may see that data.
@@ -110,8 +111,8 @@ async function studentAttendance(today: Date) {
 
 async function staffAttendance(today: Date) {
   const [teachers, marks, leaves] = await Promise.all([
-    prisma.staff.count({ where: { status: 'ACTIVE', isTeacher: true } }),
-    prisma.staffAttendance.findMany({ where: { date: today, staff: { status: 'ACTIVE', isTeacher: true } }, select: { status: true, staff: { select: { name: true } } } }),
+    prisma.staff.count({ where: { status: onRoll, isTeacher: true } }),
+    prisma.staffAttendance.findMany({ where: { date: today, staff: { status: onRoll, isTeacher: true } }, select: { status: true, staff: { select: { name: true } } } }),
     prisma.leaveRequest.findMany({
       where: { status: 'APPROVED', fromDate: { lte: today }, toDate: { gte: today }, staff: { isTeacher: true } },
       select: { staff: { select: { name: true } } },

@@ -4,6 +4,7 @@ import { currentSchoolId } from '../config/tenancy';
 import { addDays, periodRange, toIso } from './dates';
 import { daysWithin, leavePolicy, salariesOn } from './hr';
 import { D } from '../modules/fees/fees.calc';
+import { onRoll } from './staffStatus';
 
 // Payroll calculation. One line per person for a month:
 //   gross            = basic + allowances                         (from the salary structure)
@@ -60,7 +61,7 @@ export async function buildLines(tx: ScopedTx, run: { id: string; period: string
 
   const staff = await tx.staff.findMany({
     where: {
-      OR: [{ status: 'ACTIVE' }, { leftOn: { gte: start } }],
+      OR: [{ status: onRoll }, { leftOn: { gte: start } }],
       AND: [{ OR: [{ joiningDate: null }, { joiningDate: { lte: end } }] }],
     },
     orderBy: { name: 'asc' },

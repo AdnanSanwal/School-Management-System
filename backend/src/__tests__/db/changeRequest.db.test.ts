@@ -115,14 +115,14 @@ d('Change request CR-01…CR-05 (database)', () => {
   // ─── CR-04 ───
   it('CR-04: the accountant admits a student with their own monthly fee; invoices use it', async () => {
     const C = as(tok.ACCOUNTANT);
-    const admit = await C.post('/students', {
+    const admit = await C.post('/students', { admissionNo: `T-${Math.random().toString(36).slice(2, 10)}`,
       name: 'Own Fee Student', sectionId: ids.section, monthlyFee: 3000,
       guardians: [{ name: 'Parent One', phone: '03001112233', relation: 'FATHER', isPrimary: true }],
     });
     expect(admit.status).toBe(201);
     expect(Number(admit.body.data.student.monthlyFee)).toBe(3000);
     ids.ownFee = admit.body.data.student.id;
-    const classFee = await as(tok.ADMIN).post('/students', {
+    const classFee = await as(tok.ADMIN).post('/students', { admissionNo: `T-${Math.random().toString(36).slice(2, 10)}`,
       name: 'Class Fee Student', sectionId: ids.section,
       guardians: [{ name: 'Parent Two', phone: '03001112244', relation: 'MOTHER', isPrimary: true }],
     });

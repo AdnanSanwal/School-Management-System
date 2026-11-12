@@ -7,6 +7,7 @@ import toast from 'react-hot-toast';
 import { FilePlus2 } from 'lucide-react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Field, Modal, Spinner, StatusBadge, Empty } from '@/components/ui/kit';
+import { SearchInput, NoMatches, cleanTerm, useDebounced } from '@/components/ui/SearchInput';
 import { feesAPI, academicsAPI, apiError } from '@/lib/api';
 import { CAN, can } from '@/lib/roles';
 import { formatDate, formatMoney, formatPeriod, sectionLabel, todayIso } from '@/lib/utils';
@@ -18,12 +19,14 @@ export default function InvoicesPage() {
   const [period, setPeriod] = useState(todayIso().slice(0, 7));
   const [classId, setClassId] = useState('');
   const [status, setStatus] = useState('');
+  const [search, setSearch] = useState('');
+  const term = useDebounced(cleanTerm(search), 250);
   const [page, setPage] = useState(1);
   const [generating, setGenerating] = useState(false);
   const classes = useQuery({ queryKey: ['classes'], queryFn: academicsAPI.classes });
   const { data, isLoading } = useQuery({
-    queryKey: ['invoices', period, classId, status, page],
-    queryFn: () => feesAPI.invoices({ period: period || undefined, classId: classId || undefined, status: status || undefined, page, limit: 50 }),
+    queryKey: ['invoices', period, classId, status, term, page],
+    queryFn: () => feesAPI.invoices({ period: period || undefined, classId: classId || undefined, status: status || undefined, search: term || undefined, page, limit: 50 }),
     placeholderData: keepPreviousData,
   });
   const rows: any[] = data?.data ?? [];
@@ -58,10 +61,13 @@ export default function InvoicesPage() {
             <option value="">All</option><option value="OPEN">Unpaid + partial</option><option value="PAID">Paid</option><option value="CANCELLED">Cancelled</option>
           </select>
         </label>
+        <label className="min-w-[14rem] flex-1"><span className="label">Search</span>
+          <SearchInput placeholder="Invoice no., student, admission no." value={search} onChange={(v) => { setSearch(v); setPage(1); }} aria-label="Search invoices" />
+        </label>
         {data?.pagination && <span className="ml-auto text-sm text-gray-500">{data.pagination.total} invoices</span>}
       </div>
       <div className="card">
-        {isLoading ? <Spinner /> : rows.length === 0 ? <Empty title="No invoices">Use “Generate month” to create this month&apos;s vouchers.</Empty> : (
+        {isLoading ? <Spinner /> : rows.length === 0 && term ? <NoMatches term={term} what="invoices" onClear={() => setSearch('')}>{period ? 'Only the month chosen above is searched — clear the month to search every month.' : undefined}</NoMatches> : rows.length === 0 ? <Empty title="No invoices">Use “Generate month” to create this month&apos;s vouchers.</Empty> : (
           <div className="table-container">
             <table className="table">
               <thead><tr><th>Invoice</th><th>Student</th><th>Class</th><th>Month</th><th>Due</th><th className="text-right">Net</th><th className="text-right">Late fee</th><th className="text-right">Paid</th><th>Status</th></tr></thead>

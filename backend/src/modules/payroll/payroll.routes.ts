@@ -16,6 +16,7 @@ import { assertBooksOpen, assertCanPay, ensureFinanceSetup } from '../../utils/f
 import { buildLines, lineTotals, monthLabel, outstandingLoans, runTotals } from '../../utils/payroll';
 import { toPdf, toXlsx } from '../../utils/tableReport';
 import { D } from '../fees/fees.calc';
+import { onRoll } from '../../utils/staffStatus';
 
 // Payroll: monthly runs (draft → submitted → approved by the owner → paid), payslips,
 // the bank transfer sheet, and staff advances / loans recovered from salary.
@@ -77,7 +78,7 @@ router.get('/runs/:id', can('payroll.view'), handler(async (req, res) => {
     prisma.payrollLine.findMany({ where: { runId: run.id }, orderBy: { name: 'asc' } }),
     run.accountId ? prisma.moneyAccount.findFirst({ where: { id: run.accountId }, select: { name: true } }) : null,
     prisma.user.findMany({ where: { id: { in: [run.createdById, run.decidedById, run.paidById].filter(Boolean) as string[] } }, select: { id: true, name: true } }),
-    run.status === 'DRAFT' ? prisma.staff.findMany({ where: { status: 'ACTIVE' }, select: { id: true, name: true, employeeNo: true, joiningDate: true } }) : [],
+    run.status === 'DRAFT' ? prisma.staff.findMany({ where: { status: onRoll }, select: { id: true, name: true, employeeNo: true, joiningDate: true } }) : [],
   ]);
   const who = (uid: string | null) => people.find((p) => p.id === uid)?.name ?? null;
   const { end } = periodRange(run.period);
@@ -362,7 +363,7 @@ router.post('/loans', can('payroll.manage'), handler(async (req, res) => {
     installment: positive.optional(), startPeriod: period.optional(), note: z.string().trim().max(300).optional(),
   }), req);
   const [staff, account] = await Promise.all([
-    prisma.staff.findFirst({ where: { id: b.staffId, status: 'ACTIVE' } }),
+    prisma.staff.findFirst({ where: { id: b.staffId, status: onRoll } }),
     prisma.moneyAccount.findFirst({ where: { id: b.accountId, isActive: true } }),
   ]);
   if (!staff) throw new AppError('Choose an active staff member', 422);

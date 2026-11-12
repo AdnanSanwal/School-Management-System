@@ -6,6 +6,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Spinner, Empty, Stat } from '@/components/ui/kit';
+import { SearchInput, NoMatches, matchesSearch } from '@/components/ui/SearchInput';
 import { feesAPI, academicsAPI, apiError } from '@/lib/api';
 import { CAN, can } from '@/lib/roles';
 import { formatMoney, formatPeriod } from '@/lib/utils';
@@ -17,11 +18,15 @@ export default function DefaultersPage() {
   const currency = user?.school?.currency ?? 'PKR';
   const [classId, setClassId] = useState('');
   const [minDays, setMinDays] = useState('0');
+  const [search, setSearch] = useState('');
+  const term = search.trim();
   const classes = useQuery({ queryKey: ['classes'], queryFn: academicsAPI.classes });
   const { data, isLoading } = useQuery({
     queryKey: ['defaulters', classId, minDays],
     queryFn: () => feesAPI.defaulters({ classId: classId || undefined, minDaysOverdue: minDays }),
   });
+
+  const shown: any[] = (data?.students ?? []).filter((s: any) => matchesSearch(term, s.name, s.admissionNo, s.section, s.guardian?.name, s.guardian?.phone));
 
   const remind = useMutation({
     mutationFn: () => feesAPI.sendReminders({ daysAhead: 3, classId: classId || undefined }),
@@ -50,6 +55,9 @@ export default function DefaultersPage() {
             <option value="30">More than 30 days</option><option value="60">More than 60 days</option>
           </select>
         </label>
+        <label className="min-w-[14rem] flex-1"><span className="label">Search</span>
+          <SearchInput placeholder="Student, admission no., parent name or phone" value={search} onChange={setSearch} aria-label="Search defaulters" />
+        </label>
       </div>
       {isLoading || !data ? <Spinner /> : (
         <>
@@ -58,12 +66,13 @@ export default function DefaultersPage() {
             <Stat icon={AlertTriangle} tone="bad" label="Overdue amount" value={formatMoney(data.totalPending, currency)} />
           </div>
           <div className="card">
-            {data.students.length === 0 ? <Empty title="No defaulters 🎉" /> : (
+            {data.students.length === 0 ? <Empty title="No defaulters 🎉" />
+              : shown.length === 0 ? <NoMatches term={term} what="defaulters" onClear={() => setSearch('')} /> : (
               <div className="table-container">
                 <table className="table">
                   <thead><tr><th>Student</th><th>Class</th><th>Parent</th><th>Months</th><th>Days overdue</th><th className="text-right">Pending</th><th /></tr></thead>
                   <tbody>
-                    {data.students.map((s: any) => (
+                    {shown.map((s: any) => (
                       <tr key={s.studentId}>
                         <td><Link href={`/students/${s.studentId}`} className="font-medium hover:text-primary-600">{s.name}</Link><p className="text-xs text-gray-400">{s.admissionNo}</p></td>
                         <td className="text-sm">{s.section ?? '—'}</td>

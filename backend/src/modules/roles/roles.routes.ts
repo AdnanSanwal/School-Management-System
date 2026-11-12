@@ -9,7 +9,8 @@ import { AppError } from '../../middleware/errorHandler';
 import { sendSuccess } from '../../utils/apiResponse';
 import { handler, parseBody } from '../../utils/http';
 import { CREATE_OPTIONS, CREATE_STANDARD, creatableRoles, createKey } from '../../utils/accounts';
-import { changeable, CUSTOM_ROLES, EDITABLE_ROLES, forgetRoleOverrides, permissionList, roleOverrides } from '../../utils/rolePermissions';
+import { changeable, CUSTOM_ROLES, customChoices, customRoleList, EDITABLE_ROLES, forgetCustomRoles, forgetRoleOverrides, permissionList, PERMISSION_INFO, roleOverrides } from '../../utils/rolePermissions';
+import { audit } from '../../utils/audit';
 
 // Roles & permissions: the owner decides what each role may do in this school, and
 // which logins each staff role may create.
@@ -57,8 +58,83 @@ async function matrix() {
         changed: permissions.filter((p) => p.standard !== p.granted).length + creates.filter((c) => c.standard !== c.allowed).length,
       };
     }),
+    ...(await customMatrix()),
   };
 }
+
+// ─── Custom roles: the school's own access roles (e.g. Receptionist, Librarian) ───
+
+async function customMatrix() {
+  const list = await customRoleList(currentSchoolId());
+  const counts = await prisma.user.groupBy({ by: ['customRoleId'], where: { isActive: true, customRoleId: { not: null } }, _count: true });
+  return {
+    custom: list.map((r) => ({
+      id: r.id, name: r.name, baseRole: r.baseRole, baseLabel: label(r.baseRole),
+      permissions: customChoices(r.baseRole).filter((p) => r.perms.has(p)),
+      users: counts.find((c) => c.customRoleId === r.id)?._count ?? 0,
+    })),
+    // What can be ticked for a custom role, by the role it is built on.
+    customChoices: Object.fromEntries(CUSTOM_ROLES.map((base) => [base, customChoices(base).map((key) => ({ key, ...PERMISSION_INFO[key]! }))])),
+    customBases: CUSTOM_ROLES.map((r) => ({ role: r, label: label(r), about: ROLE_INFO[r].about })),
+  };
+}
+
+const customBody = z.object({
+  name: z.string().trim().min(2, 'Give the role a name').max(60),
+  baseRole: z.enum(['PRINCIPAL', 'ADMIN', 'ACCOUNTANT', 'TEACHER']),
+  permissions: z.array(z.string().max(60)).max(200),
+});
+
+function cleanCustom(b: { name: string; baseRole: Role; permissions: string[] }) {
+  if (Object.values(ROLE_INFO).some((i) => i.label.toLowerCase() === b.name.toLowerCase()) || ALL_ROLES.includes(b.name.toUpperCase() as Role)) {
+    throw new AppError(`“${b.name}” is already a standard role — choose another name`, 409);
+  }
+  const choices = customChoices(b.baseRole);
+  const bad = b.permissions.find((p) => !(choices as string[]).includes(p));
+  if (bad) throw new AppError(PERMISSION_INFO[bad as keyof typeof PERMISSION_INFO] ? `“${PERMISSION_INFO[bad as keyof typeof PERMISSION_INFO]!.label}” can’t be given to a role built on ${label(b.baseRole).toLowerCase()}` : `Unknown permission: ${bad}`, 422);
+  return [...new Set(b.permissions)];
+}
+
+async function nameTaken(name: string, exceptId?: string) {
+  const other = await prisma.customRole.findFirst({ where: { name, ...(exceptId ? { id: { not: exceptId } } : {}) }, select: { id: true } });
+  if (other) throw new AppError(`There is already a role called “${name}”`, 409);
+}
+
+router.post('/custom', handler(async (req, res) => {
+  const b = parseBody(customBody, req);
+  const permissions = cleanCustom(b);
+  await nameTaken(b.name);
+  const row = await prisma.customRole.create({ data: { schoolId: currentSchoolId(), name: b.name, baseRole: b.baseRole, permissions } });
+  forgetCustomRoles(currentSchoolId());
+  await audit(req, { action: 'Custom role created', entity: 'roles', entityId: row.id, meta: { name: b.name, baseRole: b.baseRole, permissions } });
+  return sendSuccess(res, await matrix(), `Role “${b.name}” created`, 201);
+}));
+
+router.put('/custom/:id', handler(async (req, res) => {
+  const existing = await prisma.customRole.findFirst({ where: { id: req.params.id } });
+  if (!existing) throw new AppError('Role not found', 404);
+  const b = parseBody(customBody.omit({ baseRole: true }), req);
+  const permissions = cleanCustom({ ...b, baseRole: existing.baseRole });
+  await nameTaken(b.name, existing.id);
+  await prisma.customRole.update({ where: { id: existing.id }, data: { name: b.name, permissions } });
+  forgetCustomRoles(currentSchoolId());
+  await audit(req, { action: 'Custom role changed', entity: 'roles', entityId: existing.id, meta: { name: b.name, previousName: existing.name, permissions, previousPermissions: existing.permissions } });
+  return sendSuccess(res, await matrix(), `Role “${b.name}” saved`);
+}));
+
+/** Deleting a role keeps its people: they go back to the standard role it was built on. */
+router.delete('/custom/:id', handler(async (req, res) => {
+  const existing = await prisma.customRole.findFirst({ where: { id: req.params.id } });
+  if (!existing) throw new AppError('Role not found', 404);
+  const moved = await transaction(async (tx) => {
+    const r = await tx.user.updateMany({ where: { customRoleId: existing.id }, data: { customRoleId: null } });
+    await tx.customRole.delete({ where: { id: existing.id } });
+    return r.count;
+  });
+  forgetCustomRoles(currentSchoolId());
+  await audit(req, { action: 'Custom role deleted', entity: 'roles', entityId: existing.id, meta: { name: existing.name, baseRole: existing.baseRole, usersMoved: moved } });
+  return sendSuccess(res, await matrix(), moved ? `Role “${existing.name}” deleted — ${moved} ${moved > 1 ? 'people are' : 'person is'} now ${label(existing.baseRole).toLowerCase()}` : `Role “${existing.name}” deleted`);
+}));
 
 router.get('/', handler(async (_req, res) => sendSuccess(res, await matrix())));
 
@@ -106,6 +182,7 @@ router.put('/:role', handler(async (req, res) => {
     if (rows.length) await tx.rolePermission.createMany({ data: rows.map((r) => ({ schoolId, role, ...r })) });
   });
   forgetRoleOverrides(schoolId);
+  forgetCustomRoles(schoolId);
   const m = await matrix();
   const changed = m.roles.find((r) => r.role === role)!.changed;
   return sendSuccess(res, m, changed ? `${label(role)} saved (${changed} change${changed > 1 ? 's' : ''} from the standard set)` : `${label(role)} is back to the standard set`);
@@ -115,6 +192,7 @@ router.post('/:role/reset', handler(async (req, res) => {
   const role = roleParam(req.params.role);
   await prisma.rolePermission.deleteMany({ where: { role } });
   forgetRoleOverrides(currentSchoolId());
+  forgetCustomRoles(currentSchoolId());
   return sendSuccess(res, await matrix(), `${label(role)} is back to the standard set`);
 }));
 

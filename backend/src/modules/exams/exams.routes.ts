@@ -15,6 +15,9 @@ import { familiesOfSections, notify } from '../../utils/notify';
 import { messageFamilies } from '../../utils/messaging';
 import { validateScale } from './exams.calc';
 import { assertCanEnterMarks, loadExam, reportCard, sectionResults } from './exams.service';
+import { audit } from '../../utils/audit';
+import { assertSheetWritable, loadSheet, retakeMaxSubjects, sheetAccess, writeEntries } from './exams.sheet';
+import type { AuthRequest } from '../../middleware/auth';
 import { renderReportCard } from './exams.pdf';
 
 // Exams, marks entry, grade scale, results, report cards (spec §6 Academics, §8 Marks Entry, §10 Progress Report).
@@ -142,6 +145,7 @@ router.patch('/:id', can('exam.manage'), handler(async (req, res) => {
 router.delete('/:id', can('exam.manage'), handler(async (req, res) => {
   const exam = await loadExam(req.params.id);
   if (exam.status !== 'DRAFT') throw new AppError('Only draft exams can be deleted', 409);
+  await prisma.markSheet.deleteMany({ where: { examId: exam.id } });
   await prisma.exam.delete({ where: { id: exam.id } });
   return sendSuccess(res, null, 'Exam deleted');
 }));
@@ -290,6 +294,8 @@ router.put('/:id/marks', can('marks.enter', 'exam.manage'), handler(async (req, 
   const exam = await loadExam(req.params.id);
   if (exam.status !== 'SCHEDULED') throw new AppError(exam.status === 'DRAFT' ? 'The schedule is not approved yet' : 'Results are published; marks are locked', 409);
   await assertCanEnterMarks(user, body.sectionId, body.subjectId, exam.academicYearId);
+  // A submitted marks sheet (CR-07) is read-only until an exam manager reopens it.
+  await assertSheetWritable(exam, body.sectionId);
   const paper = await paperFor(exam.id, body.sectionId, body.subjectId);
   const total = Number(paper.totalMarks);
 
@@ -316,6 +322,144 @@ router.put('/:id/marks', can('marks.enter', 'exam.manage'), handler(async (req, 
     if (toClear.length) await tx.mark.deleteMany({ where: { examSubjectId: paper.id, studentId: { in: toClear } } });
   });
   return sendSuccess(res, { saved: toSave.length, cleared: toClear.length }, 'Marks saved');
+}));
+
+// ─── Marks entry dashboard (CR-07): whole section sheet, draft → submit → reopen ───
+
+/**
+ * Filters for the dashboard: academic years, that year's exams, and per exam the classes and
+ * sections this user may load (teachers: sections where they teach a subject of the exam).
+ */
+router.get('/marks/options', can('marks.enter', 'exam.manage'), handler(async (req, res) => {
+  const q = parseQuery(z.object({ academicYearId: id.optional() }), req);
+  const user = me(req);
+  const manager = hasPermission(user.role, 'exam.manage');
+  const years = await prisma.academicYear.findMany({ orderBy: { startDate: 'desc' }, select: { id: true, name: true, isCurrent: true } });
+  const year = q.academicYearId ? years.find((y) => y.id === q.academicYearId) : years.find((y) => y.isCurrent) ?? years[0];
+  if (q.academicYearId && !year) throw new AppError('Academic year not found', 404);
+  const retakeMax = await retakeMaxSubjects();
+  if (!year) return sendSuccess(res, { years, academicYearId: null, exams: [], retakeMaxSubjects: retakeMax, canManage: manager });
+
+  const exams = await prisma.exam.findMany({
+    where: { academicYearId: year.id, ...(manager ? {} : { status: { not: 'DRAFT' } }) },
+    orderBy: [{ startDate: 'desc' }, { createdAt: 'desc' }],
+    select: {
+      id: true, name: true, status: true,
+      subjects: { select: { subjectId: true, class: { select: { id: true, name: true, level: true, archivedAt: true, sections: { select: { id: true, name: true } } } } } },
+    },
+  });
+  const staff = manager ? null : await staffForUser(user.id);
+  const teaching = manager ? null : await prisma.subjectAssignment.findMany({
+    where: { teacherId: staff?.id ?? '-', academicYearId: year.id }, select: { sectionId: true, subjectId: true },
+  });
+  const sheets = await prisma.markSheet.findMany({ where: { examId: { in: exams.map((e) => e.id) } }, select: { examId: true, sectionId: true, status: true } });
+  const sheetStatus = new Map(sheets.map((s) => [`${s.examId}:${s.sectionId}`, s.status]));
+
+  type SectionOpt = { id: string; name: string; sheetStatus: string | null };
+  const out = exams.map((e) => {
+    const classes = new Map<string, { id: string; name: string; level: number; sections: SectionOpt[] }>();
+    for (const p of e.subjects) {
+      if (p.class.archivedAt) continue;
+      const allowed = p.class.sections.filter((sec) => !teaching || teaching.some((t) => t.sectionId === sec.id && t.subjectId === p.subjectId));
+      if (!allowed.length) continue;
+      const c = classes.get(p.class.id) ?? { id: p.class.id, name: p.class.name, level: p.class.level, sections: [] };
+      for (const sec of allowed) {
+        if (!c.sections.some((x) => x.id === sec.id)) c.sections.push({ id: sec.id, name: sec.name, sheetStatus: sheetStatus.get(`${e.id}:${sec.id}`) ?? null });
+      }
+      c.sections.sort((a, b) => a.name.localeCompare(b.name));
+      classes.set(p.class.id, c);
+    }
+    return { id: e.id, name: e.name, status: e.status, classes: [...classes.values()].sort((a, b) => a.level - b.level) };
+  }).filter((e) => manager || e.classes.length);
+  return sendSuccess(res, { years, academicYearId: year.id, exams: out, retakeMaxSubjects: retakeMax, canManage: manager });
+}));
+
+/** School-wide "Keep for Retake" limit: failing up to N subjects = retake, more = fail. */
+router.patch('/marks/settings', can('exam.manage'), handler(async (req, res) => {
+  const b = parseBody(z.object({
+    retakeMaxSubjects: z.coerce.number({ error: 'Enter a number' }).int({ error: 'Enter a whole number' })
+      .min(0, { error: 'Cannot be negative' }).max(20, { error: 'Cannot be more than 20' }),
+  }), req);
+  const before = await retakeMaxSubjects();
+  await prisma.school.update({ where: { id: currentSchoolId() }, data: { retakeMaxSubjects: b.retakeMaxSubjects } });
+  await audit(req, { action: 'Retake rule changed', entity: 'marks-settings', entityId: currentSchoolId(), meta: { retakeMaxSubjects: { from: before, to: b.retakeMaxSubjects } } });
+  return sendSuccess(res, { retakeMaxSubjects: b.retakeMaxSubjects }, 'Retake rule saved');
+}));
+
+router.get('/:id/sheet', can('marks.enter', 'exam.manage'), handler(async (req, res) => {
+  const { sectionId } = parseQuery(z.object({ sectionId: id }), req);
+  return sendSuccess(res, await loadSheet(me(req), req.params.id, sectionId));
+}));
+
+const sheetBody = z.object({
+  sectionId: id,
+  remarks: z.string().max(2000, { error: 'Remarks can be at most 2000 characters' }).optional().nullable(),
+  entries: z.array(z.object({
+    studentId: id,
+    examSubjectId: id,
+    obtained: z.number({ error: 'Marks must be a number' }).min(0, { error: 'Marks cannot be negative' }).max(1000, { error: 'Marks are too large' })
+      .multipleOf(0.25, { error: 'Marks can only be in steps of 0.25' }).nullable().optional(),
+    isAbsent: z.boolean().default(false),
+  })).max(10_000).default([]),
+});
+
+/** Saves marks (and sheet remarks); with submit, also checks completeness and locks the sheet. */
+async function saveSheet(req: AuthRequest, submit: boolean) {
+  const body = parseBody(sheetBody, req);
+  const user = me(req);
+  const exam = await loadExam(req.params.id);
+  const { editable } = await sheetAccess(user, exam, body.sectionId);
+  const schoolId = currentSchoolId();
+  return transaction(async (tx) => {
+    await assertSheetWritable(exam, body.sectionId, tx);
+    const result = await writeEntries(tx, user, exam, body.sectionId, editable, body.entries);
+    if (submit) {
+      // Every active student must have every subject entered (or marked absent).
+      const section = await tx.section.findFirstOrThrow({ where: { id: body.sectionId }, select: { classId: true } });
+      const papers = await tx.examSubject.count({ where: { examId: exam.id, classId: section.classId } });
+      const students = await tx.student.findMany({ where: { sectionId: body.sectionId, status: 'ACTIVE' }, select: { id: true } });
+      if (!students.length) throw new AppError('There are no active students in this section', 422);
+      const entered = await tx.mark.count({
+        where: {
+          examSubject: { examId: exam.id, classId: section.classId }, studentId: { in: students.map((s) => s.id) },
+          OR: [{ isAbsent: true }, { obtained: { not: null } }],
+        },
+      });
+      const missing = papers * students.length - entered;
+      if (missing > 0) throw new AppError(`${missing} mark${missing === 1 ? ' is' : 's are'} still missing. Enter every subject (or mark the student absent) before submitting.`, 422);
+    }
+    const remarks = body.remarks === undefined ? undefined : body.remarks?.trim() || null;
+    const data = submit
+      ? { status: 'SUBMITTED' as const, submittedById: user.id, submittedAt: new Date(), ...(remarks !== undefined ? { remarks } : {}) }
+      : { status: 'DRAFT' as const, ...(remarks !== undefined ? { remarks } : {}) };
+    const sheet = await tx.markSheet.upsert({
+      where: { examId_sectionId: { examId: exam.id, sectionId: body.sectionId } },
+      create: { schoolId, examId: exam.id, sectionId: body.sectionId, ...data },
+      update: data,
+    });
+    return { ...result, sheetId: sheet.id, status: sheet.status, examId: exam.id, sectionId: body.sectionId };
+  });
+}
+
+router.put('/:id/sheet', can('marks.enter', 'exam.manage'), handler(async (req, res) => {
+  return sendSuccess(res, await saveSheet(req, false), 'Draft saved');
+}));
+
+router.post('/:id/sheet/submit', can('marks.enter', 'exam.manage'), handler(async (req, res) => {
+  const r = await saveSheet(req, true);
+  await audit(req, { action: 'Marks submitted', entity: 'mark-sheet', entityId: r.sheetId, meta: { examId: r.examId, sectionId: r.sectionId, saved: r.saved, cleared: r.cleared } });
+  return sendSuccess(res, r, 'Marks submitted');
+}));
+
+router.post('/:id/sheet/reopen', can('exam.manage'), handler(async (req, res) => {
+  const { sectionId } = parseBody(z.object({ sectionId: id }), req);
+  const exam = await loadExam(req.params.id);
+  if (exam.status === 'PUBLISHED') throw new AppError('Results are published; unpublish them before reopening marks', 409);
+  const sheet = await prisma.markSheet.findUnique({ where: { examId_sectionId: { examId: exam.id, sectionId } } });
+  if (!sheet || sheet.status !== 'SUBMITTED') throw new AppError('These marks are not submitted', 409);
+  await prisma.markSheet.update({ where: { id: sheet.id }, data: { status: 'DRAFT', submittedAt: null, submittedById: null } });
+  await audit(req, { action: 'Marks reopened', entity: 'mark-sheet', entityId: sheet.id, meta: { examId: exam.id, sectionId, from: 'SUBMITTED', to: 'DRAFT', submittedById: sheet.submittedById, submittedAt: sheet.submittedAt } });
+  return sendSuccess(res, { status: 'DRAFT' }, 'Marks reopened for editing');
 }));
 
 // ─── Results & analysis ───

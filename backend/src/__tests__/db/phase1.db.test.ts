@@ -86,13 +86,24 @@ d('Phase 1 API (database)', () => {
 
   // ─── Admission, guardians, siblings ───
 
+  it('admission number is required; the form suggests the next one', async () => {
+    const blank = await api('ADMIN').post('/students', { name: 'No Number', sectionId: ids.secA, guardians: [{ name: 'Nobody Here', phone: '03009990999', relation: 'FATHER' }] });
+    expect(blank.status).toBe(422);
+    expect(JSON.stringify(blank.body)).toMatch(/Admission number is required/);
+    expect(await basePrisma.student.count({ where: { schoolId: t.school.id, name: 'No Number' } })).toBe(0);
+    expect((await api('ADMIN').get('/students/next-admission-no')).body.data.admissionNo).toBe('ADM-00001');
+  });
+
   it('admits a student with a new guardian + parent login', async () => {
-    const r = await api('ADMIN').post('/students', {
+    const r = await api('ADMIN').post('/students', { admissionNo: 'ADM-00001',
       name: 'Ali Test', sectionId: ids.secA, gender: 'MALE',
       guardians: [{ name: 'Father Test', phone: '03009990001', relation: 'FATHER', loginEmail: `parent.${t.code}@test.local` }],
     });
     expect(r.status).toBe(201);
     expect(r.body.data.student.admissionNo).toBe('ADM-00001');
+    expect((await api('ADMIN').get('/students/next-admission-no')).body.data.admissionNo).toBe('ADM-00002');
+    const dup = await api('ADMIN').post('/students', { admissionNo: 'ADM-00001', name: 'Dup', sectionId: ids.secA, guardians: [{ name: 'Dup Parent', phone: '03009990998', relation: 'FATHER' }] });
+    expect(dup.status).toBe(409);
     expect(r.body.data.parentLogins).toHaveLength(1);
     ids.ali = r.body.data.student.id;
     const parent = await basePrisma.user.findUniqueOrThrow({ where: { id: r.body.data.parentLogins[0].user.id } });
@@ -103,7 +114,7 @@ d('Phase 1 API (database)', () => {
     const found = await api('ADMIN').get('/students/guardians/search?q=9990001');
     expect(found.body.data).toHaveLength(1);
     expect(found.body.data[0].children.map((c: any) => c.name)).toEqual(['Ali Test']);
-    const r = await api('ADMIN').post('/students', {
+    const r = await api('ADMIN').post('/students', { admissionNo: `T-${Math.random().toString(36).slice(2, 10)}`,
       name: 'Sara Test', sectionId: ids.secA, guardians: [{ guardianId: found.body.data[0].id, relation: 'FATHER' }],
     });
     expect(r.status).toBe(201);
@@ -112,7 +123,7 @@ d('Phase 1 API (database)', () => {
   });
 
   it('admits a third student in another section', async () => {
-    const r = await api('ADMIN').post('/students', {
+    const r = await api('ADMIN').post('/students', { admissionNo: `T-${Math.random().toString(36).slice(2, 10)}`,
       name: 'Other Child', sectionId: ids.secB, guardians: [{ name: 'Other Parent', phone: '03111234567', relation: 'MOTHER' }],
     });
     ids.other = r.body.data.student.id;
@@ -132,7 +143,7 @@ d('Phase 1 API (database)', () => {
   });
 
   it('teacher cannot admit students', async () => {
-    const r = await api('TEACHER').post('/students', { name: 'X', sectionId: ids.secA, guardians: [{ name: 'Y Z', phone: '0300000000', relation: 'FATHER' }] });
+    const r = await api('TEACHER').post('/students', { admissionNo: `T-${Math.random().toString(36).slice(2, 10)}`, name: 'X', sectionId: ids.secA, guardians: [{ name: 'Y Z', phone: '0300000000', relation: 'FATHER' }] });
     expect(r.status).toBe(403);
   });
 

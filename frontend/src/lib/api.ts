@@ -148,6 +148,7 @@ export const staffAPI = {
   create: (body: any) => data(api.post('/staff', body)),
   update: (id: string, body: any) => data(api.patch(`/staff/${id}`, body)),
   createLogin: (id: string, body: any) => data(api.post(`/staff/${id}/login`, body)),
+  setStatus: (id: string, body: { status: string; date?: string; reason?: string }) => api.post(`/staff/${id}/status`, body).then((r) => r.data as { data: any; message: string }),
   uploadDocument: (id: string, title: string, file: File) => {
     const fd = new FormData();
     fd.append('title', title);
@@ -293,12 +294,20 @@ export type RoleMatrix = {
     permissions: { key: string; module: string; label: string; standard: boolean; granted: boolean; available: boolean }[];
     /** Logins this role may create. */
     creates: { role: string; label: string; standard: boolean; allowed: boolean; available: boolean }[] }[];
+  /** The school's own roles, each built on a standard staff role. */
+  custom: { id: string; name: string; baseRole: string; baseLabel: string; permissions: string[]; users: number }[];
+  /** What can be ticked for a custom role, by the role it is built on. */
+  customChoices: Record<string, { key: string; module: string; label: string }[]>;
+  customBases: { role: string; label: string; about: string }[];
 };
 /** Roles & permissions (owner): what each staff role may do in this school. */
 export const rolesAPI = {
   matrix: () => data<RoleMatrix>(api.get('/roles')),
   save: (role: string, permissions: string[], creates: string[]) => api.put(`/roles/${role}`, { permissions, creates }),
   reset: (role: string) => api.post(`/roles/${role}/reset`),
+  createCustom: (b: { name: string; baseRole: string; permissions: string[] }) => api.post('/roles/custom', b),
+  saveCustom: (id: string, b: { name: string; permissions: string[] }) => api.put(`/roles/custom/${id}`, b),
+  deleteCustom: (id: string) => api.delete(`/roles/custom/${id}`),
 };
 
 /** A student's (or a parent's children's) own record. The server limits every call to their own data. */
@@ -320,10 +329,11 @@ export const studentsAPI = {
   list: (params?: any) => page(api.get('/students', { params })),
   get: (id: string) => data(api.get(`/students/${id}`)),
   admit: (body: any) => data(api.post('/students', body)),
+  nextAdmissionNo: () => data<{ admissionNo: string }>(api.get('/students/next-admission-no')),
+  setStatus: (id: string, body: { status: string; date?: string; reason?: string }) => api.post(`/students/${id}/status`, body).then((r) => r.data as { data: any; message: string }),
   update: (id: string, body: any) => data(api.patch(`/students/${id}`, body)),
   /** CR-04: the student's own monthly fee (null = follow the class fee structure). */
   setMonthlyFee: (id: string, monthlyFee: number | null) => data(api.put(`/students/${id}/monthly-fee`, { monthlyFee })),
-  setStatus: (id: string, body: any) => data(api.post(`/students/${id}/status`, body)),
   searchGuardians: (q: string) => data<any[]>(api.get('/students/guardians/search', { params: { q } })),
   linkGuardian: (id: string, body: any) => data(api.post(`/students/${id}/guardians`, body)),
   unlinkGuardian: (id: string, guardianId: string) => api.delete(`/students/${id}/guardians/${guardianId}`),
@@ -483,7 +493,7 @@ export const platformAPI = {
 };
 
 export const promotionsAPI = {
-  preview: (toAcademicYearId: string, examId?: string) => data(api.get('/promotions/preview', { params: { toAcademicYearId, examId } })),
+  preview: (params: { toAcademicYearId: string; fromAcademicYearId?: string; examId?: string; mapping?: string }) => data<any>(api.get('/promotions/preview', { params })),
   run: (body: any) => data(api.post('/promotions/run', body)),
 };
 

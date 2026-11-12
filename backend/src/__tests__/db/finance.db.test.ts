@@ -47,7 +47,7 @@ d('Finance: accounts, expenses, income (database)', () => {
       ids[`user${r}`] = u.id;
     }
     const cls = await as('ADMIN').post('/academics/classes', { name: 'Class 6', level: 6, sections: ['A'] });
-    const admit = await as('ADMIN').post('/students', {
+    const admit = await as('ADMIN').post('/students', { admissionNo: `T-${Math.random().toString(36).slice(2, 10)}`,
       name: 'Fee Payer', sectionId: cls.body.data.sections[0].id, monthlyFee: 3000,
       guardians: [{ name: 'Parent', phone: '03005556677', relation: 'FATHER', isPrimary: true }],
     });

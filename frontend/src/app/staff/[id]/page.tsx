@@ -5,7 +5,9 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { ArrowLeft, FileText, Pencil, Plus, Trash2, Upload, X } from 'lucide-react';
+import { ArrowLeft, Ban, CheckCircle2, DoorOpen, FileText, PauseCircle, Pencil, Plane, Plus, Trash2, Upload, X } from 'lucide-react';
+import { ActivityCard, StatusHeader, type StatusAction } from '@/components/profile/StatusHeader';
+import { STAFF_STATUS, StaffStatusBadge } from '@/components/staff/StaffStatus';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Field, Modal, Spinner } from '@/components/ui/kit';
 import { staffAPI, hrAPI, apiError, type SalaryView } from '@/lib/api';
@@ -15,6 +17,14 @@ import { formatDate, formatMoney, todayIso } from '@/lib/utils';
 import { useAuthStore } from '@/store/authStore';
 
 const CONTRACT: Record<string, string> = { PERMANENT: 'Permanent', CONTRACT: 'Contract', VISITING: 'Visiting' };
+
+const STAFF_ACTIONS: StatusAction[] = [
+  { value: 'ACTIVE', label: 'Active', icon: CheckCircle2, tone: 'green', about: STAFF_STATUS.ACTIVE.about },
+  { value: 'INACTIVE', label: 'Inactive', icon: PauseCircle, tone: 'gray', about: STAFF_STATUS.INACTIVE.about },
+  { value: 'LEFT', label: 'Left', icon: DoorOpen, tone: 'amber', about: STAFF_STATUS.LEFT.about },
+  { value: 'TEMPORARY_LEAVE', label: 'Temporary Leave', icon: Plane, tone: 'blue', about: STAFF_STATUS.TEMPORARY_LEAVE.about },
+  { value: 'TERMINATED', label: 'Terminated', icon: Ban, tone: 'red', about: STAFF_STATUS.TERMINATED.about },
+];
 
 export default function StaffProfilePage() {
   const { id } = useParams<{ id: string }>();
@@ -26,6 +36,11 @@ export default function StaffProfilePage() {
   const refresh = () => { qc.invalidateQueries({ queryKey: ['staff'] }); qc.invalidateQueries({ queryKey: ['hr'] }); };
   const [modal, setModal] = useState<null | 'edit' | 'salary' | 'doc'>(null);
   const manage = can(role, 'manageStaff');
+  const setStatus = useMutation({
+    mutationFn: ({ status, date, reason }: { status: string; date?: string; reason?: string }) => staffAPI.setStatus(id, { status, date, reason }),
+    onSuccess: (r) => { toast.success(r.message); refresh(); for (const key of ['teachers', 'classes', 'users', 'payroll']) qc.invalidateQueries({ queryKey: [key] }); },
+    onError: (e) => toast.error(apiError(e)),
+  });
 
   return (
     <DashboardLayout title={s?.name ?? 'Staff member'} allowedRoles={CAN.viewStaff}
@@ -38,10 +53,23 @@ export default function StaffProfilePage() {
       {error && <div className="card text-sm text-red-600">{apiError(error, 'Staff member not found')}</div>}
       {s && (
         <div className="grid gap-4 lg:grid-cols-3">
+          <div className="lg:col-span-3">
+            <StatusHeader
+              name={s.name} noun="staff member" status={s.status} actions={STAFF_ACTIONS}
+              canChange={manage} pending={setStatus.isPending}
+              onChange={(status, d) => setStatus.mutate({ status, ...d })}
+              subtitle={<>Employee ID: <span className="font-mono">{s.employeeNo}</span>{s.joiningDate ? <> <span className="text-gray-300">|</span> Joined {formatDate(s.joiningDate)}</> : null}</>}
+              chips={<>
+                <span className="badge badge-indigo">{s.designation ?? (s.isTeacher ? 'Teacher' : 'Staff')}</span>
+                {s.department && <span className="badge badge-blue">{s.department}</span>}
+                <StaffStatusBadge status={s.status} />
+                {s.leftOn && <span className="badge badge-gray">since {formatDate(s.leftOn)}</span>}
+              </>}
+            />
+          </div>
           <div className="card space-y-3 lg:col-span-2">
             <div className="flex items-center justify-between">
               <h3 className="section-title">Profile</h3>
-              <span className={`badge ${s.status === 'ACTIVE' ? 'badge-green' : 'badge-gray'}`}>{s.status === 'ACTIVE' ? 'active' : `left${s.leftOn ? ` ${formatDate(s.leftOn)}` : ''}`}</span>
             </div>
             <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm sm:grid-cols-3">
               <Item k="Employee no." v={s.employeeNo} />
@@ -75,8 +103,9 @@ export default function StaffProfilePage() {
           </div>
 
           <div className="space-y-4">
-            {can(role, 'viewSalary') && <SalaryCard staffId={s.id} current={s.salary ?? null} currency={currency} canEdit={can(role, 'manageSalary') && s.status === 'ACTIVE'} onEdit={() => setModal('salary')} />}
+            {can(role, 'viewSalary') && <SalaryCard staffId={s.id} current={s.salary ?? null} currency={currency} canEdit={can(role, 'manageSalary') && (s.status === 'ACTIVE' || s.status === 'TEMPORARY_LEAVE')} onEdit={() => setModal('salary')} />}
             <LeaveCard year={s.leave.year} balances={s.leave.balances} />
+            <ActivityCard items={s.activity ?? []} extra={s.joiningDate ? [{ label: 'Joined the school', at: s.joiningDate }] : []} />
           </div>
 
           <div className="card lg:col-span-3">

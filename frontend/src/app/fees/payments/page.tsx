@@ -6,6 +6,7 @@ import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { Printer } from 'lucide-react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Spinner, Stat, Empty } from '@/components/ui/kit';
+import { SearchInput, NoMatches, cleanTerm, useDebounced } from '@/components/ui/SearchInput';
 import { feesAPI } from '@/lib/api';
 import { CAN } from '@/lib/roles';
 import { formatDateTime, formatMoney, sectionLabel, todayIso } from '@/lib/utils';
@@ -17,10 +18,12 @@ export default function CollectionsPage() {
   const [from, setFrom] = useState(todayIso());
   const [to, setTo] = useState(todayIso());
   const [method, setMethod] = useState('');
+  const [search, setSearch] = useState('');
+  const term = useDebounced(cleanTerm(search), 250);
   const [page, setPage] = useState(1);
   const { data, isLoading } = useQuery({
-    queryKey: ['payments', from, to, method, page],
-    queryFn: () => feesAPI.payments({ from, to, method: method || undefined, page, limit: 50 }),
+    queryKey: ['payments', from, to, method, term, page],
+    queryFn: () => feesAPI.payments({ from, to, method: method || undefined, search: term || undefined, page, limit: 50 }),
     placeholderData: keepPreviousData,
   });
   const rows: any[] = data?.data ?? [];
@@ -36,6 +39,9 @@ export default function CollectionsPage() {
             <option value="JAZZCASH">JazzCash</option><option value="EASYPAISA">Easypaisa</option><option value="CHEQUE">Cheque</option><option value="CARD">Card</option><option value="ONLINE">Online</option>
           </select>
         </label>
+        <label className="min-w-[14rem] flex-1"><span className="label">Search</span>
+          <SearchInput placeholder="Receipt no., student, admission no., reference" value={search} onChange={(v) => { setSearch(v); setPage(1); }} aria-label="Search payments" />
+        </label>
       </div>
       {data?.totals && (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -46,7 +52,7 @@ export default function CollectionsPage() {
         </div>
       )}
       <div className="card">
-        {isLoading ? <Spinner /> : rows.length === 0 ? <Empty title="No payments in this period" /> : (
+        {isLoading ? <Spinner /> : rows.length === 0 ? (term ? <NoMatches term={term} what="payments" onClear={() => setSearch('')}>Only payments between the dates above are searched.</NoMatches> : <Empty title="No payments in this period" />) : (
           <div className="table-container">
             <table className="table">
               <thead><tr><th>Receipt</th><th>Time</th><th>Student</th><th>Class</th><th>Method</th><th className="text-right">Amount</th><th /></tr></thead>

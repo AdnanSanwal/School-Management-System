@@ -5,9 +5,10 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { ArrowLeft, FileDown, FileSpreadsheet, Filter, RotateCcw, Search } from 'lucide-react';
+import { ArrowLeft, FileDown, FileSpreadsheet, Filter, RotateCcw } from 'lucide-react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Spinner, Empty } from '@/components/ui/kit';
+import { SearchInput, NoMatches, matchesSearch } from '@/components/ui/SearchInput';
 import { reportsAPI, apiError, type ReportColumn } from '@/lib/api';
 import { CAN } from '@/lib/roles';
 import { cn } from '@/lib/utils';
@@ -55,8 +56,9 @@ export default function ReportViewPage() {
 
   if (!meta) return <DashboardLayout title="Report" allowedRoles={CAN.reports}><div className="card"><Empty title="Unknown report" /></div></DashboardLayout>;
   const r = q.data;
-  const term = search.trim().toLowerCase();
-  const rows = r ? (term ? r.rows.filter((row) => Object.values(row).some((v) => String(v ?? '').toLowerCase().includes(term))) : r.rows) : [];
+  const term = search.trim();
+  // Match the raw values and what the table shows ("4,500", "12.5%"), every word, any case.
+  const rows = r ? (term ? r.rows.filter((row) => matchesSearch(term, r.columns.map((c) => [row[c.key], fmt(row[c.key], c, r.currency)]))) : r.rows) : [];
   const dirty = JSON.stringify(toParams(type, draft)) !== JSON.stringify(params);
 
   return (
@@ -84,12 +86,9 @@ export default function ReportViewPage() {
             <div className="space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="text-sm text-gray-600"><b>{r.rows.length}</b> row{r.rows.length === 1 ? '' : 's'}{term ? ` · ${rows.length} matching` : ''}</p>
-                <div className="relative w-64 max-w-full">
-                  <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
-                  <input className="input pl-9" placeholder="Search in this report" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Search in report" />
-                </div>
+                <SearchInput className="w-64 max-w-full" placeholder="Search in this report" value={search} onChange={setSearch} aria-label="Search in report" />
               </div>
-              {rows.length === 0 ? <Empty title={term ? 'Nothing matches your search' : 'No data for these filters'} /> : (
+              {rows.length === 0 ? (term ? <NoMatches term={term} what="rows" onClear={() => setSearch('')} /> : <Empty title="No data for these filters" />) : (
                 <div className="table-container max-h-[65vh] overflow-auto">
                   <table className="table">
                     <thead>

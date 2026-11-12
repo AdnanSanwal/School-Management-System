@@ -1,11 +1,13 @@
 'use client';
 
-import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Suspense, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { Plus, BookOpen, Pencil, Search } from 'lucide-react';
+import { Plus, BookOpen, Pencil } from 'lucide-react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Field, Modal, Spinner, Empty, StudentPicker } from '@/components/ui/kit';
+import { SearchInput, NoMatches, cleanTerm, useDebounced } from '@/components/ui/SearchInput';
 import { libraryAPI, apiError } from '@/lib/api';
 import { CAN, can } from '@/lib/roles';
 import { cn, formatDate, formatMoney } from '@/lib/utils';
@@ -19,9 +21,17 @@ const LOAN_TABS = [
 ] as const;
 
 export default function LibraryPage() {
+  return <Suspense fallback={null}><Library /></Suspense>;
+}
+
+function Library() {
   const user = useAuthStore((s) => s.user);
   const manage = can(user?.role, 'manageLibrary');
-  const [tab, setTab] = useState<'loans' | 'books'>('loans');
+  // The header search links here as /library?search=<title>: open the catalogue on that book.
+  const initialSearch = useSearchParams().get('search') ?? '';
+  const [tab, setTab] = useState<'loans' | 'books'>(initialSearch ? 'books' : 'loans');
+  const [linked, setLinked] = useState(initialSearch);
+  if (linked !== initialSearch) { setLinked(initialSearch); if (initialSearch) setTab('books'); }
   const [issuing, setIssuing] = useState(false);
 
   return (
@@ -34,7 +44,7 @@ export default function LibraryPage() {
           </button>
         ))}
       </div>
-      {tab === 'loans' ? <Loans manage={manage} currency={user?.school?.currency ?? 'PKR'} /> : <Books manage={manage} />}
+      {tab === 'loans' ? <Loans manage={manage} currency={user?.school?.currency ?? 'PKR'} /> : <Books manage={manage} initialSearch={initialSearch} key={initialSearch} />}
       {issuing && <IssueModal onClose={() => setIssuing(false)} />}
     </DashboardLayout>
   );
@@ -113,23 +123,21 @@ function Loans({ manage, currency }: { manage: boolean; currency: string }) {
   );
 }
 
-function Books({ manage }: { manage: boolean }) {
-  const [search, setSearch] = useState('');
+function Books({ manage, initialSearch = '' }: { manage: boolean; initialSearch?: string }) {
+  const [search, setSearch] = useState(initialSearch);
+  const term = useDebounced(cleanTerm(search), 250);
   const [page, setPage] = useState(1);
   const [edit, setEdit] = useState<any | null>(null);
-  const { data, isLoading } = useQuery({ queryKey: ['library', 'books', search, page], meta: { quiet: !!search }, queryFn: () => libraryAPI.books({ search: search || undefined, page, limit: 25 }) });
+  const { data, isLoading } = useQuery({ queryKey: ['library', 'books', term, page], meta: { quiet: !!term }, placeholderData: keepPreviousData, queryFn: () => libraryAPI.books({ search: term || undefined, page, limit: 25 }) });
   const rows: any[] = data?.data ?? [];
   const pages = data?.pagination?.pages ?? 1;
   return (
     <div className="card">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <div className="relative w-72 max-w-full">
-          <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
-          <input className="input pl-9" placeholder="Title, author, ISBN, category" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} aria-label="Search books" />
-        </div>
+        <SearchInput className="w-72 max-w-full" placeholder="Title, author, ISBN, category" value={search} onChange={(v) => { setSearch(v); setPage(1); }} aria-label="Search books" />
         {manage && <button className="btn btn-secondary" onClick={() => setEdit({})}><Plus className="h-4 w-4" /> Add book</button>}
       </div>
-      {isLoading ? <Spinner /> : !rows.length ? <Empty title={search ? 'No book matches' : 'No books yet'} /> : (
+      {isLoading ? <Spinner /> : !rows.length ? (term ? <NoMatches term={term} what="books" onClear={() => setSearch('')} /> : <Empty title="No books yet" />) : (
         <div className="overflow-x-auto">
           <table className="table">
             <thead><tr><th>Title</th><th>Category</th><th>Shelf</th><th>Copies</th><th>Available</th><th /></tr></thead>
@@ -199,9 +207,11 @@ function IssueModal({ onClose }: { onClose: () => void }) {
   const qc = useQueryClient();
   const [student, setStudent] = useState<any>(null);
   const [q, setQ] = useState('');
+  const term = useDebounced(cleanTerm(q), 250);
   const [book, setBook] = useState<any>(null);
   const [dueDate, setDueDate] = useState('');
-  const books = useQuery({ queryKey: ['library', 'books', 'pick', q], meta: { quiet: true }, queryFn: () => libraryAPI.books({ search: q, available: 'true', limit: 8 }), enabled: q.trim().length >= 2 && !book });
+  const books = useQuery({ queryKey: ['library', 'books', 'pick', term], meta: { quiet: true }, queryFn: () => libraryAPI.books({ search: term, available: 'true', limit: 8 }), enabled: term.length >= 2 && !book });
+  const bookSettling = cleanTerm(q) !== term || books.isFetching;
   const m = useMutation({
     mutationFn: () => libraryAPI.issue({ bookId: book.id, studentId: student.id, dueDate: dueDate || undefined }),
     onSuccess: (r: any) => { toast.success(`Issued — due ${formatDate(r.dueDate)}`); qc.invalidateQueries({ queryKey: ['library'] }); onClose(); },
@@ -219,10 +229,11 @@ function IssueModal({ onClose }: { onClose: () => void }) {
             </div>
           ) : (
             <div className="relative">
-              <input className="input" placeholder="Search available books" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search book" />
-              {q.trim().length >= 2 && (
+              <SearchInput placeholder="Search available books: title, author, ISBN" value={q} onChange={setQ} aria-label="Search book" />
+              {cleanTerm(q).length >= 2 && (
                 <ul className="absolute z-20 mt-1 max-h-64 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-lg">
-                  {!books.isFetching && !(books.data?.data ?? []).length && <li className="px-3 py-2 text-sm text-gray-400">No available copy</li>}
+                  {bookSettling && !(books.data?.data ?? []).length && <li className="px-3 py-2 text-sm text-gray-400">Searching…</li>}
+                  {!bookSettling && !(books.data?.data ?? []).length && <li className="px-3 py-2 text-sm text-gray-400">No available copy matches “{term}”</li>}
                   {(books.data?.data ?? []).map((b: any) => (
                     <li key={b.id}><button type="button" className="w-full px-3 py-2 text-left text-sm hover:bg-slate-50" onClick={() => setBook(b)}>
                       <b>{b.title}</b> <span className="text-gray-500">{b.author ? `· ${b.author} ` : ''}· {b.available} available</span>

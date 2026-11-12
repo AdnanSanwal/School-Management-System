@@ -34,18 +34,27 @@ async function openCounts(bookIds: string[]) {
 // ─── Catalogue ───
 
 router.get('/books', can('library.view'), handler(async (req, res) => {
-  const q = parseQuery(paginationSchema.extend({ search: z.string().max(100).optional(), available: z.enum(['true']).optional() }), req);
-  const where: Prisma.BookWhereInput = q.search
-    ? { OR: [{ title: { contains: q.search } }, { author: { contains: q.search } }, { isbn: { contains: q.search } }, { category: { contains: q.search } }] }
+  const q = parseQuery(paginationSchema.extend({ search: z.string().trim().max(100).optional(), available: z.enum(['true']).optional() }), req);
+  // Every word must appear in the title, author, ISBN or category ("harry potter", "potter rowling").
+  const words = (q.search ?? '').split(/\s+/).filter(Boolean).slice(0, 5);
+  const where: Prisma.BookWhereInput = words.length
+    ? { AND: words.map((w) => ({ OR: [{ title: { contains: w } }, { author: { contains: w } }, { isbn: { contains: w } }, { category: { contains: w } }] })) }
     : {};
+  const withCounts = async (rows: Awaited<ReturnType<typeof prisma.book.findMany>>) => {
+    const out = await openCounts(rows.map((b) => b.id));
+    return rows.map((b) => ({ ...b, issued: out.get(b.id) ?? 0, available: b.copies - (out.get(b.id) ?? 0) }));
+  };
+  if (q.available) {
+    // "Available" depends on open issues, so filter before paging (not after, which lost matches).
+    const all = (await withCounts(await prisma.book.findMany({ where, orderBy: { title: 'asc' }, take: 1000 }))).filter((b) => b.available > 0);
+    const { skip, take } = paging(q);
+    return sendPaginated(res, all.slice(skip, skip + take), all.length, q.page, q.limit);
+  }
   const [rows, total] = await Promise.all([
     prisma.book.findMany({ where, orderBy: { title: 'asc' }, ...paging(q) }),
     prisma.book.count({ where }),
   ]);
-  const out = await openCounts(rows.map((b) => b.id));
-  const data = rows.map((b) => ({ ...b, issued: out.get(b.id) ?? 0, available: b.copies - (out.get(b.id) ?? 0) }))
-    .filter((b) => !q.available || b.available > 0);
-  return sendPaginated(res, data, total, q.page, q.limit);
+  return sendPaginated(res, await withCounts(rows), total, q.page, q.limit);
 }));
 
 const bookBody = z.object({

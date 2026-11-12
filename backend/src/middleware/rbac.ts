@@ -149,8 +149,10 @@ export function effectivePermissions(role: string, overrides?: RoleOverrides): P
  * school's own role settings apply (loaded by `authenticate`); elsewhere the standard set.
  */
 export function hasPermission(role: string, permission: Permission): boolean {
-  const standard = ROLE_PERMISSIONS[role as Role]?.has(permission) ?? false;
   const ctx = tenantStorage.getStore();
+  // A custom role replaces its base role's list for the user who holds it.
+  if (ctx?.kind === 'tenant' && ctx.custom && ctx.custom.role === role) return ctx.custom.perms.has(permission);
+  const standard = ROLE_PERMISSIONS[role as Role]?.has(permission) ?? false;
   const o = ctx?.kind === 'tenant' ? ctx.roles?.[role] : undefined;
   if (!o) return standard;
   return (standard && !o.revoke.has(permission)) || o.grant.has(permission);

@@ -3,7 +3,7 @@ import { verifyToken, JwtPayload } from '../utils/jwt';
 import { sendError } from '../utils/apiResponse';
 import { isRevoked } from '../utils/sessions';
 import { tenantStorage, TenantContext } from '../config/tenancy';
-import { roleOverrides } from '../utils/rolePermissions';
+import { customRoleOf, roleOverrides } from '../utils/rolePermissions';
 import { licenceStatus, LOCKED_MESSAGE } from '../utils/licence';
 
 export interface AuthRequest extends Request {
@@ -40,7 +40,10 @@ export async function authenticate(req: AuthRequest, res: Response, next: NextFu
 
   let ctx: TenantContext;
   if (user.role === 'SUPER_ADMIN') ctx = { kind: 'system' };
-  else if (user.schoolId) ctx = { kind: 'tenant', schoolId: user.schoolId, roles: await roleOverrides(user.schoolId) };
+  else if (user.schoolId) {
+    const [roles, custom] = await Promise.all([roleOverrides(user.schoolId), customRoleOf(user.schoolId, user.id)]);
+    ctx = { kind: 'tenant', schoolId: user.schoolId, roles, ...(custom && custom.baseRole === user.role ? { custom: { role: user.role, perms: custom.perms } } : {}) };
+  }
   else return sendError(res, 'Token has no school', 401);
 
   if (ctx.kind === 'tenant' && !LOCKED_ALLOWED.test(req.originalUrl.split('?')[0])) {

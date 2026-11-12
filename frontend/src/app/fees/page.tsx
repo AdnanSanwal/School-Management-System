@@ -5,7 +5,8 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { Search, Printer, Wallet } from 'lucide-react';
+import { Printer, Wallet } from 'lucide-react';
+import { SearchInput, NoMatches, cleanTerm, useDebounced } from '@/components/ui/SearchInput';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Field, Spinner, StatusBadge, Empty } from '@/components/ui/kit';
 import { studentsAPI, feesAPI, apiError } from '@/lib/api';
@@ -27,14 +28,20 @@ function CollectFee() {
   const currency = useAuthStore((s) => s.user?.school?.currency ?? 'PKR');
   const [query, setQuery] = useState('');
   const [studentId, setStudentId] = useState(params.get('student') ?? '');
+  // Opening /fees?student=… again (e.g. from the header search) switches to that student.
+  const linkedStudent = params.get('student') ?? '';
+  const [linked, setLinked] = useState(linkedStudent);
+  if (linked !== linkedStudent) { setLinked(linkedStudent); if (linkedStudent) setStudentId(linkedStudent); }
   const qc = useQueryClient();
 
+  const term = useDebounced(cleanTerm(query), 250);
   const search = useQuery({
-    queryKey: ['fee-search', query],
+    queryKey: ['fee-search', term],
     meta: { quiet: true },
-    queryFn: () => studentsAPI.list({ search: query, limit: 8 }),
-    enabled: query.trim().length >= 2,
+    queryFn: () => studentsAPI.list({ search: term, limit: 8 }),
+    enabled: term.length >= 2,
   });
+  const settling = cleanTerm(query) !== term || search.isFetching;
   const ledger = useQuery({ queryKey: ['ledger', studentId], queryFn: () => feesAPI.ledger(studentId), enabled: !!studentId });
 
   const [pay, setPay] = useState({ amount: '', method: 'CASH', reference: '', remarks: '' });
@@ -73,11 +80,9 @@ function CollectFee() {
     <DashboardLayout title="Collect fee" allowedRoles={CAN.collectFees} subtitle="Search a student, take payment, print the receipt">
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="card space-y-3">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-            <input autoFocus className="input pl-9" placeholder="Name, admission no. or parent phone" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Find student" />
-          </div>
-          {search.isFetching && <Spinner label="Searching…" />}
+          <SearchInput autoFocus placeholder="Name, admission no. or parent phone" value={query} onChange={setQuery} aria-label="Find student" />
+          {cleanTerm(query).length === 1 && <p className="text-xs text-gray-500">Type at least 2 characters…</p>}
+          {settling && cleanTerm(query).length >= 2 && <Spinner label="Searching…" />}
           <ul className="divide-y divide-slate-100">
             {(search.data?.data ?? []).map((s: any) => (
               <li key={s.id}>
@@ -89,7 +94,7 @@ function CollectFee() {
               </li>
             ))}
           </ul>
-          {query.length >= 2 && !search.isFetching && search.data?.data.length === 0 && <p className="text-sm text-gray-500">No student found.</p>}
+          {term.length >= 2 && !settling && search.data?.data.length === 0 && <NoMatches term={term} what="students" onClear={() => setQuery('')} />}
         </div>
 
         <div className="space-y-4 lg:col-span-2">

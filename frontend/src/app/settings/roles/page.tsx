@@ -9,6 +9,7 @@ import { Spinner } from '@/components/ui/kit';
 import { rolesAPI, apiError, RoleMatrix } from '@/lib/api';
 import { CAN } from '@/lib/roles';
 import { cn } from '@/lib/utils';
+import { CustomRoles } from '@/components/roles/CustomRoles';
 
 const sameSet = (a: Set<string>, b: Set<string>) => a.size === b.size && [...a].every((x) => b.has(x));
 
@@ -134,6 +135,8 @@ export default function RolesPage() {
               </ul>
             </div>
           )}
+
+          <CustomRoles matrix={data} />
         </>
       )}
     </DashboardLayout>

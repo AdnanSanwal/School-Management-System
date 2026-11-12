@@ -9,6 +9,7 @@ import { handler, me } from '../../utils/http';
 import { addDays, dayInTimezone, schoolTimezone, schoolToday, toIso, zonedDayStart } from '../../utils/dates';
 import { defaulters } from '../fees/fees.service';
 import { D, outstanding } from '../fees/fees.calc';
+import { onRoll } from '../../utils/staffStatus';
 
 /**
  * CR-01: what's behind each dashboard card, from live data.
@@ -97,7 +98,7 @@ async function outstandingFees() {
 
 async function staffToday(today: Date) {
   const [staff, marks, leaves] = await Promise.all([
-    prisma.staff.findMany({ where: { status: 'ACTIVE', isTeacher: true }, orderBy: { name: 'asc' }, select: { id: true, name: true, employeeNo: true, designation: true, phone: true } }),
+    prisma.staff.findMany({ where: { status: onRoll, isTeacher: true }, orderBy: { name: 'asc' }, select: { id: true, name: true, employeeNo: true, designation: true, phone: true } }),
     prisma.staffAttendance.findMany({ where: { date: today }, select: { staffId: true, status: true, checkIn: true, checkOut: true, remarks: true } }),
     prisma.leaveRequest.findMany({ where: { status: 'APPROVED', fromDate: { lte: today }, toDate: { gte: today } }, select: { staffId: true, type: true } }),
   ]);

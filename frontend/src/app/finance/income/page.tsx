@@ -9,6 +9,7 @@ import { Empty, Field, Modal, Spinner, Stat } from '@/components/ui/kit';
 import { financeAPI, apiError } from '@/lib/api';
 import { CAN } from '@/lib/roles';
 import { formatDate, todayIso } from '@/lib/utils';
+import { SearchInput, NoMatches, cleanTerm, useDebounced } from '@/components/ui/SearchInput';
 import { CategoryModal, financeError, useAccounts, useCategories, useFinance, useFinanceRefresh } from '@/components/finance/shared';
 
 /** Money received that is not a student fee: canteen rent, uniform sales, donations. */
@@ -16,13 +17,15 @@ export default function OtherIncomePage() {
   const { money, canManage } = useFinance();
   const refresh = useFinanceRefresh();
   const today = todayIso();
-  const [f, setF] = useState({ from: `${today.slice(0, 7)}-01`, to: today, categoryId: '', search: '' });
+  const [f, setF] = useState({ from: `${today.slice(0, 7)}-01`, to: today, categoryId: '' });
+  const [search, setSearch] = useState('');
+  const term = useDebounced(cleanTerm(search), 250);
   const [page, setPage] = useState(1);
   const [adding, setAdding] = useState(false);
   const [cats, setCats] = useState(false);
   const categories = useCategories('INCOME');
   const set = (patch: Partial<typeof f>) => { setF({ ...f, ...patch }); setPage(1); };
-  const query = Object.fromEntries(Object.entries({ ...f, page, limit: 25 }).filter(([, v]) => v !== ''));
+  const query = Object.fromEntries(Object.entries({ ...f, search: term, page, limit: 25 }).filter(([, v]) => v !== ''));
   const { data, isLoading, error } = useQuery({ queryKey: ['finance', 'income', query], queryFn: () => financeAPI.income(query), placeholderData: keepPreviousData, meta: { quiet: true } });
   const remove = useMutation({ mutationFn: (id: string) => financeAPI.deleteIncome(id), onSuccess: (r) => { toast.success(r.data.message); refresh(); }, onError: financeError });
   const rows: any[] = data?.data ?? [];
@@ -42,9 +45,10 @@ export default function OtherIncomePage() {
           <label><span className="label">To</span><input type="date" className="input" value={f.to} min={f.from} max={today} onChange={(e) => set({ to: e.target.value })} /></label>
           <label><span className="label">Category</span><select className="select w-48" value={f.categoryId} onChange={(e) => set({ categoryId: e.target.value })}>
             <option value="">All categories</option>{(categories.data ?? []).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label>
-          <label className="min-w-[12rem] flex-1"><span className="label">Search</span><input className="input" placeholder="Details, received from, number" value={f.search} onChange={(e) => set({ search: e.target.value })} /></label>
+          <label className="min-w-[12rem] flex-1"><span className="label">Search</span><SearchInput placeholder="Details, received from, number, category" value={search} onChange={(v) => { setSearch(v); setPage(1); }} aria-label="Search income" /></label>
         </div>
-        {isLoading ? <Spinner /> : error ? <p className="text-sm text-red-600">{apiError(error)}</p> : rows.length === 0 ? <Empty title="No income recorded in these dates">Student fees are not listed here; see Fees → Payments.</Empty> : (
+        {isLoading ? <Spinner /> : error ? <p className="text-sm text-red-600">{apiError(error)}</p> : rows.length === 0 && term ? <NoMatches term={term} what="income entries" onClear={() => setSearch('')}>Only entries between the dates above are searched.</NoMatches>
+          : rows.length === 0 ? <Empty title="No income recorded in these dates">Student fees are not listed here; see Fees → Payments.</Empty> : (
           <div className="table-container">
             <table className="table">
               <thead><tr><th>Date</th><th>No.</th><th>Category</th><th>Details</th><th>Received in</th><th className="text-right">Amount</th><th /></tr></thead>

@@ -57,7 +57,7 @@ d('Accounting ledger (database)', () => {
 
     // A fee payment of 3,000 in cash.
     const cls = await A.post('/academics/classes', { name: 'Class 5', level: 5, sections: ['A'] });
-    const admit = await A.post('/students', { name: 'Payer', sectionId: cls.body.data.sections[0].id, monthlyFee: 3000, guardians: [{ name: 'Parent', phone: '03004445566', relation: 'FATHER', isPrimary: true }] });
+    const admit = await A.post('/students', { admissionNo: `T-${Math.random().toString(36).slice(2, 10)}`, name: 'Payer', sectionId: cls.body.data.sections[0].id, monthlyFee: 3000, guardians: [{ name: 'Parent', phone: '03004445566', relation: 'FATHER', isPrimary: true }] });
     await C.post('/fees/invoices/generate', { period: month, classIds: [cls.body.data.id] });
     expect((await C.post('/fees/payments', { studentId: admit.body.data.student.id, amount: 3000, method: 'CASH' })).status).toBe(201);
 

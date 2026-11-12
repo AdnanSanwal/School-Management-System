@@ -20,7 +20,11 @@ export function loginProblems(v: LoginValue, check: UsernameCheck | null): strin
 }
 
 /** Turns the form value into the API's login body. */
-export const loginBody = (v: LoginValue) => ({ username: v.username.trim().toLowerCase(), email: v.email.trim() || undefined, password: v.password, role: v.role });
+export const loginBody = (v: LoginValue) => {
+  // A school-defined role arrives as "BASE:<id>" from the role picker.
+  const [role, customRoleId] = v.role.split(':');
+  return { username: v.username.trim().toLowerCase(), email: v.email.trim() || undefined, password: v.password, role, ...(customRoleId ? { customRoleId } : {}) };
+};
 
 /**
  * CR-05: admin-chosen sign-in for a staff member: username (checked live, with free

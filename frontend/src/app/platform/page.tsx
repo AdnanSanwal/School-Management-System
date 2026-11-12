@@ -6,6 +6,7 @@ import toast from 'react-hot-toast';
 import { Plus, Building2, Users, GraduationCap, Trash2, TriangleAlert } from 'lucide-react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Field, Modal, Spinner, Empty, Stat } from '@/components/ui/kit';
+import { SearchInput, NoMatches, matchesSearch } from '@/components/ui/SearchInput';
 import { platformAPI, apiError } from '@/lib/api';
 import { CAN } from '@/lib/roles';
 import { formatDate, formatDateTime, formatLocalDate, formatMoney, todayIso } from '@/lib/utils';
@@ -15,6 +16,9 @@ export default function PlatformPage() {
   const { data = [], isLoading, error } = useQuery({ queryKey: ['platform', 'schools'], queryFn: platformAPI.schools });
   const [open, setOpen] = useState(false);
   const [licence, setLicence] = useState<any | null>(null);
+  const [search, setSearch] = useState('');
+  const term = search.trim();
+  const shown = data.filter((s: any) => matchesSearch(term, s.name, s.code, s.phone, s.owners.map((o: any) => [o.name, o.email])));
   const toggle = useMutation({
     mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) => platformAPI.setActive(id, isActive),
     onSuccess: (_r, v) => { toast.success(v.isActive ? 'School activated' : 'School suspended'); qc.invalidateQueries({ queryKey: ['platform'] }); },
@@ -33,13 +37,15 @@ export default function PlatformPage() {
         <Stat label="Subscriptions needing attention" value={attention.length} icon={TriangleAlert} tone={attention.length ? 'warn' : 'default'}
           sub={attention.length ? `${attention.filter((s: any) => s.licence.state === 'LOCKED').length} locked, ${attention.filter((s: any) => s.licence.state === 'GRACE').length} in grace, ${attention.filter((s: any) => s.licence.state === 'DUE_SOON').length} due soon` : 'All paid up'} />
       </div>
-      <div className="card">
-        {isLoading ? <Spinner /> : error ? <p className="text-sm text-red-600">{apiError(error)}</p> : !data.length ? <Empty title="No schools yet" /> : (
+      <div className="card space-y-3">
+        {data.length > 0 && <SearchInput className="w-80 max-w-full" placeholder="School name, code, phone, owner" value={search} onChange={setSearch} aria-label="Search schools" />}
+        {isLoading ? <Spinner /> : error ? <p className="text-sm text-red-600">{apiError(error)}</p> : !data.length ? <Empty title="No schools yet" />
+          : !shown.length ? <NoMatches term={term} what="schools" onClear={() => setSearch('')} /> : (
           <div className="overflow-x-auto">
             <table className="table">
               <thead><tr><th>School</th><th>Owner</th><th>Students</th><th>Users</th><th>Joined</th><th>Subscription</th><th>Status</th><th /></tr></thead>
               <tbody>
-                {data.map((s: any) => (
+                {shown.map((s: any) => (
                   <tr key={s.id}>
                     <td><p className="font-medium">{s.name}</p><p className="text-xs text-gray-500"><code>{s.code}</code>{s.phone ? ` · ${s.phone}` : ''}</p></td>
                     <td className="text-sm">{s.owners.map((o: any) => (

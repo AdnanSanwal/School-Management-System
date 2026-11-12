@@ -46,6 +46,8 @@ model School {
   licenceOverride        Boolean          @default(false) // keep the school on whatever the date says
   licenceMessage         String?          @db.VarChar(300)
   maxStudents            Int? // most active students the plan allows (null = no limit)
+  // Marks entry: a student who fails at most this many subjects is 'Keep for retake'; more = Fail.
+  retakeMaxSubjects      Int              @default(2)
   // WhatsApp/SMS alerts to guardians' phones (see utils/messaging.ts).
   messagingEnabled       Boolean          @default(false)
   messagingChannel       MessagingChannel @default(SMS)
@@ -105,6 +107,8 @@ model User {
   // Set when an admin chose the password; the user must pick their own at next sign-in.
   mustChangePassword Boolean        @default(false)
   role               Role
+  // A school-defined access role (Settings → Roles & permissions). `role` is then its base role.
+  customRoleId       String?
   isActive           Boolean        @default(true)
   avatar             String?        @db.VarChar(1024)
   mfaEnabled         Boolean        @default(false)
@@ -125,6 +129,7 @@ model User {
   pushSubscriptions PushSubscription[]
   deviceTokens      DeviceToken[]
   noticeReads       NoticeRead[]
+  customRole        CustomRole?        @relation(fields: [customRoleId], references: [id])
 
   @@index([schoolId, role])
   @@map("users")
@@ -1203,7 +1208,10 @@ enum StudentStatus {
 
 enum StaffStatus {
   ACTIVE
+  INACTIVE
+  TEMPORARY_LEAVE
   LEFT
+  TERMINATED
 }
 
 enum GuardianRelation {
@@ -1446,6 +1454,45 @@ model RolePermission {
 
   @@unique([schoolId, role, permission])
   @@map("role_permissions")
+}
+
+// An access role the school defines itself, e.g. "Receptionist". It is built on one of the
+// standard staff roles (baseRole: what the login's `role` is), with its own permission list.
+model CustomRole {
+  id          String   @id @default(uuid())
+  schoolId    String
+  name        String   @db.VarChar(60)
+  baseRole    Role
+  permissions Json // Permission[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users User[]
+
+  @@unique([schoolId, name])
+  @@map("custom_roles")
+}
+
+// One class section's marks for one exam: saved as a draft, then submitted (locked until reopened).
+model MarkSheet {
+  id            String          @id @default(uuid())
+  schoolId      String
+  examId        String
+  sectionId     String
+  status        MarkSheetStatus @default(DRAFT)
+  remarks       String?         @db.Text
+  submittedById String?
+  submittedAt   DateTime?
+  updatedAt     DateTime        @updatedAt
+
+  @@unique([examId, sectionId])
+  @@index([schoolId])
+  @@map("mark_sheets")
+}
+
+enum MarkSheetStatus {
+  DRAFT
+  SUBMITTED
 }
 
 // ─── Accounting ledger ───

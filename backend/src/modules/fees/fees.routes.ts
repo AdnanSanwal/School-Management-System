@@ -112,9 +112,12 @@ router.get('/invoices', can('fee.view'), handler(async (req, res) => {
     classId: id.optional(),
     period: period.optional(),
     status: z.enum(['UNPAID', 'PARTIAL', 'PAID', 'CANCELLED', 'OPEN']).optional(),
+    search: z.string().trim().max(60).optional(),
   }), req);
   const where: Prisma.FeeInvoiceWhereInput = {
     student: { AND: [await studentScope(me(req)), q.classId ? { section: { classId: q.classId } } : {}] },
+    // Invoice no., or the student's name / admission no.
+    ...(q.search ? { OR: [{ invoiceNo: { contains: q.search } }, { student: { name: { contains: q.search } } }, { student: { admissionNo: { contains: q.search } } }] } : {}),
     ...(q.studentId ? { studentId: q.studentId } : {}),
     ...(q.period ? { period: q.period } : {}),
     ...(q.status === 'OPEN' ? { status: { in: ['UNPAID', 'PARTIAL'] } } : q.status ? { status: q.status } : {}),
@@ -200,7 +203,7 @@ router.get('/payments', can('fee.view'), handler(async (req, res) => {
   const q = parseQuery(paginationSchema.extend({
     from: dateOnly.optional(), to: dateOnly.optional(),
     method: z.nativeEnum(PaymentMethod).optional(),
-    search: z.string().max(60).optional(),
+    search: z.string().trim().max(60).optional(),
   }), req);
   const today = await schoolToday();
   const from = q.from ? toDate(q.from) : today;
@@ -210,7 +213,7 @@ router.get('/payments', can('fee.view'), handler(async (req, res) => {
     status: 'SUCCESS',
     paidAt: { gte: zonedDayStart(toIso(from), tz), lt: zonedDayStart(toIso(to), tz) },
     ...(q.method ? { method: q.method } : {}),
-    ...(q.search ? { OR: [{ receiptNo: { contains: q.search } }, { student: { name: { contains: q.search } } }, { student: { admissionNo: { contains: q.search } } }] } : {}),
+    ...(q.search ? { OR: [{ receiptNo: { contains: q.search } }, { reference: { contains: q.search } }, { student: { name: { contains: q.search } } }, { student: { admissionNo: { contains: q.search } } }] } : {}),
   };
   const [rows, total, sums] = await Promise.all([
     prisma.payment.findMany({

@@ -1,14 +1,16 @@
 'use client';
 
-import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Suspense, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { Plus, KeyRound } from 'lucide-react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Field, Modal, PasswordNotice, Spinner, Empty } from '@/components/ui/kit';
+import { SearchInput, NoMatches, cleanTerm, useDebounced } from '@/components/ui/SearchInput';
 import { usersAPI, apiError, type UsernameCheck } from '@/lib/api';
 import { LoginFields, CredentialsNotice, emptyLogin, loginBody, loginProblems, type LoginValue } from '@/components/ui/LoginFields';
-import { CAN, ROLE_LABEL } from '@/lib/roles';
+import { CAN, ROLE_LABEL, customRoleOptions, roleName, splitRole } from '@/lib/roles';
 import { formatDateTime } from '@/lib/utils';
 import { useAuthStore } from '@/store/authStore';
 
@@ -16,19 +18,37 @@ import { StudentOrParentLogin, TeacherLogin, useCreatableRoles, type Issued } fr
 const RANK: Record<string, number> = { OWNER: 50, PRINCIPAL: 40, ADMIN: 30, ACCOUNTANT: 20, TEACHER: 20, PARENT: 10, STUDENT: 10 };
 
 export default function UsersPage() {
+  return <Suspense fallback={null}><Users /></Suspense>;
+}
+
+function Users() {
   const me = useAuthStore((s) => s.user);
   const mine = useCreatableRoles();
   const manageable = (_me: string, target: string) => mine.includes(target);
   const [role, setRole] = useState('');
-  const [search, setSearch] = useState('');
+  // The header search links here as /users?search=<username>.
+  const initialSearch = useSearchParams().get('search') ?? '';
+  const [search, setSearch] = useState(initialSearch);
+  const term = useDebounced(cleanTerm(search), 250);
   const [page, setPage] = useState(1);
+  const [linked, setLinked] = useState(initialSearch);
+  if (linked !== initialSearch) { setLinked(initialSearch); setSearch(initialSearch); setPage(1); }
   const [adding, setAdding] = useState(false);
   const [issued, setIssued] = useState<{ email: string; password?: string; name?: string } | null>(null);
   const qc = useQueryClient();
   const { data, isLoading } = useQuery({
-    queryKey: ['users', role, search, page],
-    meta: { quiet: !!search },
-    queryFn: () => usersAPI.list({ role: role || undefined, search: search || undefined, page, limit: 50 }),
+    queryKey: ['users', role, term, page],
+    meta: { quiet: !!term },
+    placeholderData: keepPreviousData,
+    queryFn: () => usersAPI.list({ role: role || undefined, search: term || undefined, page, limit: 50 }),
+  });
+  // Staff roles this user may give out, plus the school's own roles built on them.
+  const staffRoles = ['OWNER', 'PRINCIPAL', 'ADMIN', 'ACCOUNTANT', 'TEACHER'].filter((r) => mine.includes(r));
+  const roleChoices = [...staffRoles.map((r) => [r, ROLE_LABEL[r]]), ...customRoleOptions(staffRoles)];
+  const changeRole = useMutation({
+    mutationFn: ({ u, value }: { u: any; value: string }) => usersAPI.update(u.id, splitRole(value)),
+    onSuccess: (r: any) => { toast.success(`${r.name} is now ${roleName(r)}`); qc.invalidateQueries({ queryKey: ['users'] }); qc.invalidateQueries({ queryKey: ['roles'] }); },
+    onError: (e) => toast.error(apiError(e)),
   });
   const toggle = useMutation({
     mutationFn: (u: any) => usersAPI.update(u.id, { isActive: !u.isActive }),
@@ -50,13 +70,13 @@ export default function UsersPage() {
         : <CredentialsNotice name={issued.name ?? issued.email} username={issued.email} onClose={() => setIssued(null)} />)}
       <div className="card space-y-4">
         <div className="flex flex-wrap gap-3">
-          <input className="input max-w-xs" placeholder="Search" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Search users" />
-          <select className="select w-44" value={role} onChange={(e) => setRole(e.target.value)} aria-label="Role">
+          <SearchInput className="w-72 max-w-full" placeholder="Name, username, email, phone" value={search} onChange={(v) => { setSearch(v); setPage(1); }} aria-label="Search users" />
+          <select className="select w-44" value={role} onChange={(e) => { setRole(e.target.value); setPage(1); }} aria-label="Role">
             <option value="">All roles</option>
             {Object.keys(RANK).map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
           </select>
         </div>
-        {isLoading ? <Spinner /> : rows.length === 0 ? <Empty title="No users" /> : (
+        {isLoading ? <Spinner /> : rows.length === 0 ? (term ? <NoMatches term={term} what="users" onClear={() => setSearch('')} /> : <Empty title="No users" />) : (
           <div className="table-container">
             <table className="table">
               <thead><tr><th>Name</th><th>Username / email</th><th>Role</th><th>Last login</th><th>Status</th><th /></tr></thead>
@@ -71,7 +91,17 @@ export default function UsersPage() {
                         {u.email && <span className={u.username ? 'block text-xs text-gray-500' : ''}>{u.email}</span>}
                         {u.mustChangePassword && <span className="badge badge-yellow mt-0.5">must set own password</span>}
                       </td>
-                      <td className="text-sm">{ROLE_LABEL[u.role]}</td>
+                      <td className="text-sm">{can && staffRoles.includes(u.role) && roleChoices.length > 1 ? (
+                        <select className="select py-1 text-sm" aria-label={`Role of ${u.name}`} disabled={changeRole.isPending}
+                          value={u.customRole ? `${u.role}:${u.customRole.id}` : u.role}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            const label = roleChoices.find(([v]) => v === value)?.[1] ?? value;
+                            if (window.confirm(`Change ${u.name}'s role to ${label}? They get that role's permissions straight away.`)) changeRole.mutate({ u, value });
+                          }}>
+                          {roleChoices.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                        </select>
+                      ) : roleName(u)}</td>
                       <td className="text-sm text-gray-500">{u.lastLoginAt ? formatDateTime(u.lastLoginAt) : 'Never'}</td>
                       <td>{can ? (
                         <button className={`badge ${u.isActive ? 'badge-green' : 'badge-gray'}`} onClick={() => toggle.mutate(u)} title="Click to toggle">
@@ -140,7 +170,7 @@ function AddUserModal({ onClose, onIssued }: { myRole: string; onClose: () => vo
           <Field label="Name *"><input className="input" required minLength={2} value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /></Field>
           <Field label="Phone"><input className="input" value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} /></Field>
         </div>
-        <LoginFields value={login} onChange={setLogin} roles={roles.map((r) => [r, ROLE_LABEL[r]])} personName={f.name} onCheck={setCheck} />
+        <LoginFields value={login} onChange={setLogin} roles={[...roles.map((r) => [r, ROLE_LABEL[r]]), ...customRoleOptions(roles)]} personName={f.name} onCheck={setCheck} />
         <button className="btn btn-primary w-full" disabled={m.isPending || problems.length > 0} title={problems[0]}>Create</button>
       </form>}
     </Modal>

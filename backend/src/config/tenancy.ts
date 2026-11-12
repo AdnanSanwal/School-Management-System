@@ -10,7 +10,11 @@ import { AsyncLocalStorage } from 'async_hooks';
 export type RoleOverrides = Record<string, { grant: Set<string>; revoke: Set<string> } | undefined>;
 
 export type TenantContext =
-  | { kind: 'tenant'; schoolId: string; roles?: RoleOverrides }
+  | {
+      kind: 'tenant'; schoolId: string; roles?: RoleOverrides;
+      /** The signed-in user's own permission list when they hold a school-defined (custom) role. */
+      custom?: { role: string; perms: ReadonlySet<string> };
+    }
   | { kind: 'system' };
 
 export const tenantStorage = new AsyncLocalStorage<TenantContext>();

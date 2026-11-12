@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { X, Loader2 } from 'lucide-react';
 import { academicsAPI, studentsAPI } from '@/lib/api';
 import { cn } from '@/lib/utils';
+import { SearchInput, cleanTerm, useDebounced } from './SearchInput';
 
 export function Modal({ open, onClose, title, children, wide }: {
   open: boolean; onClose: () => void; title: string; children: React.ReactNode; wide?: boolean;
@@ -145,12 +146,14 @@ export function StudentPicker({ value, onChange, placeholder = 'Search student b
   value: { id: string; name: string; admissionNo?: string } | null; onChange: (s: any | null) => void; placeholder?: string;
 }) {
   const [q, setQ] = useState('');
+  const term = useDebounced(cleanTerm(q), 250);
   const { data, isFetching } = useQuery({
-    queryKey: ['student-pick', q],
+    queryKey: ['student-pick', term],
     meta: { quiet: true },
-    queryFn: () => studentsAPI.list({ search: q, status: 'ACTIVE', limit: 8 }),
-    enabled: q.trim().length >= 2 && !value,
+    queryFn: () => studentsAPI.list({ search: term, status: 'ACTIVE', limit: 8 }),
+    enabled: term.length >= 2 && !value,
   });
+  const settling = cleanTerm(q) !== term || isFetching;
   if (value) {
     return (
       <div className="flex items-center justify-between rounded-xl border border-slate-200 px-3 py-2 text-sm">
@@ -162,11 +165,11 @@ export function StudentPicker({ value, onChange, placeholder = 'Search student b
   const rows: any[] = data?.data ?? [];
   return (
     <div className="relative">
-      <input className="input" placeholder={placeholder} value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search student" />
-      {q.trim().length >= 2 && (
+      <SearchInput placeholder={placeholder} value={q} onChange={setQ} aria-label="Search student" />
+      {cleanTerm(q).length >= 2 && (
         <ul className="absolute z-20 mt-1 max-h-64 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-lg">
-          {isFetching && !rows.length && <li className="px-3 py-2 text-sm text-gray-400">Searching…</li>}
-          {!isFetching && !rows.length && <li className="px-3 py-2 text-sm text-gray-400">No student found</li>}
+          {settling && !rows.length && <li className="px-3 py-2 text-sm text-gray-400">Searching…</li>}
+          {!settling && !rows.length && <li className="px-3 py-2 text-sm text-gray-400">No student matches “{term}”</li>}
           {rows.map((s) => (
             <li key={s.id}>
               <button type="button" className="w-full px-3 py-2 text-left text-sm hover:bg-slate-50" onClick={() => onChange(s)}>

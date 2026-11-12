@@ -3,9 +3,9 @@
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
-import { Search } from 'lucide-react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Spinner, Empty, Stat } from '@/components/ui/kit';
+import { SearchInput, NoMatches, matchesSearch } from '@/components/ui/SearchInput';
 import { hrAPI, apiError } from '@/lib/api';
 import { CAN } from '@/lib/roles';
 import { formatDate, formatMoney } from '@/lib/utils';
@@ -17,12 +17,10 @@ export default function SalariesPage() {
   const { data, isLoading, error } = useQuery({ queryKey: ['hr', 'salaries'], queryFn: hrAPI.salaries });
   const [search, setSearch] = useState('');
   const [only, setOnly] = useState<'all' | 'missing'>('all');
-  const rows: any[] = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    return (data?.rows ?? [])
-      .filter((r: any) => only === 'all' || !r.salary)
-      .filter((r: any) => !term || [r.name, r.employeeNo, r.designation, r.department].some((v) => String(v ?? '').toLowerCase().includes(term)));
-  }, [data, search, only]);
+  const term = search.trim();
+  const rows: any[] = useMemo(() => (data?.rows ?? [])
+    .filter((r: any) => only === 'all' || !r.salary)
+    .filter((r: any) => matchesSearch(term, r.name, r.employeeNo, r.designation, r.department)), [data, term, only]);
   const t = data?.totals;
   const money = (v: unknown) => formatMoney(v as string, currency);
 
@@ -38,15 +36,12 @@ export default function SalariesPage() {
           </div>
           <div className="card space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="relative w-72 max-w-full">
-                <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
-                <input className="input pl-9" placeholder="Name, employee no., designation" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Search staff" />
-              </div>
+              <SearchInput className="w-72 max-w-full" placeholder="Name, employee no., designation" value={search} onChange={setSearch} aria-label="Search staff" />
               <select className="select w-48" value={only} onChange={(e) => setOnly(e.target.value as 'all' | 'missing')} aria-label="Show">
                 <option value="all">All active staff</option><option value="missing">Without a salary</option>
               </select>
             </div>
-            {rows.length === 0 ? <Empty title="Nobody matches" /> : (
+            {rows.length === 0 ? (term ? <NoMatches term={term} what="staff" onClear={() => setSearch('')} /> : <Empty title={only === 'missing' ? 'Everyone has a salary set' : 'No active staff'} />) : (
               <div className="table-container">
                 <table className="table">
                   <thead><tr><th>Staff</th><th>Designation</th><th>Bank</th><th className="text-right">Basic</th><th className="text-right">Allowances</th><th className="text-right">Deductions</th><th className="text-right">Net / month</th></tr></thead>
@@ -65,7 +60,7 @@ export default function SalariesPage() {
                       </tr>
                     ))}
                   </tbody>
-                  {only === 'all' && !search && (
+                  {only === 'all' && !term && (
                     <tfoot><tr className="bg-slate-50 font-semibold">
                       <td className="px-4 py-3 text-sm" colSpan={3}>Total ({t.withSalary} staff)</td>
                       <td className="px-4 py-3 text-right text-sm tabular-nums">{money(t.basic)}</td>

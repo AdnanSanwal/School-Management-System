@@ -1,12 +1,13 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import {
   useReactTable, getCoreRowModel, getSortedRowModel,
   getFilteredRowModel, getPaginationRowModel,
-  flexRender, ColumnDef, SortingState,
+  flexRender, ColumnDef, SortingState, FilterFn,
 } from '@tanstack/react-table';
-import { Search, ChevronUp, ChevronDown, ChevronsUpDown, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronUp, ChevronDown, ChevronsUpDown, ChevronLeft, ChevronRight } from 'lucide-react';
+import { SearchInput, NoMatches, matchesSearch } from './SearchInput';
 
 interface DataTableProps<T> {
   data: T[];
@@ -16,6 +17,10 @@ interface DataTableProps<T> {
   toolbar?: React.ReactNode;
   isLoading?: boolean;
 }
+
+/** Matches every word of the search against the row's data and its cell values (partial, any case). */
+const rowMatches: FilterFn<unknown> = (row, _columnId, term: string) =>
+  matchesSearch(term, row.original, row.getAllCells().map((c) => c.getValue()));
 
 function SkeletonRow({ cols }: { cols: number }) {
   return (
@@ -41,6 +46,7 @@ export function DataTable<T>({
     state: { sorting, globalFilter },
     onSortingChange: setSorting,
     onGlobalFilterChange: setGlobalFilter,
+    globalFilterFn: rowMatches as FilterFn<T>,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
@@ -52,15 +58,7 @@ export function DataTable<T>({
     <div className="space-y-3">
       {/* Toolbar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="relative">
-          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-          <input
-            value={globalFilter}
-            onChange={e => setGlobalFilter(e.target.value)}
-            placeholder={searchPlaceholder}
-            className="pl-9 input w-64 text-sm"
-          />
-        </div>
+        <SearchInput value={globalFilter} onChange={setGlobalFilter} placeholder={searchPlaceholder} className="w-64 max-w-full" />
         {toolbar && <div className="flex items-center gap-2">{toolbar}</div>}
       </div>
 
@@ -109,7 +107,7 @@ export function DataTable<T>({
               : (
                 <tr>
                   <td colSpan={columns.length} className="text-center text-gray-400 py-14">
-                    No results found
+                    {globalFilter.trim() ? <NoMatches term={globalFilter} onClear={() => setGlobalFilter('')} /> : 'Nothing to show yet'}
                   </td>
                 </tr>
               )

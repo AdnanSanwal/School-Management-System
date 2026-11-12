@@ -1,14 +1,16 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Bell, Search, Settings, LogOut, ChevronRight, Check, X } from 'lucide-react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { authAPI, notificationsAPI } from '@/lib/api';
+import { Bell, Settings, LogOut, ChevronRight, Check, X, Loader2, CornerDownLeft } from 'lucide-react';
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
+import { authAPI, notificationsAPI, apiError } from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
 import { cn } from '@/lib/utils';
-import { formatDate, formatDateTime } from '@/lib/utils';
+import { formatDateTime } from '@/lib/utils';
+import { SearchInput, cleanTerm, useDebounced } from '@/components/ui/SearchInput';
+import { searchAPI, matchingPages, type SearchGroup, type SearchItem } from '@/lib/searchApi';
 
 interface HeaderProps {
   title: string;
@@ -164,11 +166,153 @@ function UserMenu({ onClose }: { onClose: () => void }) {
   );
 }
 
+/** Is the keyboard focus somewhere the user is typing? */
+function typingIn(el: EventTarget | null) {
+  const t = el as HTMLElement | null;
+  return !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable);
+}
+
+/**
+ * CR-06: "Search anything…". Students, staff, parents, classes, invoices, receipts, books and
+ * logins from the server (only what this user may open), plus matching screens. ↑/↓ to move,
+ * Enter to open, Esc to clear / close, Ctrl+K or "/" to focus from anywhere.
+ */
+function GlobalSearch() {
+  const router = useRouter();
+  const role = useAuthStore((s) => s.user?.role);
+  const [text, setText] = useState('');
+  const [open, setOpen] = useState(false);
+  // The highlighted row, remembered per search term so new results start at the top.
+  const [sel, setSel] = useState({ term: '', i: 0 });
+  const boxRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const typed = cleanTerm(text);
+  const term = useDebounced(typed, 250);
+  const ready = term.length >= 2;
+
+  const q = useQuery({
+    queryKey: ['global-search', term],
+    queryFn: ({ signal }) => searchAPI.all(term, signal),
+    enabled: ready,
+    staleTime: 30_000,
+    placeholderData: keepPreviousData,
+    retry: false,
+    meta: { quiet: true },
+  });
+
+  const groups: SearchGroup[] = useMemo(() => {
+    if (!ready) return [];
+    const pages = matchingPages(term, role);
+    const fromServer = q.data && q.data.q === term ? q.data.groups : [];
+    return [...fromServer, ...(pages.length ? [{ key: 'pages', label: 'Pages', items: pages }] : [])];
+  }, [ready, term, role, q.data]);
+  const flat: SearchItem[] = useMemo(() => groups.flatMap((g) => g.items), [groups]);
+  const waiting = typed !== term || (ready && q.isFetching && q.data?.q !== term);
+
+  const active = sel.term === term ? sel.i : 0;
+  const setActive = (f: (i: number) => number) => setSel({ term, i: f(active) });
+
+  // Ctrl+K / Cmd+K anywhere, or "/" when not typing, focuses the box.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.key === 'k' || e.key === 'K') && (e.ctrlKey || e.metaKey)) { e.preventDefault(); inputRef.current?.focus(); setOpen(true); }
+      else if (e.key === '/' && !typingIn(e.target)) { e.preventDefault(); inputRef.current?.focus(); setOpen(true); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  useEffect(() => {
+    const onDown = (e: MouseEvent) => { if (boxRef.current && !boxRef.current.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, []);
+
+  const go = (item?: SearchItem) => {
+    if (!item) return;
+    setOpen(false);
+    setText('');
+    inputRef.current?.blur();
+    router.push(item.href);
+  };
+
+  const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'ArrowDown') { e.preventDefault(); setOpen(true); setActive((i) => (flat.length ? (i + 1) % flat.length : 0)); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setOpen(true); setActive((i) => (flat.length ? (i - 1 + flat.length) % flat.length : 0)); }
+    else if (e.key === 'Enter') { e.preventDefault(); if (!waiting) go(flat[active] ?? flat[0]); }
+    else if (e.key === 'Escape') {
+      e.preventDefault();
+      if (text) setText(''); else { setOpen(false); inputRef.current?.blur(); }
+    }
+  };
+
+  let index = -1;
+  return (
+    <div ref={boxRef} className="relative hidden md:block">
+      <SearchInput
+        ref={inputRef}
+        value={text}
+        onChange={(v) => { setText(v); setOpen(true); }}
+        onFocus={() => setOpen(true)}
+        onKeyDown={onKeyDown}
+        placeholder="Search anything…  (Ctrl+K)"
+        aria-label="Search students, staff, invoices and more"
+        className="w-56 transition-all duration-150 focus-within:w-80"
+        inputClassName="py-2 rounded-xl border-white/60 bg-white/80 shadow-sm focus:bg-white"
+      />
+      {open && typed.length > 0 && (
+        <div role="listbox" aria-label="Search results"
+          className="absolute right-0 top-full z-50 mt-2 w-[26rem] max-w-[90vw] overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-card-lg animate-slide-down">
+          {typed.length < 2 ? (
+            <p className="px-4 py-3 text-sm text-gray-500">Type at least 2 characters…</p>
+          ) : waiting && !flat.length ? (
+            <p className="flex items-center gap-2 px-4 py-3 text-sm text-gray-500"><Loader2 className="h-4 w-4 animate-spin" /> Searching…</p>
+          ) : q.isError && !flat.length ? (
+            <p className="px-4 py-3 text-sm text-red-600">{apiError(q.error, 'Search failed — try again')}</p>
+          ) : !flat.length ? (
+            <div className="px-4 py-6 text-center">
+              <p className="text-sm font-medium text-gray-700">No matches for “{term}”</p>
+              <p className="mt-1 text-xs text-gray-500">Try part of a name, an admission / employee no., a phone or an invoice no.</p>
+              <button type="button" className="mt-2 text-xs font-medium text-primary-600 hover:underline" onClick={() => { setText(''); inputRef.current?.focus(); }}>Clear search</button>
+            </div>
+          ) : (
+            <div className="max-h-[70vh] overflow-y-auto py-1">
+              {groups.map((g) => (
+                <div key={g.key} className="py-1">
+                  <p className="px-4 pb-1 pt-2 text-2xs font-semibold uppercase tracking-wide text-gray-400">{g.label}</p>
+                  {g.items.map((item) => {
+                    index += 1;
+                    const i = index;
+                    return (
+                      <button key={`${g.key}:${item.id}`} type="button" role="option" aria-selected={i === active}
+                        onMouseEnter={() => setActive(() => i)} onMouseDown={(e) => e.preventDefault()} onClick={() => go(item)}
+                        className={cn('flex w-full items-center gap-3 px-4 py-2 text-left', i === active ? 'bg-primary-50' : 'hover:bg-gray-50')}>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium text-gray-900">{item.title}</p>
+                          {item.subtitle && <p className="truncate text-xs text-gray-500">{item.subtitle}</p>}
+                        </div>
+                        {i === active && <CornerDownLeft className="h-3.5 w-3.5 flex-shrink-0 text-gray-400" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              ))}
+              {waiting && <p className="flex items-center gap-2 px-4 py-2 text-xs text-gray-400"><Loader2 className="h-3 w-3 animate-spin" /> Updating…</p>}
+            </div>
+          )}
+          <div className="flex items-center gap-3 border-t border-gray-100 bg-slate-50/60 px-4 py-2 text-2xs text-gray-400">
+            <span>↑ ↓ to move</span><span>Enter to open</span><span>Esc to clear</span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function Header({ title }: HeaderProps) {
   const { user } = useAuthStore();
   const [showNotifs, setShowNotifs] = useState(false);
   const [showUser, setShowUser] = useState(false);
-  const [search, setSearch] = useState('');
   const notifsRef = useRef<HTMLDivElement>(null);
   const userRef = useRef<HTMLDivElement>(null);
 
@@ -197,23 +341,7 @@ export function Header({ title }: HeaderProps) {
       {/* Right: actions */}
       <div className="flex items-center gap-2">
         {/* Search */}
-        <div className="relative hidden md:block">
-          <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-          <input
-            type="text"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Search anything…"
-            className="pl-8 pr-4 py-2 text-sm border border-white/60 rounded-xl bg-white/80 text-gray-700 placeholder:text-gray-400 shadow-sm
-                       focus:outline-none focus:ring-2 focus:ring-primary-500/30 focus:border-primary-300 focus:bg-white
-                       transition-all duration-150 w-56 focus:w-72"
-          />
-          {search && (
-            <button onClick={() => setSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
-              <X className="w-3.5 h-3.5" />
-            </button>
-          )}
-        </div>
+        <GlobalSearch />
 
         {/* Notification bell */}
         <div ref={notifsRef} className="relative">

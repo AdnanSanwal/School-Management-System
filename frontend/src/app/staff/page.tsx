@@ -4,43 +4,35 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { Plus, KeyRound, UserMinus, UserCheck } from 'lucide-react';
+import { Plus, KeyRound, Eye } from 'lucide-react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Field, Modal, PasswordNotice, Spinner, Empty } from '@/components/ui/kit';
 import { staffAPI, hrAPI, apiError, type UsernameCheck } from '@/lib/api';
 import { LoginFields, CredentialsNotice, emptyLogin, loginBody, loginProblems, type LoginValue } from '@/components/ui/LoginFields';
 import { useCreatableRoles } from '@/components/users/LinkedLogin';
-import { CAN, can } from '@/lib/roles';
+import { SearchInput, NoMatches, useDebounced, cleanTerm } from '@/components/ui/SearchInput';
+import { StaffStatusBadge, STATUS_OPTIONS } from '@/components/staff/StaffStatus';
+import { CAN, can, customRoleOptions } from '@/lib/roles';
 import { useAuthStore } from '@/store/authStore';
 
 export default function StaffPage() {
   const role = useAuthStore((s) => s.user?.role);
   const manage = can(role, 'manageStaff');
-  const [status, setStatus] = useState('ACTIVE');
+  const [status, setStatus] = useState('CURRENT');
+  const [designation, setDesignation] = useState('');
   const [search, setSearch] = useState('');
+  const term = useDebounced(cleanTerm(search));
+  const options = useQuery({ queryKey: ['hr', 'options'], queryFn: hrAPI.options, staleTime: 60_000 });
   const [adding, setAdding] = useState(false);
   const [loginFor, setLoginFor] = useState<any>(null);
   const [issued, setIssued] = useState<any>(null);
-  const qc = useQueryClient();
   const { data, isLoading } = useQuery({
-    queryKey: ['staff', status, search],
-    meta: { quiet: !!search },
-    queryFn: () => staffAPI.list({ status, search: search || undefined, limit: 200 }),
-  });
-  const markLeft = useMutation({
-    mutationFn: (id: string) => staffAPI.update(id, { status: 'LEFT' }),
-    onSuccess: () => { toast.success('Marked as left; login disabled'); for (const key of ['staff', 'teachers', 'classes', 'users']) qc.invalidateQueries({ queryKey: [key] }); },
-    onError: (e) => toast.error(apiError(e)),
-  });
-  const reactivate = useMutation({
-    mutationFn: (id: string) => staffAPI.update(id, { status: 'ACTIVE' }),
-    onSuccess: (r: any) => {
-      toast.success(`${r.name} is active again${r.userId ? '; their login works again' : ''}. Reassign their classes if needed.`, { duration: 6000 });
-      for (const key of ['staff', 'teachers', 'classes', 'users']) qc.invalidateQueries({ queryKey: [key] });
-    },
-    onError: (e) => toast.error(apiError(e)),
+    queryKey: ['staff', status, designation, term],
+    meta: { quiet: !!term },
+    queryFn: () => staffAPI.list({ status, designation: designation || undefined, search: term || undefined, limit: 200 }),
   });
   const rows: any[] = data?.data ?? [];
+  const filtered = !!term || !!designation || status !== 'CURRENT';
 
   return (
     <DashboardLayout title="Staff" allowedRoles={CAN.viewStaff} subtitle={data ? `${data.pagination.total} people` : undefined}
@@ -50,15 +42,24 @@ export default function StaffPage() {
         : <CredentialsNotice name={issued.user.name} username={issued.user.username ?? issued.user.email} onClose={() => setIssued(null)} />)}
       <div className="card space-y-4">
         <div className="flex flex-wrap gap-3">
-          <input className="input max-w-xs" placeholder="Search name, employee no., phone" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Search staff" />
-          <select className="select w-36" value={status} onChange={(e) => setStatus(e.target.value)} aria-label="Status">
-            <option value="ACTIVE">Active</option><option value="LEFT">Left</option>
+          <SearchInput className="w-full max-w-sm" value={search} onChange={setSearch} placeholder="Name, employee ID or role" aria-label="Search staff" />
+          <select className="select w-48" value={designation} onChange={(e) => setDesignation(e.target.value)} aria-label="Role / designation">
+            <option value="">All roles</option>
+            {(options.data?.designations ?? []).map((d: any) => <option key={d.id} value={d.name}>{d.name}</option>)}
           </select>
+          <select className="select w-48" value={status} onChange={(e) => setStatus(e.target.value)} aria-label="Status">
+            <option value="CURRENT">Current (active + on leave)</option>
+            {STATUS_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            <option value="ALL">All staff</option>
+          </select>
+          {filtered && <button className="btn-ghost text-sm" onClick={() => { setSearch(''); setDesignation(''); setStatus('CURRENT'); }}>Reset</button>}
         </div>
-        {isLoading ? <Spinner /> : rows.length === 0 ? <Empty title="No staff found" /> : (
+        {isLoading ? <Spinner /> : rows.length === 0 ? (term
+          ? <NoMatches term={term} what="staff" onClear={() => setSearch('')} />
+          : <Empty title="No staff found">{filtered ? 'Try another role or status.' : undefined}</Empty>) : (
           <div className="table-container">
             <table className="table">
-              <thead><tr><th>Name</th><th>Emp. no.</th><th>Designation</th><th>Class teacher of</th><th>Phone</th><th>App login</th>{manage && <th />}</tr></thead>
+              <thead><tr><th>Name</th><th>Emp. no.</th><th>Role / designation</th><th>Class teacher of</th><th>Phone</th><th>Status</th><th>App login</th><th className="text-right">Actions</th></tr></thead>
               <tbody>
                 {rows.map((s) => (
                   <tr key={s.id}>
@@ -67,17 +68,12 @@ export default function StaffPage() {
                     <td className="text-sm">{s.designation ?? (s.isTeacher ? 'Teacher' : '—')}</td>
                     <td className="text-sm">{s.classTeacherOf.map((c: any) => `${c.class.name}-${c.name}`).join(', ') || '—'}</td>
                     <td className="text-sm">{s.phone ?? '—'}</td>
+                    <td><StaffStatusBadge status={s.status} /></td>
                     <td className="text-sm">{s.user ? <span className="inline-flex flex-col"><span className={s.user.isActive ? 'badge badge-green w-fit' : 'badge badge-gray w-fit'}>{s.user.role.toLowerCase()}</span>{(s.user.username || s.user.email) && <span className="mt-0.5 font-mono text-xs text-gray-500">{s.user.username ?? s.user.email}</span>}</span>
-                      : manage && s.status === 'ACTIVE' ? <button className="btn btn-ghost px-2 py-1" onClick={() => setLoginFor(s)}><KeyRound className="h-3.5 w-3.5" /> Give access</button> : '—'}</td>
-                    {manage && <td>{s.status === 'ACTIVE' ? (
-                      <button className="btn-icon btn-ghost text-red-500" aria-label={`Mark ${s.name} as left`} title="Mark as left"
-                        onClick={() => confirm(`Mark ${s.name} as left? Their login will be disabled.`) && markLeft.mutate(s.id)}><UserMinus className="h-4 w-4" /></button>
-                    ) : (
-                      <button className="btn btn-ghost px-2 py-1 text-xs text-emerald-700" disabled={reactivate.isPending}
-                        onClick={() => confirm(`Reactivate ${s.name}?${s.user ? ' Their login will work again.' : ''}`) && reactivate.mutate(s.id)}>
-                        <UserCheck className="h-3.5 w-3.5" /> Reactivate
-                      </button>
-                    )}</td>}
+                      : manage && (s.status === 'ACTIVE' || s.status === 'TEMPORARY_LEAVE') ? <button className="btn btn-ghost px-2 py-1" onClick={() => setLoginFor(s)}><KeyRound className="h-3.5 w-3.5" /> Give access</button> : '—'}</td>
+                    <td className="text-right">
+                      <Link href={`/staff/${s.id}`} className="btn btn-secondary px-3 py-1.5 text-xs"><Eye className="h-3.5 w-3.5" /> View</Link>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -95,7 +91,8 @@ const ALL_LOGIN_ROLES = [['TEACHER', 'Teacher'], ['ACCOUNTANT', 'Accountant'], [
 /** Roles this user may give out (the owner decides this under Roles & permissions). */
 function useLoginRoles() {
   const mine = useCreatableRoles();
-  return ALL_LOGIN_ROLES.filter(([r]) => mine.includes(r));
+  const standard = ALL_LOGIN_ROLES.filter(([r]) => mine.includes(r));
+  return [...standard, ...customRoleOptions(standard.map(([r]) => r))];
 }
 
 function AddStaffModal({ onClose, onIssued }: { onClose: () => void; onIssued: (r: any) => void }) {
@@ -122,9 +119,13 @@ function AddStaffModal({ onClose, onIssued }: { onClose: () => void; onIssued: (
       <form className="grid gap-3 md:grid-cols-2" onSubmit={(e) => { e.preventDefault(); if (problems.length) return toast.error(problems[0]); m.mutate(); }}>
         <Field label="Staff name *"><input className="input" required minLength={2} value={f.name} onChange={set('name')} /></Field>
         <Field label="Phone"><input className="input" value={f.phone} onChange={set('phone')} /></Field>
-        <Field label="Role / designation">
-          <input className="input" list="add-designations" value={f.designation} onChange={set('designation')} placeholder="Teacher, Clerk, Driver…" />
-          <datalist id="add-designations">{(options.data?.designations ?? []).map((o) => <option key={o.id} value={o.name} />)}</datalist>
+        <Field label="Role / designation *">
+          <select className="select" required value={f.designation} onChange={(e) => setF({ ...f, designation: e.target.value, isTeacher: e.target.value === 'Teacher' ? true : f.isTeacher })}>
+            <option value="">Choose a role…</option>
+            {(options.data?.designations ?? []).map((o) => <option key={o.id} value={o.name}>{o.name}</option>)}
+            {f.designation && !(options.data?.designations ?? []).some((o) => o.name === f.designation) && <option value={f.designation}>{f.designation}</option>}
+          </select>
+          {can(useAuthStore.getState().user?.role, 'manageHr') && <Link href="/hr/settings" className="mt-1 inline-block text-xs text-primary-700 hover:underline">Add or rename roles</Link>}
         </Field>
         <Field label="Department">
           <input className="input" list="add-departments" value={f.department} onChange={set('department')} />

@@ -12,6 +12,7 @@ import { schoolToday, toDate, toIso } from '../../utils/dates';
 import { currentAcademicYear, ensureInSchool, staffForUser } from '../../utils/scope';
 import { LEAVE_TYPES, leaveBalances, leavePolicy, salariesOn, salaryHistory } from '../../utils/hr';
 import { D } from '../fees/fees.calc';
+import { onRoll } from '../../utils/staffStatus';
 
 // HR records: department/designation lists, leave policy and balances, salary structures.
 // Staff profiles and documents live in modules/staff; payroll comes in the next step.
@@ -49,7 +50,7 @@ function listRoutes(path: 'departments' | 'designations', column: 'department' |
   router.delete(`/${path}/:id`, can('hr.manage'), handler(async (req, res) => {
     const row = await model.findFirst({ where: { id: req.params.id } });
     if (!row) throw new AppError(`${label} not found`, 404);
-    const inUse = await prisma.staff.count({ where: { [column]: row.name, status: 'ACTIVE' } });
+    const inUse = await prisma.staff.count({ where: { [column]: row.name, status: onRoll } });
     if (inUse) throw new AppError(`${inUse} active staff member(s) are in “${row.name}”. Move them first.`, 409);
     await model.deleteMany({ where: { id: row.id } });
     return sendSuccess(res, null, `${label} removed`);
@@ -63,7 +64,7 @@ router.get('/options', can('staff.view'), handler(async (_req, res) => {
   const [departments, designations, staff] = await Promise.all([
     prisma.department.findMany({ orderBy: { name: 'asc' } }),
     prisma.designation.findMany({ orderBy: { name: 'asc' } }),
-    prisma.staff.findMany({ where: { status: 'ACTIVE' }, select: { department: true, designation: true } }),
+    prisma.staff.findMany({ where: { status: onRoll }, select: { department: true, designation: true } }),
   ]);
   const count = (col: 'department' | 'designation', name: string) => staff.filter((s) => s[col] === name).length;
   return sendSuccess(res, {
@@ -103,7 +104,7 @@ router.put('/leave-policy', can('hr.manage'), handler(async (req, res) => {
 /** Everyone's leave balance for the current academic year. */
 router.get('/leave-balances', can('leave.view', 'leave.approve', 'staff.manage'), handler(async (_req, res) => {
   const year = await currentAcademicYear();
-  const staff = await prisma.staff.findMany({ where: { status: 'ACTIVE' }, orderBy: { name: 'asc' }, select: { id: true, name: true, employeeNo: true, designation: true } });
+  const staff = await prisma.staff.findMany({ where: { status: onRoll }, orderBy: { name: 'asc' }, select: { id: true, name: true, employeeNo: true, designation: true } });
   const balances = await leaveBalances(staff.map((s) => s.id), year);
   return sendSuccess(res, { year: year.name, staff: staff.map((s) => ({ ...s, balances: balances.get(s.id) ?? [] })) });
 }));
@@ -127,7 +128,7 @@ const structureBody = z.object({
 router.get('/salaries', can('salary.view'), handler(async (_req, res) => {
   const today = await schoolToday();
   const staff = await prisma.staff.findMany({
-    where: { status: 'ACTIVE' }, orderBy: { name: 'asc' },
+    where: { status: onRoll }, orderBy: { name: 'asc' },
     select: { id: true, name: true, employeeNo: true, designation: true, department: true, contractType: true, bankName: true, bankAccountNo: true },
   });
   const pay = await salariesOn(staff.map((s) => s.id), today);

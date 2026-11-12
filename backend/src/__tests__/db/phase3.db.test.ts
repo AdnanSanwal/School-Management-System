@@ -57,14 +57,14 @@ d('Phase 3 API (database)', () => {
     await request(app).patch(`/api/v1/academics/sections/${ids.secA}`).set({ Authorization: `Bearer ${tok.ADMIN}` }).send({ classTeacherId: ids.T_MATH });
 
     for (const [i, name] of ['Top Kid', 'Weak Maths', 'Absent Kid'].entries()) {
-      const r = await A.post('/students', {
+      const r = await A.post('/students', { admissionNo: `T-${Math.random().toString(36).slice(2, 10)}`,
         name, sectionId: ids.secA, rollNo: String(i + 1),
         guardians: [{ name: `Parent ${i}`, phone: `0300777000${i}`, relation: 'FATHER', ...(i === 0 ? { loginEmail: `p3parent.${t.code}@test.local` } : {}) }],
       });
       ids[`s${i}`] = r.body.data.student.id;
       if (i === 0) tok.PARENT = tokenFor(await basePrisma.user.findUniqueOrThrow({ where: { id: r.body.data.parentLogins[0].user.id } }));
     }
-    const b = await A.post('/students', { name: 'Section B Kid', sectionId: ids.secB, guardians: [{ name: 'B Parent', phone: '03007770009', relation: 'MOTHER' }] });
+    const b = await A.post('/students', { admissionNo: `T-${Math.random().toString(36).slice(2, 10)}`, name: 'Section B Kid', sectionId: ids.secB, guardians: [{ name: 'B Parent', phone: '03007770009', relation: 'MOTHER' }] });
     ids.sB = b.body.data.student.id;
   });
 

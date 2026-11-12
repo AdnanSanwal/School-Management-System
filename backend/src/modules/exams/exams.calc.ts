@@ -91,3 +91,18 @@ export function validateScale(scale: GradeBand[]): string | null {
   if (new Set(scale.map((b) => b.grade)).size !== scale.length) return 'Grade names must be unique';
   return null;
 }
+
+/** Result of a marks sheet row: Pass, Keep for Retake, or Fail. */
+export type SheetOutcome = 'PASS' | 'RETAKE' | 'FAIL';
+
+/**
+ * School rule (CR-07): no failed subject → Pass; 1..maxRetake failed subjects → Keep for
+ * Retake; more than maxRetake → Fail. An absent subject counts as failed. null until every
+ * subject is entered.
+ */
+export function sheetOutcome(r: Pick<StudentResult, 'complete' | 'failedSubjects'>, maxRetake: number): SheetOutcome | null {
+  if (!r.complete) return null;
+  const failed = r.failedSubjects.length;
+  if (failed === 0) return 'PASS';
+  return failed <= Math.max(0, maxRetake) ? 'RETAKE' : 'FAIL';
+}

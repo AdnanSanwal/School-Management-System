@@ -122,3 +122,22 @@ export const ROLE_LABEL: Record<string, string> = {
   SUPER_ADMIN: 'Platform admin', OWNER: 'Owner', PRINCIPAL: 'Principal', ADMIN: 'Office admin',
   ACCOUNTANT: 'Accountant', TEACHER: 'Teacher', PARENT: 'Parent', STUDENT: 'Student',
 };
+
+/**
+ * The school's own roles (e.g. Receptionist) that this user may give out, for a role picker.
+ * Each option's value is "BASE:<id>" — `splitRole` turns it back into role + customRoleId.
+ */
+export function customRoleOptions(baseRoles: string[]): string[][] {
+  const list = useAuthStore.getState().user?.customRoles ?? [];
+  return list.filter((r) => baseRoles.includes(r.baseRole)).map((r) => [`${r.baseRole}:${r.id}`, `${r.name} (${ROLE_LABEL[r.baseRole] ?? r.baseRole} access)`]);
+}
+
+export function splitRole(value: string): { role: string; customRoleId: string | null } {
+  const [role, customRoleId] = value.split(':');
+  return { role, customRoleId: customRoleId || null };
+}
+
+/** How to show a user's role: their custom role's name if they have one. */
+export function roleName(u: { role: string; customRole?: { name: string } | null }) {
+  return u.customRole?.name ?? ROLE_LABEL[u.role] ?? u.role;
+}

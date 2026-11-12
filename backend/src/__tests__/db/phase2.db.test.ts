@@ -61,7 +61,7 @@ d('Phase 2 API (database)', () => {
     await as('ADMIN').put(`/academics/sections/${ids.secA}/subjects`, { assignments: [{ subjectId: ids.subject, teacherId: ids.TEACHER_staff }] });
 
     for (const [key, sec, phone] of [['PARENT_A', ids.secA, '03001110001'], ['PARENT_B', ids.secB, '03001110002']]) {
-      const r = await as('ADMIN').post('/students', {
+      const r = await as('ADMIN').post('/students', { admissionNo: `T-${Math.random().toString(36).slice(2, 10)}`,
         name: `Child of ${key}`, sectionId: sec,
         guardians: [{ name: `${key} Name`, phone, relation: 'FATHER', loginEmail: `${key.toLowerCase()}.${t.code}@test.local` }],
       });

@@ -15,6 +15,7 @@ import { D, outstanding } from '../fees/fees.calc';
 import { defaulters } from '../fees/fees.service';
 import { leaveDays } from '../leave/leave.routes';
 import type { JwtPayload } from '../../utils/jwt';
+import { onRoll } from '../../utils/staffStatus';
 
 // Spec §13 Reports & Analytics — every report downloads as PDF or Excel:
 //   GET /reports/:type?format=pdf|xlsx&…params
@@ -167,7 +168,7 @@ const REPORTS: Record<string, Builder> = {
     async build({ q }) {
       const { start, end } = periodRange(q.month as string);
       const [staff, marks] = await Promise.all([
-        prisma.staff.findMany({ where: { status: 'ACTIVE' }, select: { id: true, name: true, employeeNo: true, designation: true }, orderBy: { name: 'asc' } }),
+        prisma.staff.findMany({ where: { status: onRoll }, select: { id: true, name: true, employeeNo: true, designation: true }, orderBy: { name: 'asc' } }),
         prisma.staffAttendance.findMany({ where: { date: { gte: start, lte: end } }, select: { staffId: true, status: true } }),
       ]);
       return {

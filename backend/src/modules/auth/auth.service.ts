@@ -9,7 +9,7 @@ import { AppError } from '../../middleware/errorHandler';
 import { sendEmail } from '../../utils/email';
 import { endAllSessions, endSession, newSessionId, saveSession, storedRefreshToken } from '../../utils/sessions';
 import { normalizeUsername, usernameProblem, isUsernameTaken } from '../../utils/usernames';
-import { permissionsFor, roleOverrides } from '../../utils/rolePermissions';
+import { customRoleList, customRoleOf, permissionsFor, roleOverrides } from '../../utils/rolePermissions';
 import { creatableRoles } from '../../utils/accounts';
 import { licenceStatus } from '../../utils/licence';
 
@@ -22,11 +22,16 @@ const publicUser = {
 } as const;
 
 /** The profile plus what this user may do in their school and the school's subscription (the apps show menus and notices from them). */
-async function withPermissions<T extends { role: string; school: { id: string } | null }>(profile: T) {
+async function withPermissions<T extends { id: string; role: string; school: { id: string } | null }>(profile: T) {
   const schoolId = profile?.school?.id;
+  const creatable = creatableRoles(profile?.role ?? '', schoolId ? await roleOverrides(schoolId) : undefined);
+  const custom = schoolId && profile?.id ? await customRoleOf(schoolId, profile.id) : undefined;
   return {
-    ...profile, permissions: await permissionsFor(profile?.role ?? '', schoolId),
-    creatableRoles: creatableRoles(profile?.role ?? '', schoolId ? await roleOverrides(schoolId) : undefined),
+    ...profile, permissions: await permissionsFor(profile?.role ?? '', schoolId, profile?.id),
+    creatableRoles: creatable,
+    // The school-defined role this user holds, and the ones they may give out (built on a role they can create).
+    customRole: custom && custom.baseRole === profile.role ? { id: custom.id, name: custom.name } : null,
+    customRoles: schoolId ? (await customRoleList(schoolId)).filter((r) => creatable.includes(r.baseRole)).map((r) => ({ id: r.id, name: r.name, baseRole: r.baseRole })) : [],
     licence: schoolId ? await licenceStatus(schoolId) : null,
   };
 }

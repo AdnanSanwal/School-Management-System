@@ -41,12 +41,12 @@ d('student uploads (database)', () => {
     tok.OWNER = (await t.user('OWNER')).token;
     const cls = await request(app).post('/api/v1/academics/classes').set(auth('ADMIN')).send({ name: 'Class 1', level: 1, sections: ['A'] });
     const sectionId = cls.body.data.sections[0].id;
-    const a = await request(app).post('/api/v1/students').set(auth('ADMIN')).send({
+    const a = await request(app).post('/api/v1/students').set(auth('ADMIN')).send({ admissionNo: `T-${Math.random().toString(36).slice(2, 10)}`,
       name: 'Upload Kid', sectionId, guardians: [{ name: 'Up Parent', phone: '03005550000', relation: 'FATHER', loginEmail: `p.${t.code}@test.local` }],
     });
     studentId = a.body.data.student.id;
     tok.PARENT = tokenFor(await basePrisma.user.findUniqueOrThrow({ where: { id: a.body.data.parentLogins[0].user.id } }));
-    const b = await request(app).post('/api/v1/students').set(auth('ADMIN')).send({
+    const b = await request(app).post('/api/v1/students').set(auth('ADMIN')).send({ admissionNo: `T-${Math.random().toString(36).slice(2, 10)}`,
       name: 'Other Kid', sectionId, guardians: [{ name: 'Other Parent', phone: '03005550001', relation: 'MOTHER' }],
     });
     otherStudentId = b.body.data.student.id;

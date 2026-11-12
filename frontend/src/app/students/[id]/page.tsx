@@ -5,7 +5,8 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { KeyRound, FileText, Plus, Wallet, BadgePercent, Trash2, Camera, Link2 } from 'lucide-react';
+import { KeyRound, FileText, Plus, Wallet, BadgePercent, Trash2, Camera, Link2, CheckCircle2, DoorOpen, GraduationCap, ArrowRightLeft } from 'lucide-react';
+import { ActivityCard, StatusHeader, type StatusAction } from '@/components/profile/StatusHeader';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Field, Modal, PasswordNotice, Spinner, StatusBadge, SectionSelect } from '@/components/ui/kit';
 import { studentsAPI, feesAPI, transportAPI, libraryAPI, apiError } from '@/lib/api';
@@ -14,6 +15,14 @@ import { formatDate, formatMoney, sectionLabel, todayIso } from '@/lib/utils';
 import { useAuthStore } from '@/store/authStore';
 import { LinkedLoginModal, useCreatableRoles } from '@/components/users/LinkedLogin';
 import { CredentialsNotice } from '@/components/ui/LoginFields';
+
+// Student statuses (CR-01). Only the status changes: records, fees, attendance and documents stay.
+const STUDENT_ACTIONS: StatusAction[] = [
+  { value: 'ACTIVE', label: 'Active', icon: CheckCircle2, tone: 'green', about: 'Studying here: included in attendance, fee billing and exams; app logins work.' },
+  { value: 'LEFT', label: 'Left', icon: DoorOpen, tone: 'amber', about: 'Has left the school: dropped from attendance and fee billing, and the student’s app login is disabled.' },
+  { value: 'GRADUATED', label: 'Graduate', icon: GraduationCap, tone: 'violet', about: 'Completed the final class: kept as an alumnus, no longer billed or marked.' },
+  { value: 'TRANSFERRED', label: 'Transfer', icon: ArrowRightLeft, tone: 'blue', about: 'Moved to another school (transfer certificate): dropped from attendance and billing.' },
+];
 
 export default function StudentProfilePage() {
   const { id } = useParams<{ id: string }>();
@@ -24,10 +33,15 @@ export default function StudentProfilePage() {
   const { data: s, isLoading, error } = useQuery({ queryKey: ['student', id], queryFn: () => studentsAPI.get(id) });
   const refresh = () => { qc.invalidateQueries({ queryKey: ['student', id] }); qc.invalidateQueries({ queryKey: ['students'] }); };
 
-  const [modal, setModal] = useState<null | 'status' | 'section' | 'doc' | 'concession' | 'fee' | { loginFor: any } | 'studentLogin'>(null);
+  const [modal, setModal] = useState<null | 'section' | 'doc' | 'concession' | 'fee' | { loginFor: any } | 'studentLogin'>(null);
   const [issued, setIssued] = useState<{ name: string; username: string } | null>(null);
   const mayCreate = useCreatableRoles();
   const manage = can(role, 'manageStudents');
+  const setStatus = useMutation({
+    mutationFn: ({ status, date, reason }: { status: string; date?: string; reason?: string }) => studentsAPI.setStatus(id, { status, date, reason }),
+    onSuccess: (r) => { toast.success(r.message); refresh(); qc.invalidateQueries({ queryKey: ['classes'] }); },
+    onError: (e) => toast.error(apiError(e)),
+  });
 
   return (
     <DashboardLayout title={s?.name ?? 'Student'} allowedRoles={CAN.viewStudents}
@@ -36,13 +50,26 @@ export default function StudentProfilePage() {
         <>
           {can(role, 'collectFees') && <Link href={`/fees?student=${s.id}`} className="btn btn-primary"><Wallet className="h-4 w-4" /> Collect fee</Link>}
           {manage && <button className="btn btn-secondary" onClick={() => setModal('section')}>Change class</button>}
-          {manage && <button className="btn btn-secondary" onClick={() => setModal('status')}>Change status</button>}
         </>
       )}>
       {isLoading && <Spinner />}
       {error && <div className="card text-sm text-red-600">{apiError(error, 'Student not found')}</div>}
       {s && (
         <div className="grid gap-4 lg:grid-cols-3">
+          <div className="lg:col-span-3">
+            <StatusHeader
+              name={s.name} photoUrl={s.photo} noun="student" status={s.status} actions={STUDENT_ACTIONS}
+              canChange={manage} pending={setStatus.isPending}
+              onChange={(status, d) => setStatus.mutate({ status, ...d })}
+              subtitle={<>{s.rollNo ? <>Roll No: {s.rollNo} <span className="text-gray-300">|</span> </> : null}Admission No: <span className="font-mono">{s.admissionNo}</span></>}
+              chips={<>
+                {s.section && <span className="badge badge-indigo">{s.section.class?.name}</span>}
+                {s.section && <span className="badge badge-blue">Section {s.section.name}</span>}
+                <StatusBadge status={s.status} />
+                {s.leftOn && <span className="badge badge-gray">since {formatDate(s.leftOn)}</span>}
+              </>}
+            />
+          </div>
           <div className="card space-y-2 lg:col-span-2">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -91,6 +118,7 @@ export default function StudentProfilePage() {
             )}
             {can(role, 'viewTransport') && <TransportCard studentId={s.id} active={s.status === 'ACTIVE'} currency={currency} />}
             {can(role, 'viewLibrary') && <LibraryCard studentId={s.id} currency={currency} />}
+            {s.activity && <ActivityCard items={s.activity} extra={[{ label: 'Student admitted', at: s.admissionDate }]} />}
           </div>
 
           <div className="card lg:col-span-2">
@@ -145,7 +173,6 @@ export default function StudentProfilePage() {
         </div>
       )}
 
-      {s && modal === 'status' && <StatusModal s={s} onClose={() => setModal(null)} onDone={refresh} />}
       {s && modal === 'section' && <SectionModal s={s} onClose={() => setModal(null)} onDone={refresh} />}
       {s && modal === 'doc' && <DocModal id={s.id} onClose={() => setModal(null)} onDone={refresh} />}
       {s && modal === 'concession' && <ConcessionModal id={s.id} onClose={() => setModal(null)} />}
@@ -171,32 +198,6 @@ function Line({ k, v }: { k: string; v: React.ReactNode }) {
   return <div className="flex justify-between py-1 text-sm"><span className="text-gray-500">{k}</span><span className="font-medium">{v}</span></div>;
 }
 
-function StatusModal({ s, onClose, onDone }: { s: any; onClose: () => void; onDone: () => void }) {
-  const [f, setF] = useState({ status: s.status === 'ACTIVE' ? 'LEFT' : 'ACTIVE', date: todayIso(), reason: '' });
-  const m = useMutation({
-    mutationFn: () => studentsAPI.setStatus(s.id, { status: f.status, date: f.date, reason: f.reason || undefined }),
-    onSuccess: () => { toast.success('Status updated'); onDone(); onClose(); },
-    onError: (e) => toast.error(apiError(e)),
-  });
-  return (
-    <Modal open onClose={onClose} title="Change student status">
-      <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); m.mutate(); }}>
-        <Field label="Status">
-          <select className="select" value={f.status} onChange={(e) => setF({ ...f, status: e.target.value })}>
-            <option value="ACTIVE">Active</option><option value="LEFT">Left school</option>
-            <option value="TRANSFERRED">Transferred (TC)</option><option value="GRADUATED">Graduated</option>
-          </select>
-        </Field>
-        {f.status !== 'ACTIVE' && <>
-          <Field label="Date"><input type="date" className="input" value={f.date} onChange={(e) => setF({ ...f, date: e.target.value })} /></Field>
-          <Field label="Reason"><input className="input" value={f.reason} onChange={(e) => setF({ ...f, reason: e.target.value })} /></Field>
-          <p className="text-xs text-gray-500">The student drops out of attendance and fee billing; their app login is disabled.</p>
-        </>}
-        <button className="btn btn-primary w-full" disabled={m.isPending}>Save</button>
-      </form>
-    </Modal>
-  );
-}
 
 function SectionModal({ s, onClose, onDone }: { s: any; onClose: () => void; onDone: () => void }) {
   const [sectionId, setSectionId] = useState(s.sectionId ?? '');

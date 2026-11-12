@@ -5,9 +5,10 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { AlertTriangle, ArrowLeft, Check, Download, Pencil, Printer, RefreshCw, RotateCcw, Search, Send, Trash2, Wallet, X } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Check, Download, Pencil, Printer, RefreshCw, RotateCcw, Send, Trash2, Wallet, X } from 'lucide-react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Field, Modal, Spinner, Stat } from '@/components/ui/kit';
+import { SearchInput, NoMatches, matchesSearch } from '@/components/ui/SearchInput';
 import { payrollAPI, apiError, PayrollLine, PayrollRun } from '@/lib/api';
 import { CAN } from '@/lib/roles';
 import { formatDate, todayIso } from '@/lib/utils';
@@ -43,10 +44,11 @@ export default function PayrollRunPage() {
     const note = window.prompt('What should the accountant fix?');
     if (note !== null) decide.mutate({ approve: false, note: note.trim() || undefined });
   };
-  const lines = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    return (run?.lines ?? []).filter((l) => !term || `${l.name} ${l.employeeNo} ${l.designation ?? ''}`.toLowerCase().includes(term));
-  }, [run, search]);
+  const term = search.trim();
+  const lines = useMemo(
+    () => (run?.lines ?? []).filter((l) => matchesSearch(term, l.name, l.employeeNo, l.designation)),
+    [run, term],
+  );
   const draft = run?.status === 'DRAFT';
   const busy = recalc.isPending || reset.isPending || submit.isPending || reopen.isPending || remove.isPending || decide.isPending;
 
@@ -86,10 +88,7 @@ export default function PayrollRunPage() {
 
           <div className="card space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="relative w-72 max-w-full">
-                <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
-                <input className="input pl-9" placeholder="Name, employee no." value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Search staff" />
-              </div>
+              <SearchInput className="w-72 max-w-full" placeholder="Name, employee no., designation" value={search} onChange={setSearch} aria-label="Search staff" />
               <div className="flex flex-wrap gap-2">
                 <button className="btn-secondary" disabled={sheet.isPending} onClick={() => sheet.mutate('xlsx')}><Download className="h-4 w-4" /> Bank sheet (Excel)</button>
                 <button className="btn-secondary" disabled={sheet.isPending} onClick={() => sheet.mutate('pdf')}><Download className="h-4 w-4" /> PDF</button>
@@ -102,6 +101,7 @@ export default function PayrollRunPage() {
                   <th className="text-right">Tax & fixed</th><th className="text-right">Advance / loan</th><th className="text-right">Bonus</th><th className="text-right">Other</th><th className="text-right">Net pay</th><th />
                 </tr></thead>
                 <tbody>
+                  {!lines.length && term && <tr><td colSpan={10}><NoMatches term={term} what="staff" onClear={() => setSearch('')} /></td></tr>}
                   {lines.map((l) => {
                     const fixed = l.fixedDeductions.reduce((t, c) => t + c.amount, 0);
                     const why = [Number(l.absentDays) && `${days(l.absentDays)} absent`, Number(l.unpaidLeaveDays) && `${days(l.unpaidLeaveDays)} unpaid leave`, Number(l.notEmployedDays) && `${days(l.notEmployedDays)} not employed`].filter(Boolean).join(', ');
@@ -127,7 +127,7 @@ export default function PayrollRunPage() {
                     );
                   })}
                 </tbody>
-                {!search && (
+                {!term && (
                   <tfoot><tr className="bg-slate-50 font-semibold">
                     <td className="px-4 py-3 text-sm">Total ({run.totals.staff})</td>
                     <td className="px-4 py-3 text-right text-sm tabular-nums">{money(run.totals.gross)}</td><td />

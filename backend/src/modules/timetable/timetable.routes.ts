@@ -11,6 +11,7 @@ import { handler, parseBody, id, me } from '../../utils/http';
 import { dayInTimezone, schoolTimezone } from '../../utils/dates';
 import { isSchoolWide, staffForUser, studentScope, teacherSectionIds } from '../../utils/scope';
 import type { JwtPayload } from '../../utils/jwt';
+import { onRoll } from '../../utils/staffStatus';
 
 // Class-wise and teacher-wise timetables (spec module 9; §8 My Timetable; §10 Timetable).
 
@@ -121,7 +122,7 @@ router.put('/section/:sectionId', can('timetable.manage'), handler(async (req, r
   const teacherIds = [...new Set(slots.map((s) => s.teacherId))];
   const [subjects, teachers] = await Promise.all([
     prisma.subject.count({ where: { id: { in: subjectIds } } }),
-    prisma.staff.findMany({ where: { id: { in: teacherIds }, status: 'ACTIVE', isTeacher: true }, select: { id: true, name: true } }),
+    prisma.staff.findMany({ where: { id: { in: teacherIds }, status: onRoll, isTeacher: true }, select: { id: true, name: true } }),
   ]);
   if (subjects !== subjectIds.length || teachers.length !== teacherIds.length) throw new AppError('Unknown subject or teacher', 422);
 
