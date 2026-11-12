@@ -9,7 +9,8 @@ import { AppError } from '../../middleware/errorHandler';
 import { sendEmail } from '../../utils/email';
 import { endAllSessions, endSession, newSessionId, saveSession, storedRefreshToken } from '../../utils/sessions';
 import { normalizeUsername, usernameProblem, isUsernameTaken } from '../../utils/usernames';
-import { permissionsFor } from '../../utils/rolePermissions';
+import { permissionsFor, roleOverrides } from '../../utils/rolePermissions';
+import { creatableRoles } from '../../utils/accounts';
 import { licenceStatus } from '../../utils/licence';
 
 // Auth runs before a tenant is known (login, refresh, reset) or concerns only
@@ -23,7 +24,11 @@ const publicUser = {
 /** The profile plus what this user may do in their school and the school's subscription (the apps show menus and notices from them). */
 async function withPermissions<T extends { role: string; school: { id: string } | null }>(profile: T) {
   const schoolId = profile?.school?.id;
-  return { ...profile, permissions: await permissionsFor(profile?.role ?? '', schoolId), licence: schoolId ? await licenceStatus(schoolId) : null };
+  return {
+    ...profile, permissions: await permissionsFor(profile?.role ?? '', schoolId),
+    creatableRoles: creatableRoles(profile?.role ?? '', schoolId ? await roleOverrides(schoolId) : undefined),
+    licence: schoolId ? await licenceStatus(schoolId) : null,
+  };
 }
 
 /** Blocks disabled users and users of disabled schools. */

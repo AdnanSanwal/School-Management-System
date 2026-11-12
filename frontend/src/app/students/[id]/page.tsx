@@ -12,6 +12,8 @@ import { studentsAPI, feesAPI, transportAPI, libraryAPI, apiError } from '@/lib/
 import { CAN, can } from '@/lib/roles';
 import { formatDate, formatMoney, sectionLabel, todayIso } from '@/lib/utils';
 import { useAuthStore } from '@/store/authStore';
+import { LinkedLoginModal, useCreatableRoles } from '@/components/users/LinkedLogin';
+import { CredentialsNotice } from '@/components/ui/LoginFields';
 
 export default function StudentProfilePage() {
   const { id } = useParams<{ id: string }>();
@@ -22,8 +24,9 @@ export default function StudentProfilePage() {
   const { data: s, isLoading, error } = useQuery({ queryKey: ['student', id], queryFn: () => studentsAPI.get(id) });
   const refresh = () => { qc.invalidateQueries({ queryKey: ['student', id] }); qc.invalidateQueries({ queryKey: ['students'] }); };
 
-  const [modal, setModal] = useState<null | 'status' | 'section' | 'doc' | 'concession' | 'fee' | { loginFor: any }>(null);
-  const [issued, setIssued] = useState<any>(null);
+  const [modal, setModal] = useState<null | 'status' | 'section' | 'doc' | 'concession' | 'fee' | { loginFor: any } | 'studentLogin'>(null);
+  const [issued, setIssued] = useState<{ name: string; username: string } | null>(null);
+  const mayCreate = useCreatableRoles();
   const manage = can(role, 'manageStudents');
 
   return (
@@ -102,14 +105,22 @@ export default function StudentProfilePage() {
                     {g.guardian.phone && <p className="text-gray-500">{g.guardian.phone}{g.guardian.email ? ` · ${g.guardian.email}` : ''}</p>}
                   </div>
                   {g.guardian.user
-                    ? <span className="badge badge-green">App: {g.guardian.user.email}</span>
-                    : can(role, 'manageUsers') && g.guardian.phone !== undefined && (
-                      <button className="btn btn-ghost" onClick={() => setModal({ loginFor: g.guardian })}><KeyRound className="h-4 w-4" /> Give app access</button>
+                    ? <span className="badge badge-green">Login: {g.guardian.user.username ?? g.guardian.user.email}</span>
+                    : mayCreate.includes('PARENT') && g.guardian.phone !== undefined && (
+                      <button className="btn btn-ghost" onClick={() => setModal({ loginFor: g.guardian })}><KeyRound className="h-4 w-4" /> Create parent login</button>
                     )}
                 </li>
               ))}
             </ul>
-            {issued && <div className="mt-3"><PasswordNotice email={issued.user.email} password={issued.temporaryPassword} /></div>}
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3 text-sm">
+              <div><p className="font-medium">Student’s own login</p><p className="text-xs text-gray-500">Lets {s.name} sign in to the app and see only their own attendance, diary, results and timetable.</p></div>
+              {s.user
+                ? <span className={`badge ${s.user.isActive ? 'badge-green' : 'badge-gray'}`}>Login: {s.user.username ?? s.user.email}{s.user.isActive ? '' : ' (disabled)'}</span>
+                : mayCreate.includes('STUDENT') && s.status === 'ACTIVE'
+                  ? <button className="btn btn-ghost" onClick={() => setModal('studentLogin')}><KeyRound className="h-4 w-4" /> Create student login</button>
+                  : <span className="text-xs text-gray-400">No login</span>}
+            </div>
+            {issued && <div className="mt-3"><CredentialsNotice name={issued.name} username={issued.username} onClose={() => setIssued(null)} /></div>}
           </div>
 
           <div className="card">
@@ -140,8 +151,9 @@ export default function StudentProfilePage() {
       {s && modal === 'concession' && <ConcessionModal id={s.id} onClose={() => setModal(null)} />}
       {s && modal === 'fee' && <MonthlyFeeModal s={s} currency={currency} onClose={() => setModal(null)} onDone={refresh} />}
       {s && modal && typeof modal === 'object' && (
-        <LoginModal guardian={modal.loginFor} onClose={() => setModal(null)} onDone={(r) => { setIssued(r); refresh(); }} />
+        <LinkedLoginModal kind="PARENT" target={modal.loginFor} onClose={() => setModal(null)} onDone={(r) => { setIssued(r); refresh(); }} />
       )}
+      {modal === 'studentLogin' && s && <LinkedLoginModal kind="STUDENT" target={{ id: s.id, name: s.name }} onClose={() => setModal(null)} onDone={(r) => { setIssued(r); refresh(); }} />}
     </DashboardLayout>
   );
 }
@@ -268,24 +280,6 @@ function Photo({ s, editable, onDone }: { s: any; editable: boolean; onDone: () 
       <input type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" aria-label="Upload student photo"
         disabled={m.isPending} onChange={(e) => { const f = e.target.files?.[0]; if (f) m.mutate(f); e.target.value = ''; }} />
     </label>
-  );
-}
-
-function LoginModal({ guardian, onClose, onDone }: { guardian: any; onClose: () => void; onDone: (r: any) => void }) {
-  const [email, setEmail] = useState(guardian.email ?? '');
-  const m = useMutation({
-    mutationFn: () => studentsAPI.guardianLogin(guardian.id, email),
-    onSuccess: (r) => { onDone(r); onClose(); },
-    onError: (e) => toast.error(apiError(e)),
-  });
-  return (
-    <Modal open onClose={onClose} title={`App access for ${guardian.name}`}>
-      <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); m.mutate(); }}>
-        <Field label="Login email"><input type="email" required className="input" value={email} onChange={(e) => setEmail(e.target.value)} /></Field>
-        <p className="text-xs text-gray-500">One login covers all their children at this school.</p>
-        <button className="btn btn-primary w-full" disabled={m.isPending}>Create login</button>
-      </form>
-    </Modal>
   );
 }
 

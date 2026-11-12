@@ -3,41 +3,49 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { Lock, RotateCcw, Save } from 'lucide-react';
+import { Crown, Lock, RotateCcw, Save, UserPlus } from 'lucide-react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Spinner } from '@/components/ui/kit';
 import { rolesAPI, apiError, RoleMatrix } from '@/lib/api';
 import { CAN } from '@/lib/roles';
 import { cn } from '@/lib/utils';
 
-/** The owner decides what each staff role may do in this school. */
+const sameSet = (a: Set<string>, b: Set<string>) => a.size === b.size && [...a].every((x) => b.has(x));
+
+/** The owner decides what each role may do in this school, and which logins each role may create. */
 export default function RolesPage() {
   const qc = useQueryClient();
   const { data, isLoading, error } = useQuery({ queryKey: ['roles'], queryFn: rolesAPI.matrix });
   const [role, setRole] = useState('PRINCIPAL');
   const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [creates, setCreates] = useState<Set<string>>(new Set());
   const current = data?.roles.find((r) => r.role === role);
   const saved = useMemo(() => new Set(current?.permissions.filter((p) => p.granted).map((p) => p.key)), [current]);
-  useEffect(() => { setPicked(new Set(saved)); }, [saved]);
+  const savedCreates = useMemo(() => new Set(current?.creates.filter((c) => c.allowed).map((c) => c.role)), [current]);
+  useEffect(() => { setPicked(new Set(saved)); setCreates(new Set(savedCreates)); }, [saved, savedCreates]);
 
-  const dirty = current ? current.permissions.some((p) => picked.has(p.key) !== saved.has(p.key)) : false;
+  const dirty = !!current?.editable && (!sameSet(picked, saved) || !sameSet(creates, savedCreates));
   const done = (r: { data: { data: RoleMatrix; message: string } }) => { toast.success(r.data.message); qc.setQueryData(['roles'], r.data.data); qc.invalidateQueries({ queryKey: ['session'] }); };
   const onError = (e: unknown) => toast.error(apiError(e), { duration: 7000 });
-  const save = useMutation({ mutationFn: () => rolesAPI.save(role, [...picked]), onSuccess: done, onError });
+  const save = useMutation({ mutationFn: () => rolesAPI.save(role, [...picked], [...creates]), onSuccess: done, onError });
   const reset = useMutation({ mutationFn: () => rolesAPI.reset(role), onSuccess: done, onError });
-  const toggle = (key: string) => setPicked((old) => { const next = new Set(old); if (next.has(key)) next.delete(key); else next.add(key); return next; });
+  const flip = (set: (f: (old: Set<string>) => Set<string>) => void) => (key: string) => set((old) => { const next = new Set(old); if (next.has(key)) next.delete(key); else next.add(key); return next; });
+  const toggle = flip(setPicked);
+  const toggleCreate = flip(setCreates);
   const switchRole = (next: string) => { if (!dirty || window.confirm('Leave without saving the changes to this role?')) setRole(next); };
+  const modules = current ? [...new Set(current.permissions.map((p) => p.module))] : [];
+  const family = role === 'PARENT' || role === 'STUDENT';
 
   return (
-    <DashboardLayout title="Roles & permissions" allowedRoles={CAN.manageRoles} subtitle="Choose what each staff role may do in your school. Changes apply straight away.">
+    <DashboardLayout title="Roles & permissions" allowedRoles={CAN.manageRoles} subtitle="Choose what each role may do in your school, and who may create which logins. Changes apply straight away.">
       {isLoading ? <Spinner /> : error ? <div className="card text-sm text-red-600">{apiError(error)}</div> : data && current && (
         <>
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {data.roles.map((r) => (
               <button key={r.role} onClick={() => switchRole(r.role)} className={cn('card text-left transition', r.role === role ? 'ring-2 ring-primary-400' : 'hover:shadow-md')}>
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-semibold">{r.label}</span>
-                  {r.changed > 0 ? <span className="badge badge-yellow">{r.changed} changed</span> : <span className="badge badge-gray">standard</span>}
+                  {!r.editable ? <span className="badge badge-indigo">full access</span> : r.changed > 0 ? <span className="badge badge-yellow">{r.changed} changed</span> : <span className="badge badge-gray">standard</span>}
                 </div>
                 <p className="mt-1 text-xs text-gray-500">{r.about}</p>
                 <p className="mt-2 text-xs text-gray-400">{r.users} active login{r.users === 1 ? '' : 's'}</p>
@@ -45,27 +53,58 @@ export default function RolesPage() {
             ))}
           </div>
 
-          <div className="card space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <h3 className="section-title">{current.label} may…</h3>
-                <p className="text-xs text-gray-500">Ticked = allowed. A yellow dot marks a difference from the standard set.</p>
-              </div>
-              <div className="flex gap-2">
-                <button className="btn-secondary" disabled={reset.isPending || (current.changed === 0 && !dirty)}
-                  onClick={() => window.confirm(`Put ${current.label} back to the standard permissions?`) && reset.mutate()}><RotateCcw className="h-4 w-4" /> Standard set</button>
-                <button className="btn-primary" disabled={!dirty || save.isPending} onClick={() => save.mutate()}><Save className="h-4 w-4" /> Save</button>
+          {!current.editable ? (
+            <div className="card flex items-start gap-4">
+              <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl bg-primary-50 text-primary-600"><Crown className="h-6 w-6" /></div>
+              <div className="space-y-1 text-sm">
+                <h3 className="section-title">The owner has full access</h3>
+                <p className="text-gray-600">Owners see everything in the school, approve payroll and large expenses, reopen closed months, and are the only ones who can open this screen. This can’t be limited, so the school can never be locked out of its own settings.</p>
+                <p className="text-gray-600">An owner can create a login for any role, including another owner.</p>
               </div>
             </div>
-            <div className="grid gap-x-8 gap-y-5 lg:grid-cols-2">
-              {data.modules.map((m) => {
-                const items = current.permissions.filter((p) => p.module === m);
-                if (!items.length) return null;
-                return (
+          ) : (
+            <div className="card space-y-5">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h3 className="section-title">{current.label} may…</h3>
+                  <p className="text-xs text-gray-500">Ticked = allowed. A yellow dot marks a difference from the standard set.</p>
+                </div>
+                <div className="flex gap-2">
+                  <button className="btn-secondary" disabled={reset.isPending || (current.changed === 0 && !dirty)}
+                    onClick={() => window.confirm(`Put ${current.label} back to the standard set?`) && reset.mutate()}><RotateCcw className="h-4 w-4" /> Standard set</button>
+                  <button className="btn-primary" disabled={!dirty || save.isPending} onClick={() => save.mutate()}><Save className="h-4 w-4" /> Save</button>
+                </div>
+              </div>
+
+              {current.creates.length > 0 && (
+                <fieldset className="rounded-xl border border-slate-200 bg-slate-50/60 p-4">
+                  <legend className="flex items-center gap-1.5 px-1 text-xs font-semibold uppercase tracking-wider text-gray-600"><UserPlus className="h-3.5 w-3.5" /> May create logins for</legend>
+                  <div className="flex flex-wrap gap-2">
+                    {current.creates.map((c) => {
+                      const on = creates.has(c.role);
+                      return (
+                        <label key={c.role} className={cn('flex cursor-pointer items-center gap-2 rounded-lg border bg-white px-3 py-2 text-sm', on ? 'border-primary-300 text-primary-800' : 'border-slate-200 text-gray-600')}>
+                          <input type="checkbox" className="h-4 w-4 rounded border-slate-300" checked={on} onChange={() => toggleCreate(c.role)} />
+                          {c.label}
+                          {on !== c.standard && <span className="h-2 w-2 rounded-full bg-amber-400" title={c.standard ? 'Standard: allowed' : 'Standard: not allowed'} />}
+                        </label>
+                      );
+                    })}
+                  </div>
+                  <p className="mt-2 text-xs text-gray-500">
+                    {creates.size === 0
+                      ? `${current.label}s can’t create any login, so “Users & logins” is closed to them.`
+                      : `${current.label}s can create these logins, disable them and reset their passwords, from “Users & logins”, the Staff page and a student’s profile.`}
+                  </p>
+                </fieldset>
+              )}
+
+              <div className="grid gap-x-8 gap-y-5 lg:grid-cols-2">
+                {modules.map((m) => (
                   <fieldset key={m}>
                     <legend className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-gray-500">{m}</legend>
                     <ul className="space-y-1">
-                      {items.map((p) => {
+                      {current.permissions.filter((p) => p.module === m).map((p) => {
                         const on = picked.has(p.key);
                         const locked = !p.available;
                         return (
@@ -73,7 +112,7 @@ export default function RolesPage() {
                             <label className={cn('flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm', locked ? 'text-gray-400' : 'cursor-pointer hover:bg-slate-50')}>
                               <input type="checkbox" className="h-4 w-4 rounded border-slate-300" checked={on} disabled={locked} onChange={() => toggle(p.key)} />
                               <span className="flex-1">{p.label}</span>
-                              {locked && <Lock className="h-3.5 w-3.5" aria-label="Not available for this role" />}
+                              {locked && <Lock className="h-3.5 w-3.5" aria-label={on ? 'Always on for this role' : 'Not available for this role'} />}
                               {on !== p.standard && <span className="h-2 w-2 rounded-full bg-amber-400" title={p.standard ? 'Standard: allowed' : 'Standard: not allowed'} />}
                             </label>
                           </li>
@@ -81,16 +120,20 @@ export default function RolesPage() {
                       })}
                     </ul>
                   </fieldset>
-                );
-              })}
+                ))}
+              </div>
+              <ul className="space-y-1 border-t border-slate-100 pt-3 text-xs text-gray-500">
+                {family ? <>
+                  <li>{role === 'PARENT' ? 'A parent only ever sees their own children.' : 'A student only ever sees their own record.'} The locked items are the heart of the app and stay on.</li>
+                  <li>{role === 'STUDENT' ? 'Fees are hidden from students unless you switch them on here.' : 'Switch fees off if parents should not see invoices or pay from the app.'}</li>
+                </> : <>
+                  <li>Approvals (payroll, large expenses, results, concessions) can be given only to the principal, so the person who prepares something is not the one who approves it.</li>
+                  <li>Teachers always work inside their own classes; only a few school-wide jobs can be added to them.</li>
+                  <li>A role can be allowed to create logins only for roles below it. Everyone can read notices, the calendar and the timetable.</li>
+                </>}
+              </ul>
             </div>
-            <ul className="space-y-1 border-t border-slate-100 pt-3 text-xs text-gray-500">
-              <li>The owner always has full access, and parents and students only ever see their own information.</li>
-              <li>Approvals (payroll, large expenses, results, concessions) can be given only to the principal, so the person who prepares something is not the one who approves it.</li>
-              <li>Teachers always work inside their own classes; only a few school-wide jobs can be added to them.</li>
-              <li>Everyone can read notices, the calendar and the timetable.</li>
-            </ul>
-          </div>
+          )}
         </>
       )}
     </DashboardLayout>

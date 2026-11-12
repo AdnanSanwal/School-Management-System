@@ -85,9 +85,11 @@ export function LoginFields({ value, onChange, roles, personName, onCheck }: {
       <Field label="Confirm password *" hint={mismatch ? 'The two passwords are different' : undefined}>
         <input type="password" className={cn('input', mismatch && 'border-red-300')} required minLength={8} autoComplete="new-password" value={value.confirm} onChange={set('confirm')} />
       </Field>
-      <Field label="Role">
-        <select className="select" value={value.role} onChange={set('role')}>{roles.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select>
-      </Field>
+      {roles.length > 0 && (
+        <Field label="Role">
+          <select className="select" value={value.role} onChange={set('role')}>{roles.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select>
+        </Field>
+      )}
     </div>
   );
 }

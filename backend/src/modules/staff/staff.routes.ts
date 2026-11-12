@@ -196,8 +196,7 @@ router.delete('/:id/documents/:docId', can('staff.manage'), handler(async (req, 
 }));
 
 // Give an existing staff member app access.
-router.post('/:id/login', can('staff.manage'), handler(async (req, res) => {
-  if (!hasPermission(me(req).role, 'users.manage')) throw new AppError('You cannot create logins', 403);
+router.post('/:id/login', can('users.manage'), handler(async (req, res) => {
   const login = parseBody(loginBody, req);
   const result = await transaction(async (tx) => {
     const staff = await tx.staff.findFirst({ where: { id: req.params.id } });

@@ -9,6 +9,7 @@ import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Field, Modal, PasswordNotice, Spinner, Empty } from '@/components/ui/kit';
 import { staffAPI, hrAPI, apiError, type UsernameCheck } from '@/lib/api';
 import { LoginFields, CredentialsNotice, emptyLogin, loginBody, loginProblems, type LoginValue } from '@/components/ui/LoginFields';
+import { useCreatableRoles } from '@/components/users/LinkedLogin';
 import { CAN, can } from '@/lib/roles';
 import { useAuthStore } from '@/store/authStore';
 
@@ -91,11 +92,10 @@ export default function StaffPage() {
 }
 
 const ALL_LOGIN_ROLES = [['TEACHER', 'Teacher'], ['ACCOUNTANT', 'Accountant'], ['ADMIN', 'Office admin'], ['PRINCIPAL', 'Principal']];
-const RANK: Record<string, number> = { OWNER: 50, PRINCIPAL: 40, ADMIN: 30, ACCOUNTANT: 20, TEACHER: 20 };
-/** Roles this user may give out: strictly below their own rank (the owner may give any). */
+/** Roles this user may give out (the owner decides this under Roles & permissions). */
 function useLoginRoles() {
-  const me = useAuthStore((s) => s.user?.role) ?? '';
-  return ALL_LOGIN_ROLES.filter(([r]) => me === 'OWNER' || (RANK[me] ?? 0) > RANK[r]);
+  const mine = useCreatableRoles();
+  return ALL_LOGIN_ROLES.filter(([r]) => mine.includes(r));
 }
 
 function AddStaffModal({ onClose, onIssued }: { onClose: () => void; onIssued: (r: any) => void }) {

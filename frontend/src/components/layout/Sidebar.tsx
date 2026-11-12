@@ -35,7 +35,8 @@ const navGroups: NavGroup[] = [
     title: 'Overview',
     items: [
       { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, cap: 'dashboard' },
-      { label: 'My children', href: '/family', icon: Home, roles: ['PARENT', 'STUDENT'] },
+      { label: 'My children', href: '/family', icon: Home, roles: ['PARENT'] },
+      { label: 'My school record', href: '/family', icon: Home, roles: ['STUDENT'] },
       { label: 'Schools', href: '/platform', icon: Building2, cap: 'platform' },
       { label: 'Approvals', href: '/approvals', icon: Inbox, cap: 'approvals' },
       { label: 'Reports', href: '/reports', icon: FileBarChart, cap: 'reports' },

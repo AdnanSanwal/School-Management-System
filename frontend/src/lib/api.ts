@@ -289,15 +289,31 @@ export const ledgerAPI = {
 };
 
 export type RoleMatrix = {
-  modules: string[];
-  roles: { role: string; label: string; about: string; users: number; changed: number;
-    permissions: { key: string; module: string; label: string; standard: boolean; granted: boolean; available: boolean }[] }[];
+  roles: { role: string; label: string; about: string; users: number; changed: number; editable: boolean;
+    permissions: { key: string; module: string; label: string; standard: boolean; granted: boolean; available: boolean }[];
+    /** Logins this role may create. */
+    creates: { role: string; label: string; standard: boolean; allowed: boolean; available: boolean }[] }[];
 };
 /** Roles & permissions (owner): what each staff role may do in this school. */
 export const rolesAPI = {
   matrix: () => data<RoleMatrix>(api.get('/roles')),
-  save: (role: string, permissions: string[]) => api.put(`/roles/${role}`, { permissions }),
+  save: (role: string, permissions: string[], creates: string[]) => api.put(`/roles/${role}`, { permissions, creates }),
   reset: (role: string) => api.post(`/roles/${role}/reset`),
+};
+
+/** A student's (or a parent's children's) own record. The server limits every call to their own data. */
+export const familyAPI = {
+  children: () => data<any[]>(api.get('/family/children')),
+  home: (studentId: string) => data<any>(api.get('/family/home', { params: { studentId } })),
+  today: () => data<any>(api.get('/timetable/today')),
+  calendar: (studentId: string, month: string) => data<any>(api.get(`/attendance/students/${studentId}/calendar`, { params: { month } })),
+  diary: (studentId: string) => api.get('/diary', { params: { studentId, limit: 50 } }).then((r) => r.data.data as any[]),
+  exams: (studentId: string) => data<any[]>(api.get('/family/exams', { params: { studentId } })),
+  reportCard: (examId: string, studentId: string) => data<{ url: string }>(api.get(`/exams/${examId}/report-card/${studentId}/pdf-link`)),
+  timetable: (sectionId: string) => data<any[]>(api.get(`/timetable/section/${sectionId}`)),
+  fees: (studentId: string) => data<any>(api.get(`/fees/students/${studentId}`)),
+  library: (studentId: string) => data<any>(api.get(`/library/students/${studentId}`)),
+  transport: (studentId: string) => data<any>(api.get(`/transport/students/${studentId}`)),
 };
 
 export const studentsAPI = {
@@ -311,7 +327,9 @@ export const studentsAPI = {
   searchGuardians: (q: string) => data<any[]>(api.get('/students/guardians/search', { params: { q } })),
   linkGuardian: (id: string, body: any) => data(api.post(`/students/${id}/guardians`, body)),
   unlinkGuardian: (id: string, guardianId: string) => api.delete(`/students/${id}/guardians/${guardianId}`),
-  guardianLogin: (guardianId: string, email: string) => data(api.post(`/students/guardians/${guardianId}/login`, { email })),
+  /** A parent login for a guardian, or the student's own login: username and/or email, optional password. */
+  guardianLogin: (guardianId: string, body: { username?: string; email?: string; password?: string }) => data(api.post(`/students/guardians/${guardianId}/login`, body)),
+  studentLogin: (id: string, body: { username?: string; email?: string; password?: string }) => data(api.post(`/students/${id}/login`, body)),
   addDocumentLink: (id: string, body: { title: string; url: string }) => data(api.post(`/students/${id}/documents`, body)),
   uploadDocument: (id: string, title: string, file: File) => {
     const fd = new FormData();

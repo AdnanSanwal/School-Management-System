@@ -3,15 +3,21 @@ import { basePrisma } from '../config/database';
 import type { RoleOverrides } from '../config/tenancy';
 import { effectivePermissions, Permission, PERMISSIONS, ROLE_PERMISSIONS } from '../middleware/rbac';
 
-// Each school can tune what its staff roles may do. Only the differences from the standard
+// Each school can tune what its roles may do. Only the differences from the standard
 // set are stored (RolePermission rows); they are read once per school and kept for a few
 // seconds, so a request costs no extra query and a change reaches every server quickly.
+// The same rows also hold which logins a role may create ("create:<ROLE>", see utils/accounts.ts).
 
-/** Roles a school can tune. The owner keeps everything; parents and students see only their own data. */
+/** Staff roles: the owner can add to and take from their permissions. */
 export const CUSTOM_ROLES: Role[] = ['PRINCIPAL', 'ADMIN', 'ACCOUNTANT', 'TEACHER'];
+/** Parent and student: they only ever see their own data; a few parts of the app can be switched. */
+export const FAMILY_ROLES: Role[] = ['PARENT', 'STUDENT'];
+export const EDITABLE_ROLES: Role[] = [...CUSTOM_ROLES, ...FAMILY_ROLES];
 
-/** What each permission means, grouped the way the settings screen shows it. */
-export const PERMISSION_INFO: Partial<Record<Permission, { module: string; label: string }>> = {
+type Info = { module: string; label: string };
+
+/** What each permission means for staff, grouped the way the settings screen shows it. */
+export const PERMISSION_INFO: Partial<Record<Permission, Info>> = {
   'student.view': { module: 'Students', label: 'See students' },
   'student.manage': { module: 'Students', label: 'Edit student records' },
   'student.admit': { module: 'Students', label: 'Admit new students' },
@@ -79,7 +85,24 @@ export const PERMISSION_INFO: Partial<Record<Permission, { module: string; label
   'audit.view': { module: 'Reports', label: 'See the activity log (who changed what)' },
 
   'school.manage': { module: 'Administration', label: 'Change school settings' },
-  'users.manage': { module: 'Administration', label: 'Create logins and reset passwords' },
+};
+
+/** The same permissions in a parent's or student's words: always about their own child / themselves. */
+const FAMILY_INFO: Partial<Record<Permission, Info>> = {
+  'student.view': { module: 'In the app', label: 'See the profile and class' },
+  'attendance.student.view': { module: 'In the app', label: 'See attendance' },
+  'diary.view': { module: 'In the app', label: 'See the diary and homework' },
+  'homework.mark': { module: 'In the app', label: 'Tick homework as done' },
+  'marks.view': { module: 'In the app', label: 'See marks, results and report cards' },
+  'fee.view': { module: 'Fees', label: 'See fee invoices and receipts' },
+  'fee.pay': { module: 'Fees', label: 'Pay fees online' },
+  'transport.view': { module: 'Facilities', label: 'See the school transport' },
+  'library.view': { module: 'Facilities', label: 'See library books' },
+};
+/** The parts a school can switch for parents and students; everything else of theirs is fixed. */
+const FAMILY_SWITCHES: Record<string, Permission[]> = {
+  PARENT: ['fee.view', 'fee.pay', 'homework.mark', 'transport.view', 'library.view'],
+  STUDENT: ['fee.view', 'homework.mark', 'transport.view', 'library.view'],
 };
 
 /** Approvals exist so a second person checks the work; they can be handed only to the principal. */
@@ -87,8 +110,17 @@ const SENIOR_ONLY: Permission[] = ['expense.approve', 'payroll.approve', 'books.
 /** Teachers work inside their own classes, so only a few school-wide jobs can be added to them. */
 const TEACHER_EXTRAS: Permission[] = ['notice.publish', 'calendar.manage', 'library.view', 'library.manage'];
 
+const isFamily = (role: Role) => FAMILY_ROLES.includes(role);
+
+/** The permissions listed for a role on the settings screen, with their wording. */
+export function permissionList(role: Role): { key: Permission; module: string; label: string }[] {
+  const info = isFamily(role) ? FAMILY_INFO : PERMISSION_INFO;
+  return PERMISSIONS.filter((p) => info[p]).map((p) => ({ key: p, ...info[p]! }));
+}
+
 /** Can the school switch this permission on for the role (beyond its standard set)? */
 export function grantable(role: Role, permission: Permission): boolean {
+  if (isFamily(role)) return FAMILY_SWITCHES[role].includes(permission);
   if (!CUSTOM_ROLES.includes(role) || !PERMISSION_INFO[permission]) return false;
   if (ROLE_PERMISSIONS[role].has(permission)) return true;
   if (role === 'TEACHER') return TEACHER_EXTRAS.includes(permission);
@@ -96,8 +128,11 @@ export function grantable(role: Role, permission: Permission): boolean {
   return true;
 }
 
-/** Permissions shown on the settings screen. Everything else (school.view, notices, calendar…) is fixed. */
-export const TUNABLE = PERMISSIONS.filter((p) => PERMISSION_INFO[p]);
+/** Can the school change this permission for the role at all (on or off)? */
+export function changeable(role: Role, permission: Permission): boolean {
+  if (isFamily(role)) return FAMILY_SWITCHES[role].includes(permission);
+  return ROLE_PERMISSIONS[role].has(permission) ? !!PERMISSION_INFO[permission] : grantable(role, permission);
+}
 
 const TTL_MS = 10_000;
 const cache = new Map<string, { at: number; roles: RoleOverrides }>();

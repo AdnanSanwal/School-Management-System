@@ -13,7 +13,7 @@ import { toDate, schoolToday } from '../../utils/dates';
 import { createAccount } from '../../utils/accounts';
 import { formatNumber, nextNumber } from '../../utils/counter';
 import { attendanceSummary } from '../../utils/attendanceStats';
-import { assertStudentAccess, ensureInSchool, studentScope, currentAcademicYear } from '../../utils/scope';
+import { assertStudentAccess, ensureInSchool, isSchoolWide, studentScope, currentAcademicYear } from '../../utils/scope';
 import { assertKind, deleteFile, MIME, saveFile, signedUrl } from '../../utils/storage';
 import { uploadOne } from '../files/files.routes';
 
@@ -69,9 +69,9 @@ router.get('/:id', can('student.view'), handler(async (req, res) => {
     where: { id: req.params.id },
     include: {
       section: { include: { class: true, classTeacher: { select: { id: true, name: true, phone: true } } } },
-      guardians: { include: { guardian: { include: { user: { select: { id: true, email: true, isActive: true } } } } } },
+      guardians: { include: { guardian: { include: { user: { select: { id: true, email: true, username: true, isActive: true } } } } } },
       documents: { orderBy: { uploadedAt: 'desc' } },
-      user: { select: { id: true, email: true, isActive: true } },
+      user: { select: { id: true, email: true, username: true, isActive: true, lastLoginAt: true } },
     },
   });
 
@@ -96,8 +96,8 @@ router.get('/:id', can('student.view'), handler(async (req, res) => {
     const pending = (open._sum.netAmount ?? new Prisma.Decimal(0)).plus(open._sum.fineAmount ?? 0).minus(open._sum.paidAmount ?? 0);
     extras.fees = { pending, oldestDueDate: open._min.dueDate };
   }
-  // Guardian contact details are office data; parents/teachers see names only.
-  const fullContacts = hasPermission(user.role, 'student.manage') || user.role === 'PARENT';
+  // Guardian contact details are office data: the school-wide roles and the family see them, teachers see names only.
+  const fullContacts = isSchoolWide(user) || hasPermission(user.role, 'student.manage') || user.role === 'PARENT';
   const guardians = student.guardians.map((g) => ({
     relation: g.relation, isPrimary: g.isPrimary,
     guardian: fullContacts ? g.guardian : { id: g.guardian.id, name: g.guardian.name },
@@ -274,14 +274,37 @@ router.delete('/:id/guardians/:guardianId', can('student.manage'), handler(async
   return sendSuccess(res, null, 'Guardian unlinked');
 }));
 
+// Sign-in details for a parent or student login: a username or an email, and optionally a
+// password (otherwise one is generated and shown once). They set their own at first sign-in.
+const appLoginBody = z.object({
+  username: z.string().trim().min(3).max(60).optional(),
+  email: z.string().email().optional(),
+  password: z.string().min(8).max(100).optional(),
+}).refine((l) => l.username || l.email, { message: 'Give the login a username or an email', path: ['username'] });
+
+// Give the student their own app login. They see only their own record.
+router.post('/:id/login', can('users.manage'), handler(async (req, res) => {
+  const login = parseBody(appLoginBody, req);
+  const result = await transaction(async (tx) => {
+    const student = await tx.student.findFirst({ where: { id: req.params.id } });
+    if (!student) throw new AppError('Student not found', 404);
+    if (student.userId) throw new AppError('This student already has a login', 409);
+    if (student.status !== 'ACTIVE') throw new AppError('Only an active student can be given a login', 409);
+    const account = await createAccount(tx, me(req).role, { name: student.name, ...login, role: 'STUDENT' });
+    await tx.student.update({ where: { id: student.id }, data: { userId: account.user.id } });
+    return account;
+  });
+  return sendSuccess(res, result, 'Student login created', 201);
+}));
+
 // Give a guardian parent-app access (covers all their children).
 router.post('/guardians/:guardianId/login', can('users.manage'), handler(async (req, res) => {
-  const { email } = parseBody(z.object({ email: z.string().email() }), req);
+  const login = parseBody(appLoginBody, req);
   const result = await transaction(async (tx) => {
     const g = await tx.guardian.findFirst({ where: { id: req.params.guardianId } });
     if (!g) throw new AppError('Guardian not found', 404);
     if (g.userId) throw new AppError('This guardian already has a login', 409);
-    const account = await createAccount(tx, me(req).role, { name: g.name, email, phone: g.phone, role: 'PARENT' });
+    const account = await createAccount(tx, me(req).role, { name: g.name, phone: g.phone, ...login, role: 'PARENT' });
     await tx.guardian.update({ where: { id: g.id }, data: { userId: account.user.id } });
     return account;
   });

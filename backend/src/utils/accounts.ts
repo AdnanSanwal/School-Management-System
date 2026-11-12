@@ -6,20 +6,43 @@ import { currentSchoolId } from '../config/tenancy';
 import { AppError } from '../middleware/errorHandler';
 import { basePrisma } from '../config/database';
 import { normalizeUsername, usernameProblem, isUsernameTaken } from './usernames';
+import { tenantStorage, RoleOverrides } from '../config/tenancy';
 
 /**
- * Who may create/manage which accounts. A user can manage strictly lower ranks;
- * the owner can manage every school role, including other owners.
+ * Who may create and manage which logins.
+ *  - The owner manages every school role, including other owners.
+ *  - For the staff roles the owner decides (Settings → Roles & permissions). CREATE_OPTIONS
+ *    lists what each role can be allowed; CREATE_STANDARD is what it has until the owner changes it.
+ *  - Parents and students never create logins.
+ * A school's choices are stored with its role settings as "create:<ROLE>" entries.
  */
-const RANK: Record<Role, number> = {
-  SUPER_ADMIN: 100, OWNER: 50, PRINCIPAL: 40, ADMIN: 30, ACCOUNTANT: 20, TEACHER: 20, PARENT: 10, STUDENT: 10,
+export const CREATE_OPTIONS: Partial<Record<Role, Role[]>> = {
+  PRINCIPAL: ['ADMIN', 'ACCOUNTANT', 'TEACHER', 'PARENT', 'STUDENT'],
+  ADMIN: ['ACCOUNTANT', 'TEACHER', 'PARENT', 'STUDENT'],
+  ACCOUNTANT: ['TEACHER', 'PARENT', 'STUDENT'],
+  TEACHER: ['PARENT', 'STUDENT'],
 };
+export const CREATE_STANDARD: Partial<Record<Role, Role[]>> = {
+  PRINCIPAL: ['ADMIN', 'ACCOUNTANT', 'TEACHER', 'PARENT', 'STUDENT'],
+  ADMIN: ['ACCOUNTANT', 'TEACHER', 'PARENT', 'STUDENT'],
+};
+export const createKey = (role: string) => `create:${role}`;
+const SCHOOL_ROLES: Role[] = ['OWNER', 'PRINCIPAL', 'ADMIN', 'ACCOUNTANT', 'TEACHER', 'PARENT', 'STUDENT'];
+
+/** The roles this role may create logins for, with the school's own settings applied. */
+export function creatableRoles(actorRole: string, overrides?: RoleOverrides): Role[] {
+  if (actorRole === 'OWNER') return SCHOOL_ROLES;
+  const options = CREATE_OPTIONS[actorRole as Role];
+  if (!options) return [];
+  const standard = CREATE_STANDARD[actorRole as Role] ?? [];
+  const o = overrides?.[actorRole];
+  return options.filter((r) => (standard.includes(r) && !o?.revoke.has(createKey(r))) || !!o?.grant.has(createKey(r)));
+}
 
 export function canManageRole(actorRole: string, target: Role): boolean {
   if (target === 'SUPER_ADMIN') return false;
-  if (actorRole === 'OWNER') return true;
-  const actor = RANK[actorRole as Role];
-  return actor !== undefined && actor > RANK[target];
+  const ctx = tenantStorage.getStore();
+  return creatableRoles(actorRole, ctx?.kind === 'tenant' ? ctx.roles : undefined).includes(target);
 }
 
 export function assertCanManageRole(actorRole: string, target: Role) {
