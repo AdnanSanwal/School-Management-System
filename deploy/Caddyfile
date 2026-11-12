@@ -5,8 +5,10 @@
 	encode zstd gzip
 
 	# Internal endpoints stay private.
-	@internal path /metrics /metrics/*
-	respond @internal 404
+	@internal path /metrics /metrics/* /ready
+	handle @internal {
+		respond 404
+	}
 
 	# API, health check and live updates go to the backend.
 	@backend path /api/* /socket.io/* /health

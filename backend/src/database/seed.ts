@@ -288,6 +288,12 @@ async function seedRiverside(hash: string) {
 }
 
 async function main() {
+  // Demo logins share a published password (README). Never create them on a production
+  // server unless someone explicitly asks for a demo there (SECURITY_FINDINGS SEC-1).
+  if (process.env.NODE_ENV === 'production' && process.env.ALLOW_DEMO_SEED !== 'true') {
+    console.error('Refusing to seed demo data: NODE_ENV=production. Set ALLOW_DEMO_SEED=true only on a throw-away demo server.');
+    process.exit(1);
+  }
   if (await prisma.school.findUnique({ where: { code: 'greenfield' } })) {
     console.log('Demo data already present — run `npx prisma migrate reset` to reseed.');
     return;

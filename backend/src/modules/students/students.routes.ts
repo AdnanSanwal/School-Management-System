@@ -17,6 +17,7 @@ import { assertStudentAccess, ensureInSchool, isSchoolWide, studentScope, curren
 import { assertKind, deleteFile, MIME, saveFile, signedUrl } from '../../utils/storage';
 import { uploadOne } from '../files/files.routes';
 import { activityFor, audit } from '../../utils/audit';
+import { endAllSessions } from '../../utils/sessions';
 
 // Students, admission, guardians/siblings and documents (spec: Student Management).
 
@@ -145,7 +146,7 @@ const studentFields = z.object({
   dateOfBirth: dateOnly.optional(),
   bloodGroup: z.string().max(8).optional(),
   address: z.string().max(500).optional(),
-  photoUrl: z.string().url().max(1024).optional(),
+  photoUrl: z.string().url().max(1024).refine((u) => /^https?:\/\//i.test(u), 'Use an http(s) link').optional(),
   admissionDate: dateOnly.optional(),
   sectionId: id,
 });
@@ -282,6 +283,7 @@ router.post('/:id/status', can('student.manage'), handler(async (req, res) => {
     if (s.userId) await tx.user.update({ where: { id: s.userId }, data: { isActive: !leaving } });
     return s;
   });
+  if (leaving && student.userId) await endAllSessions(student.userId); // signed out on every device now (AUTH-10)
   await audit(req, {
     action: 'Status changed', entity: 'students', entityId: before.id,
     meta: { name: before.name, admissionNo: before.admissionNo, from: before.status, to: body.status, fromLabel: STUDENT_STATUS_LABEL[before.status], toLabel: STUDENT_STATUS_LABEL[body.status], effective: toIso(effective), reason: body.reason ?? null },

@@ -5,6 +5,8 @@ import prisma, { basePrisma } from '../../config/database';
 import { currentSchoolId } from '../../config/tenancy';
 import { sendSuccess, sendError } from '../../utils/apiResponse';
 import logger from '../../utils/logger';
+import { z } from 'zod';
+import { parseBody } from '../../utils/http';
 
 // Configure VAPID once at module load
 let VAPID_PUBLIC = process.env.VAPID_PUBLIC_KEY || '';
@@ -37,6 +39,9 @@ export async function subscribe(req: AuthRequest, res: Response, next: NextFunct
     if (typeof endpoint !== 'string' || !endpoint || !keys?.p256dh || !keys?.auth) {
       return res.status(422).json({ success: false, message: 'endpoint and keys.p256dh / keys.auth are required' });
     }
+    if (!isPushServiceUrl(endpoint) || !/^[A-Za-z0-9_-]{20,200}$/.test(String(keys.p256dh)) || !/^[A-Za-z0-9_-]{8,100}$/.test(String(keys.auth))) {
+      return res.status(422).json({ success: false, message: 'Not a browser push subscription' });
+    }
     // Endpoint is globally unique; scoped upsert means another school's row can't be hijacked.
     await prisma.pushSubscription.upsert({
       where: { endpoint },
@@ -58,7 +63,13 @@ export async function unsubscribe(req: AuthRequest, res: Response, next: NextFun
 
 export async function sendPush(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const { title, body, url, roles, userIds } = req.body;
+    const { title, body, url, roles, userIds } = parseBody(z.object({
+      title: z.string().trim().min(1).max(150),
+      body: z.string().trim().min(1).max(1000),
+      url: z.string().max(300).regex(/^\/(?![/\\])/, 'A path inside the app, e.g. /notices').optional(),
+      roles: z.array(z.enum(['OWNER', 'PRINCIPAL', 'ADMIN', 'ACCOUNTANT', 'TEACHER', 'PARENT', 'STUDENT'])).max(7).optional(),
+      userIds: z.array(z.string().uuid()).max(1000).optional(),
+    }), req);
 
     const where: any = {};
     if (userIds?.length) where.userId = { in: userIds };
@@ -109,4 +120,17 @@ export async function unregisterDevice(req: AuthRequest, res: Response, next: Ne
     if (token) await prisma.deviceToken.deleteMany({ where: { token, userId: req.user!.id } });
     return sendSuccess(res, null, 'Device removed');
   } catch (err) { next(err); }
+}
+
+/**
+ * The server POSTs to every stored endpoint, so only the browsers' push services are
+ * accepted (SECURITY_FINDINGS API-1): never an internal address or arbitrary host.
+ */
+const PUSH_HOSTS = [/^fcm\.googleapis\.com$/, /^android\.googleapis\.com$/, /(^|\.)push\.services\.mozilla\.com$/, /(^|\.)notify\.windows\.com$/, /^web\.push\.apple\.com$/];
+export function isPushServiceUrl(endpoint: string) {
+  if (endpoint.length > 1000) return false;
+  try {
+    const u = new URL(endpoint);
+    return u.protocol === 'https:' && !u.username && !u.password && (u.port === '' || u.port === '443') && PUSH_HOSTS.some((re) => re.test(u.hostname));
+  } catch { return false; }
 }

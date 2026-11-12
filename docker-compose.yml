@@ -1,3 +1,5 @@
+# LOCAL TRY-OUT STACK ONLY. Every port is bound to 127.0.0.1 and the passwords are
+# development defaults: never run this file on a server (use docker-compose.prod.yml).
 
 services:
   # ─── Core Data ──────────────────────────────────────────────────────────────
@@ -11,7 +13,7 @@ services:
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:-sms_pass}
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-sms_root_pass}
     # 3307 on the host so it doesn't clash with a local MySQL on 3306
-    ports: ['3307:3306']
+    ports: ['127.0.0.1:3307:3306']
     volumes:
       - mysql_data:/var/lib/mysql
     healthcheck:
@@ -25,7 +27,7 @@ services:
     image: redis:7-alpine
     container_name: sms_redis
     restart: unless-stopped
-    ports: ['6379:6379']
+    ports: ['127.0.0.1:6379:6379']
     volumes:
       - redis_data:/data
     command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
@@ -58,7 +60,7 @@ services:
       UPLOAD_DIR: /app/uploads
     volumes:
       - uploads_data:/app/uploads
-    ports: ['5000:5000']
+    ports: ['127.0.0.1:5000:5000']
     healthcheck:
       test: ['CMD-SHELL', 'wget -qO- http://localhost:5000/health || exit 1']
       interval: 30s
@@ -79,7 +81,7 @@ services:
     environment:
       NODE_ENV: production
       NEXT_PUBLIC_API_URL: /api/v1
-    ports: ['3000:3000']
+    ports: ['127.0.0.1:3000:3000']
     healthcheck:
       test: ['CMD-SHELL', 'wget -qO- http://localhost:3000 || exit 1']
       interval: 30s
@@ -109,7 +111,7 @@ services:
     image: prom/prometheus:v2.52.0
     container_name: sms_prometheus
     restart: unless-stopped
-    ports: ['9090:9090']
+    ports: ['127.0.0.1:9090:9090']
     volumes:
       - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus_data:/prometheus
@@ -124,9 +126,9 @@ services:
     image: grafana/grafana:10.4.3
     container_name: sms_grafana
     restart: unless-stopped
-    ports: ['3001:3000']
+    ports: ['127.0.0.1:3001:3000']
     environment:
-      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:?set GRAFANA_PASSWORD}
       GF_USERS_ALLOW_SIGN_UP: 'false'
       GF_SERVER_ROOT_URL: http://localhost:3001
     volumes:
@@ -138,7 +140,7 @@ services:
     image: prom/node-exporter:v1.8.1
     container_name: sms_node_exporter
     restart: unless-stopped
-    ports: ['9100:9100']
+    ports: ['127.0.0.1:9100:9100']
     volumes:
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
@@ -158,7 +160,7 @@ services:
       - discovery.type=single-node
       - xpack.security.enabled=false
       - ES_JAVA_OPTS=-Xms512m -Xmx512m
-    ports: ['9200:9200']
+    ports: ['127.0.0.1:9200:9200']
     volumes:
       - elasticsearch_data:/usr/share/elasticsearch/data
     healthcheck:
@@ -174,7 +176,7 @@ services:
     depends_on:
       elasticsearch:
         condition: service_healthy
-    ports: ['5044:5044', '9600:9600']
+    ports: ['127.0.0.1:5044:5044', '127.0.0.1:9600:9600']
     volumes:
       - ./monitoring/logstash/pipeline:/usr/share/logstash/pipeline:ro
       - ./logs:/logs:ro
@@ -186,7 +188,7 @@ services:
     depends_on:
       elasticsearch:
         condition: service_healthy
-    ports: ['5601:5601']
+    ports: ['127.0.0.1:5601:5601']
     environment:
       ELASTICSEARCH_HOSTS: http://elasticsearch:9200
 
@@ -204,7 +206,7 @@ services:
     environment:
       REDIS_URL: redis://redis:6379
       PORT: '5010'
-    ports: ['5010:5010']
+    ports: ['127.0.0.1:5010:5010']
 
   # ─── Error Tracking ─────────────────────────────────────────────────────────
   # Sentry is SaaS — configure SENTRY_DSN in .env

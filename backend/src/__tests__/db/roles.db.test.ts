@@ -233,7 +233,7 @@ d('Roles & permissions (database)', () => {
   it('a parent login can use a username and covers only their own children', async () => {
     const detail = (await as(tok.ADMIN).get(`/students/${ids.omar}`)).body.data;
     const guardianId = detail.guardians[0].guardian.id;
-    const made = await as(tok.ADMIN).post(`/students/guardians/${guardianId}/login`, { username: uname('omar.dad'), password: 'Parent@1234' });
+    const made = await as(tok.ADMIN).post(`/students/guardians/${guardianId}/login`, { username: uname('omar.dad'), password: 'Kite-Lake-4821' });
     expect(made.status).toBe(201);
     expect(made.body.data.user).toMatchObject({ role: 'PARENT', username: uname('omar.dad'), email: null });
     expect((await as(tok.ADMIN).post(`/students/guardians/${guardianId}/login`, { username: uname('omar.dad2') })).status).toBe(409);

@@ -49,7 +49,8 @@ router.get(/^\/(.+)$/, handler(async (req, res) => {
   res.setHeader('Content-Security-Policy', "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; sandbox");
   // The web app runs on another origin; helmet's default would block <img> loads.
   res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
-  res.setHeader('Cache-Control', 'private, max-age=3000');
+  // Shared office computers: don't keep CNIC copies or payment proofs in the browser cache (FILE-2).
+  res.setHeader('Cache-Control', 'private, no-store');
   res.end(data);
 }));
 

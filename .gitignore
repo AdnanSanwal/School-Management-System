@@ -42,8 +42,6 @@ coverage/
 # Sentry
 .sentryclirc
 
-# Docker build cache
-.dockerignore
 
 # Mobile
 mobile/node_modules/
@@ -55,3 +53,6 @@ backend/uploads/
 # Production secrets and backups
 .env.production
 backups/
+
+# Real Kubernetes secrets never go in git (SECURITY_FINDINGS SEC-2)
+k8s/secrets.yml

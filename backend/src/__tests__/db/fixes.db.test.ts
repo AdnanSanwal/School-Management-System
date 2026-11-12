@@ -9,7 +9,7 @@ import request from 'supertest';
 import { authenticator } from 'otplib';
 import app from '../../app';
 import { basePrisma } from '../../config/database';
-import { connectRedis } from '../../config/redis';
+import { connectRedis, getRedis } from '../../config/redis';
 import { createTestSchool } from './helpers';
 
 const d = process.env.RUN_DB_TESTS ? describe : describe.skip;
@@ -46,13 +46,17 @@ d('Review fixes (database)', () => {
 
   it('two-step login: set up, sign in with a code, turning off needs the password', async () => {
     const A = as('PRINCIPAL');
-    const setup = await A.post('/auth/mfa/enable');
+    expect((await A.post('/auth/mfa/enable', {})).status).toBe(422); // needs the password (AUTH-6)
+    const setup = await A.post('/auth/mfa/enable', { password: 'Test@12345' });
     expect(setup.status).toBe(200);
     const { secret } = setup.body.data;
     expect((await A.post('/auth/mfa/verify', { code: '000000' })).status).toBe(400);
-    expect((await A.post('/auth/mfa/verify', { code: authenticator.generate(secret) })).status).toBe(200);
+    const first = authenticator.generate(secret);
+    expect((await A.post('/auth/mfa/verify', { code: first })).status).toBe(200);
+    // Each code works once (AUTH-7); this test signs in within the same 30 s, so forget the used one.
+    await getRedis().del(`mfa-used:${users.PRINCIPAL.id}:${first}`);
     // Can't silently replace an active secret.
-    expect((await A.post('/auth/mfa/enable')).status).toBe(409);
+    expect((await A.post('/auth/mfa/enable', { password: 'Test@12345' })).status).toBe(409);
 
     const login = (mfaCode?: string) => request(app).post('/api/v1/auth/login').send({ email: users.PRINCIPAL.email, password: 'Test@12345', mfaCode });
     const noCode = await login();
@@ -95,7 +99,8 @@ d('Review fixes (database)', () => {
 
   it('browser push: subscribe with the browser shape; unsubscribe removes only that device', async () => {
     const A = as('ADMIN');
-    const sub = (n: number) => ({ endpoint: `https://push.example/${t.code}/${n}`, keys: { p256dh: `p${n}`, auth: `a${n}` } });
+    // Real push-service host and key shapes (API-1 refuses anything else).
+    const sub = (n: number) => ({ endpoint: `https://fcm.googleapis.com/fcm/send/${t.code}-${n}`, keys: { p256dh: `P${n}`.padEnd(87, 'B'), auth: `A${n}`.padEnd(22, 'a') } });
     expect((await A.post('/push/subscribe', sub(1))).status).toBe(201);
     expect((await A.post('/push/subscribe', sub(2))).status).toBe(201);
     expect((await A.post('/push/subscribe', { endpoint: 'https://x' })).status).toBe(422);

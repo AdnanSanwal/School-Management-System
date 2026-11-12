@@ -13,6 +13,7 @@ import { currentAcademicYear } from '../../utils/scope';
 import { sectionResults } from '../exams/exams.service';
 import { basePrisma } from '../../config/database';
 import { audit } from '../../utils/audit';
+import { endAllSessions } from '../../utils/sessions';
 
 // Year-end promotion (spec §6; client change request 05).
 // The office picks the current and the next academic year and a destination for each class
@@ -151,6 +152,7 @@ router.post('/run', handler(async (req, res) => {
   const label = new Map(sections.map((s) => [s.id, `${s.class.name}-${s.name}`]));
   const OUTCOME_ACTION: Record<string, string> = { PROMOTED: 'Promoted', RETAINED: 'Kept in class', GRADUATED: 'Graduated', LEFT: 'Left at year end' };
   const logRows: { action: string; studentId: string; meta: Record<string, unknown> }[] = [];
+  const leavers: string[] = [];
   const counts: Record<string, number> = {};
   // Chunks keep each transaction short on large schools.
   for (let i = 0; i < b.decisions.length; i += 100) {
@@ -166,6 +168,9 @@ router.post('/run', handler(async (req, res) => {
             where: { id: d.studentId },
             data: { status: d.outcome === 'GRADUATED' ? 'GRADUATED' : 'LEFT', leftOn: to.startDate, leftReason: d.outcome === 'GRADUATED' ? `Graduated ${from.name}` : null },
           });
+          // Their own app login stops with them (AUTHZ-7).
+          await tx.user.updateMany({ where: { student: { id: d.studentId } }, data: { isActive: false } });
+          leavers.push(d.studentId);
         }
         await tx.promotionRecord.create({
           data: { schoolId, studentId: d.studentId, fromAcademicYearId: from.id, toAcademicYearId: to.id, fromSectionId, toSectionId, outcome: d.outcome, createdById: user.id },
@@ -177,6 +182,10 @@ router.post('/run', handler(async (req, res) => {
         });
       }
     });
+  }
+  if (leavers.length) {
+    const logins = await prisma.student.findMany({ where: { id: { in: leavers }, userId: { not: null } }, select: { userId: true } });
+    for (const l of logins) await endAllSessions(l.userId!);
   }
   // Activity log: one entry per student (shown on their profile), plus the run itself.
   await basePrisma.auditLog.createMany({

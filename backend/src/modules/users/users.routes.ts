@@ -14,6 +14,7 @@ import { assertCanManageRole, assertCustomRole, createAccount, temporaryPassword
 import { forgetCustomRoles } from '../../utils/rolePermissions';
 import { currentSchoolId } from '../../config/tenancy';
 import { formatNumber, nextNumber } from '../../utils/counter';
+import { audit } from '../../utils/audit';
 
 const OFFICE_STAFF_ROLES = new Set<string>(['PRINCIPAL', 'ADMIN', 'ACCOUNTANT']);
 const ROLE_DESIGNATION: Record<string, string> = { PRINCIPAL: 'Principal', ADMIN: 'Office administrator', ACCOUNTANT: 'Accountant' };
@@ -120,7 +121,15 @@ router.patch('/:id', handler(async (req, res) => {
   if (body.customRoleId) await assertCustomRole(body.customRoleId, role);
   // Moving to another standard role drops a custom role built on the old one.
   const data = { ...body, ...(body.role && body.role !== target.role && body.customRoleId === undefined ? { customRoleId: null } : {}) };
+  const before = await prisma.user.findFirst({ where: { id: target.id }, select: { role: true, isActive: true, customRoleId: true } });
   const user = await prisma.user.update({ where: { id: target.id }, data, select: userSelect });
+  // Who changed whose access, and from what (LOG-4).
+  if (before && (before.role !== user.role || before.isActive !== user.isActive || before.customRoleId !== (user.customRole?.id ?? null))) {
+    await audit(req, { action: 'Login access changed', entity: 'users', entityId: target.id, meta: {
+      name: user.name, fromRole: before.role, toRole: user.role, fromActive: before.isActive, toActive: user.isActive,
+      fromCustomRoleId: before.customRoleId, toCustomRole: user.customRole?.name ?? null,
+    } });
+  }
   if (data.customRoleId !== undefined) forgetCustomRoles(currentSchoolId());
   // Deactivation or role change: end existing sessions so it takes effect now.
   if (body.isActive === false || body.role) await endAllSessions(target.id);
@@ -131,6 +140,7 @@ router.post('/:id/reset-password', handler(async (req, res) => {
   const target = await loadManageable(me(req), req.params.id);
   const password = temporaryPassword();
   await prisma.user.update({ where: { id: target.id }, data: { password: await hashPassword(password), mustChangePassword: true } });
+  await audit(req, { action: 'Password reset by office', entity: 'users', entityId: target.id, meta: {} });
   await endAllSessions(target.id);
   return sendSuccess(res, { temporaryPassword: password }, 'Password reset — share the new password with the user');
 }));

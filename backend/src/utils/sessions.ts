@@ -51,11 +51,18 @@ export async function endAllSessions(userId: string, opts: { keepSid?: string } 
 
 /** True when an access token was signed out or issued before a "sign out everywhere". */
 export async function isRevoked(token: string, payload: JwtPayload) {
-  const [blacklisted, cutoff] = await getRedis().mget(`blacklist:${token}`, `revoked-before:${payload.id}`);
+  const [blacklisted, userCutoff, schoolCutoff] = await getRedis().mget(`blacklist:${token}`, `revoked-before:${payload.id}`, `revoked-before-school:${payload.schoolId ?? '-'}`);
   if (blacklisted) return true;
+  // A school suspension cuts off every token of that school issued before it (AUTH-10).
+  const cutoff = [userCutoff, schoolCutoff].filter(Boolean).map(Number).reduce((a, b) => Math.max(a, b), 0) || null;
   if (!cutoff) return false;
   // Millisecond issue time when present (tokens issued right after a cut-off stay valid);
   // older tokens only carry whole seconds, so anything from that second is refused.
   if (typeof payload.iam === 'number') return payload.iam < Number(cutoff);
   return typeof payload.iat === 'number' && payload.iat * 1000 <= Number(cutoff);
+}
+
+/** Signs out every user of a school at once (suspension). New sign-ins are refused while it is suspended. */
+export async function endSchoolSessions(schoolId: string) {
+  await getRedis().setex(`revoked-before-school:${schoolId}`, 31 * 24 * 3600, String(Date.now()));
 }

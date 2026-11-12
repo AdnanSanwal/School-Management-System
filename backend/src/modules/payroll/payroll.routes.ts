@@ -160,6 +160,8 @@ router.post('/runs/:id/submit', can('payroll.manage'), handler(async (req, res) 
 router.post('/runs/:id/decision', can('payroll.approve'), handler(async (req, res) => {
   const b = parseBody(z.object({ approve: z.boolean(), note: z.string().trim().max(300).optional() }), req);
   const run = await runOr404(req.params.id);
+  // Separation of duties (AUTHZ-5): the person who asked for it can't also approve it — except the owner, whose business it is.
+  if (run.createdById === me(req).id && me(req).role !== 'OWNER') throw new AppError('You cannot approve a payroll you prepared', 403);
   const { count } = await prisma.payrollRun.updateMany({
     where: { id: run.id, status: 'SUBMITTED' },
     data: { status: b.approve ? 'APPROVED' : 'DRAFT', decidedById: me(req).id, decidedAt: new Date(), decisionNote: b.note || null },

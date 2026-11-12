@@ -31,7 +31,11 @@ export function initSentry(app: Express) {
     tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.2 : 1.0,
     profileSessionSampleRate: profiling ? 1.0 : 0,
     environment: process.env.NODE_ENV || 'development',
-  });
+    // Student and staff records must not leave the school's servers in error reports (LOG-2).
+    sendDefaultPii: false,
+    beforeSend: scrubEvent,
+    beforeSendTransaction: scrubEvent,
+  } as Parameters<typeof Sentry.init>[0]);
 
   logger.info('Sentry initialized');
 }
@@ -47,4 +51,20 @@ export function captureError(err: Error, context?: Record<string, unknown>) {
     if (context) scope.setExtras(context);
     Sentry.captureException(err);
   });
+}
+
+/** Removes bodies, query strings (signed links), cookies, headers and user details from a Sentry event. */
+export function scrubEvent<T extends { request?: Record<string, unknown>; user?: unknown; extra?: unknown; breadcrumbs?: unknown; spans?: unknown }>(event: T): T {
+  if (event.request) {
+    const url = typeof event.request.url === 'string' ? event.request.url.split('?')[0] : event.request.url;
+    event.request = { method: event.request.method, url };
+  }
+  if (event.user) event.user = undefined;
+  if (Array.isArray(event.spans)) {
+    for (const s of event.spans as { description?: string; data?: Record<string, unknown> }[]) {
+      if (typeof s.description === 'string') s.description = s.description.split('?')[0];
+      if (s.data) for (const k of Object.keys(s.data)) if (/url|query|body/i.test(k)) delete s.data[k];
+    }
+  }
+  return event;
 }

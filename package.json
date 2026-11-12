@@ -31,5 +31,8 @@
     "@typescript-eslint/typescript-estree": {
       "minimatch": "^11.0.8"
     }
+  },
+  "engines": {
+    "node": ">=22"
   }
 }

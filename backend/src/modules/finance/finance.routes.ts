@@ -327,6 +327,8 @@ router.post('/expenses/:id/decision', can('expense.approve'), handler(async (req
   const expense = await prisma.expense.findFirst({ where: { id: req.params.id }, include: expenseInclude });
   if (!expense) throw new AppError('Expense not found', 404);
   if (expense.status !== 'PENDING') throw new AppError('This expense was already decided', 409);
+  // Separation of duties (AUTHZ-5): the person who asked for it can't also approve it — except the owner, whose business it is.
+  if (expense.requestedById === me(req).id && me(req).role !== 'OWNER') throw new AppError('You cannot approve an expense you recorded yourself', 403);
   if (b.approve) { await assertBooksOpen(expense.expenseDate); await assertCanPay(expense.accountId, expense.amount, 'this expense'); }
   const { count } = await prisma.expense.updateMany({
     where: { id: expense.id, status: 'PENDING' },

@@ -15,7 +15,7 @@ export function verifyPassword(plain: string, hash: string) {
   return bcrypt.compare(plain, hash);
 }
 
-/** True when a stored hash uses a different cost than today's setting (re-hash after login). */
+/** True when a stored hash is weaker than today's setting (re-hash after login). Never downgrades. */
 export function needsRehash(hash: string) {
-  try { return bcrypt.getRounds(hash) !== BCRYPT_ROUNDS; } catch { return false; }
+  try { return bcrypt.getRounds(hash) < BCRYPT_ROUNDS; } catch { return false; }
 }

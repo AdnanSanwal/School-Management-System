@@ -8,6 +8,8 @@ import { basePrisma } from '../config/database';
 import { normalizeUsername, usernameProblem, isUsernameTaken } from './usernames';
 import { tenantStorage, RoleOverrides } from '../config/tenancy';
 import { forgetCustomRoles } from './rolePermissions';
+import { assertStrongPassword } from './passwordPolicy';
+import { effectivePermissions } from '../middleware/rbac';
 
 /**
  * Who may create and manage which logins.
@@ -43,7 +45,23 @@ export function creatableRoles(actorRole: string, overrides?: RoleOverrides): Ro
 export function canManageRole(actorRole: string, target: Role): boolean {
   if (target === 'SUPER_ADMIN') return false;
   const ctx = tenantStorage.getStore();
-  return creatableRoles(actorRole, ctx?.kind === 'tenant' ? ctx.roles : undefined).includes(target);
+  if (!creatableRoles(actorRole, ctx?.kind === 'tenant' ? ctx.roles : undefined).includes(target)) return false;
+  // Someone whose custom role was deliberately limited must not reach more by creating or
+  // resetting a login of another role (SECURITY_FINDINGS AUTHZ-1): every permission of the
+  // target role has to be one they already hold.
+  if (ctx?.kind === 'tenant' && ctx.custom && ctx.custom.role === actorRole) {
+    const mine = ctx.custom.perms;
+    return effectivePermissions(target, ctx.roles).every((p) => mine.has(p));
+  }
+  return true;
+}
+
+/** Same rule for giving someone a school-defined role. */
+export function canGrantPermissions(perms: Iterable<string>): boolean {
+  const ctx = tenantStorage.getStore();
+  if (ctx?.kind !== 'tenant' || !ctx.custom) return true;
+  for (const p of perms) if (!ctx.custom.perms.has(p)) return false;
+  return true;
 }
 
 export function assertCanManageRole(actorRole: string, target: Role) {
@@ -52,16 +70,24 @@ export function assertCanManageRole(actorRole: string, target: Role) {
 
 /** The custom role must belong to this school and be built on the login's role. */
 export async function assertCustomRole(customRoleId: string, role: Role) {
-  const r = await basePrisma.customRole.findFirst({ where: { id: customRoleId, schoolId: currentSchoolId() }, select: { baseRole: true, name: true } });
+  const r = await basePrisma.customRole.findFirst({ where: { id: customRoleId, schoolId: currentSchoolId() }, select: { baseRole: true, name: true, permissions: true } });
   if (!r) throw new AppError('That role no longer exists', 422);
   if (r.baseRole !== role) throw new AppError(`“${r.name}” is built on a different role`, 422);
+  if (!canGrantPermissions(Array.isArray(r.permissions) ? (r.permissions as string[]) : [])) throw new AppError(`You cannot give the “${r.name}” role`, 403);
 }
 
-/** Readable one-time password, e.g. "Kite-7342-Moon". Shown once to the admin. */
+/**
+ * Readable one-time password, e.g. "Kite-Moon-Rose-482913" (about 38 bits: 64³ words ×
+ * 900,000 numbers), shown once to the admin. The person must replace it at first sign-in,
+ * and the per-account sign-in limit stops guessing long before it could be found.
+ */
+const WORDS = ['Kite', 'Moon', 'Lake', 'Star', 'Rose', 'Hill', 'Tree', 'Bird', 'Rain', 'Sand', 'Leaf', 'Wave', 'Snow', 'Fire', 'Gold', 'Mint',
+  'Pine', 'Reef', 'Sky', 'Sun', 'Wind', 'Bear', 'Deer', 'Fox', 'Hawk', 'Lion', 'Owl', 'Wolf', 'Swan', 'Crow', 'Dove', 'Lark',
+  'Apple', 'Berry', 'Cedar', 'Daisy', 'Ember', 'Fern', 'Grape', 'Honey', 'Iris', 'Jade', 'Lemon', 'Maple', 'Olive', 'Pearl', 'Plum', 'Ruby',
+  'Sage', 'Tulip', 'Coral', 'River', 'Stone', 'Cloud', 'Brook', 'Field', 'Ocean', 'Cliff', 'Shore', 'Spark', 'Light', 'Frost', 'Storm', 'Dawn'];
 export function temporaryPassword(): string {
-  const words = ['Kite', 'Moon', 'Lake', 'Star', 'Rose', 'Hill', 'Tree', 'Bird', 'Rain', 'Sand'];
-  const w = () => words[crypto.randomInt(words.length)];
-  return `${w()}-${crypto.randomInt(1000, 10000)}-${w()}`;
+  const w = () => WORDS[crypto.randomInt(WORDS.length)];
+  return `${w()}-${w()}-${w()}-${crypto.randomInt(100000, 1000000)}`;
 }
 
 export interface NewAccount {
@@ -95,6 +121,7 @@ export async function createAccount(tx: Pick<ScopedTx, 'user'>, actorRole: strin
   if (email && await basePrisma.user.findFirst({ where: { email }, select: { id: true } })) {
     throw new AppError(`${email} already has a login`, 409);
   }
+  if (a.password) assertStrongPassword(a.password, { email, username, name: a.name });
   const plain = a.password ?? temporaryPassword();
   const user = await tx.user.create({
     data: {

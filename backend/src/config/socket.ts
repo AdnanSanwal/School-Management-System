@@ -26,6 +26,7 @@ export function initSocketIO(server: HttpServer) {
       const user = verifyToken(token);
       if (await isRevoked(token, user)) return next(new Error('Authentication error'));
       (socket as any).user = user;
+      (socket as any).token = token;
       next();
     } catch {
       next(new Error('Authentication error'));
@@ -43,6 +44,19 @@ export function initSocketIO(server: HttpServer) {
 
     socket.on('disconnect', () => logger.debug(`Socket disconnected: ${user.id}`));
   });
+
+  // Re-check every minute: a signed-out, deactivated or expired session loses its live
+  // connection instead of keeping it until the browser closes (WS-1).
+  const sweep = setInterval(async () => {
+    for (const socket of io.of('/').sockets.values()) {
+      const s = socket as any;
+      try {
+        const payload = verifyToken(s.token);
+        if (await isRevoked(s.token, payload)) socket.disconnect(true);
+      } catch { socket.disconnect(true); }
+    }
+  }, 60_000);
+  sweep.unref();
 
   logger.info('Socket.IO initialized');
   return io;

@@ -7,7 +7,7 @@ import { sendSuccess, sendError } from '../../utils/apiResponse';
 export async function login(req: Request, res: Response, next: NextFunction) {
   try {
     const { email, password, mfaCode } = req.body;
-    const result = await authService.login(email, password, mfaCode);
+    const result = await authService.login(email, password, mfaCode, req.ip);
     return sendSuccess(res, result, 'Login successful');
   } catch (err) { next(err); }
 }
@@ -52,7 +52,7 @@ export async function changePassword(req: AuthRequest, res: Response, next: Next
 
 export async function enableMFA(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const result = await authService.enableMFA(req.user!.id);
+    const result = await authService.enableMFA(req.user!.id, req.body.password);
     return sendSuccess(res, result, 'Scan QR code with authenticator app');
   } catch (err) { next(err); }
 }
@@ -66,7 +66,7 @@ export async function verifyMFA(req: AuthRequest, res: Response, next: NextFunct
 
 export async function disableMFA(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    await authService.disableMFA(req.user!.id, req.body.password);
+    await authService.disableMFA(req.user!.id, req.body.password, req.user!.sid);
     return sendSuccess(res, null, 'MFA disabled');
   } catch (err) { next(err); }
 }

@@ -12,6 +12,8 @@ import { attendanceSummary } from '../../utils/attendanceStats';
 import { currentAcademicYear } from '../../utils/scope';
 import { D } from '../fees/fees.calc';
 import { onRoll } from '../../utils/staffStatus';
+import crypto from 'crypto';
+import { tenantStorage } from '../../config/tenancy';
 
 // Owner / Principal / Admin / Accountant home screen (spec §5 Owner Dashboard).
 // Each block is included only if the viewer's role may see that data.
@@ -136,7 +138,10 @@ router.get('/overview', can('dashboard.owner', 'dashboard.principal', 'dashboard
   // office screen: cache per school + role for up to 30 s. Any change in the school bumps
   // its data version, so a fee just collected still shows straight away.
   const schoolId = currentSchoolId();
-  const key = `dashboard:${schoolId}:${await schoolDataVersion(schoolId)}:${role}`;
+  // A custom role sees less than its base role: the cache key is the permission set (AUTHZ-3).
+  const ctx = tenantStorage.getStore();
+  const permKey = ctx?.kind === 'tenant' && ctx.custom ? crypto.createHash('sha1').update([...ctx.custom.perms].sort().join(',')).digest('hex').slice(0, 16) : 'std';
+  const key = `dashboard:${schoolId}:${await schoolDataVersion(schoolId)}:${role}:${permKey}`;
   return sendSuccess(res, await withCache(key, 30, () => overview(role as Role)));
 }));
 

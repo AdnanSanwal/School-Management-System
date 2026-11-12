@@ -89,7 +89,7 @@ Log in with that email at `https://<DOMAIN>`. You land on **Schools**. Click **N
 
 The owner then logs in and adds the principal, admin and accountant (**Users**), classes, staff, students and the fee structure.
 
-To try the stack with demo data instead (**never on a live server with real schools**), run `erp exec backend node dist/database/seed.js`. It creates two demo schools; their logins are listed in the README.
+To try the stack with demo data instead (**never on a live server with real schools**), run `erp exec -e ALLOW_DEMO_SEED=true backend node dist/database/seed.js` on a throw-away demo server. It creates two demo schools whose logins (with a published password) are listed in the README. The seed refuses to run in production without `ALLOW_DEMO_SEED=true`, and the server refuses to start while that variable is set, so remove it again after seeding.
 
 ## 5. Backups
 
@@ -127,6 +127,23 @@ rclone sync ~/school-erp/backups remote:erp-backups   # add to crontab: 30 3 * *
 The script stops the app and replaces the database and uploads with that backup. It then starts the app again and asks you to type `restore` before it changes anything. Test a restore on a spare server once, so you know the process works before you need it.
 
 ## 6. Updating
+
+### Upgrading to the security-hardened release (once)
+
+This release (see `docs/security/`) adds required settings and runs the containers as a normal user:
+
+1. Add to `.env.production` (each `openssl rand -hex 32`, all different):
+   `REDIS_PASSWORD`, `METRICS_TOKEN` (and `FILE_URL_SECRET` if it is still missing). If `PAYMENT_GATEWAY` is set,
+   `PAYMENT_GATEWAY_SECRET` must be 32+ characters too. `MESSAGING_PROVIDER=test` and `ALLOW_DEMO_SEED` are refused.
+2. Optional but recommended: `BACKUP_PASSPHRASE` (keep a copy off the server, e.g. in a password manager —
+   without it encrypted backups can't be restored) and `BACKUP_PING_URL` (a healthchecks.io-style URL that alerts
+   you when a night's backup didn't arrive).
+3. Hand the uploads volume to the unprivileged user before starting the new backend:
+   `docker compose -f docker-compose.prod.yml --env-file .env.production run --rm -u root backend chown -R node:node /app/uploads`
+4. Rebuild and start as usual (below). Everyone is signed out once (new Redis), and must sign in again.
+5. Google / Microsoft sign-in stays off unless you set `OAUTH_ENABLED=true` plus the provider settings; Microsoft
+   also needs `MS_TENANT_ID` set to your own tenant (not `common`).
+
 
 ```bash
 erp run --rm backup once          # safety copy first

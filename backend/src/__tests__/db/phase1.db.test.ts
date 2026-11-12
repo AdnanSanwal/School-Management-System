@@ -54,7 +54,7 @@ d('Phase 1 API (database)', () => {
   it('admin adds a teacher with a login, gets a one-time password', async () => {
     const r = await api('ADMIN').post('/staff', { name: 'Test Teacher', login: { email: `teacher.${t.code}@test.local` } });
     expect(r.status).toBe(201);
-    expect(r.body.data.login.temporaryPassword).toMatch(/^\w+-\d{4}-\w+$/);
+    expect(r.body.data.login.temporaryPassword).toMatch(/^[A-Z][a-z]+-[A-Z][a-z]+-[A-Z][a-z]+-\d{6}$/);
     expect(r.body.data.staff.employeeNo).toBe('EMP-0001');
     ids.teacherStaff = r.body.data.staff.id;
     const u = await basePrisma.user.findUniqueOrThrow({ where: { id: r.body.data.login.user.id } });

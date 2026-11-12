@@ -121,3 +121,39 @@ export const heavyLimiter = limiter('heavy', {
   keyGenerator: userOrIp,
   message: 'Too many reports at once. Please wait a minute.',
 });
+
+/**
+ * Failed sign-ins per account from ANY address (AUTH-4): spreading guesses over many IPs
+ * doesn't reset the count. Generous enough that a confused user isn't locked out for long.
+ */
+export const loginIdentityLimiter = limiter('login-identity', {
+  windowMs: 60 * 60_000,
+  limit: 30,
+  skipSuccessfulRequests: true,
+  keyGenerator: (req) => `id:${String(req.body?.email ?? '').toLowerCase().trim()}`,
+  message: 'Too many failed sign-ins for this account. Try again in an hour, or ask the school office to reset the password.',
+});
+
+/** Wrong current-password checks per signed-in user (change password, profile, two-step settings) (AUTH-5). */
+export const passwordCheckLimiter = limiter('password-check', {
+  windowMs: 15 * 60_000,
+  limit: 10,
+  skipSuccessfulRequests: true,
+  keyGenerator: userOrIp,
+  message: 'Too many wrong password attempts. Try again in 15 minutes.',
+});
+
+/** Username availability checks per user (AUTH-11). */
+export const lookupLimiter = limiter('lookup', {
+  windowMs: 60_000,
+  limit: 60,
+  keyGenerator: userOrIp,
+  message: 'Too many checks. Please wait a minute.',
+});
+
+/** Token refreshes per address (AUTH-9). */
+export const refreshLimiter = limiter('refresh', {
+  windowMs: 15 * 60_000,
+  limit: 300,
+  message: 'Too many requests. Please sign in again.',
+});

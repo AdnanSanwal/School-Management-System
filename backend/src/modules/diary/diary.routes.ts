@@ -217,6 +217,8 @@ router.delete('/:id/done', can('homework.mark'), handler(async (req, res) => {
 
 // Teacher: who has / hasn't done a homework.
 router.get('/:id/completion', can('diary.post', 'diary.view'), handler(async (req, res) => {
+  // Classmates' names and homework status are not for parents or students (AUTHZ-6).
+  if (['PARENT', 'STUDENT'].includes(me(req).role)) throw new AppError('Homework not found', 404);
   const entry = await prisma.diaryEntry.findFirst({ where: { id: req.params.id }, select: { id: true, isHomework: true, sectionId: true } });
   if (!entry || !entry.isHomework) throw new AppError('Homework not found', 404);
   const sections = await readableSections(me(req));

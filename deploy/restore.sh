@@ -10,6 +10,17 @@ set -euo pipefail
 DIR="${1:?usage: deploy/restore.sh <backup folder>}"
 ENV_FILE="${ENV_FILE:-.env.production}"
 COMPOSE="docker compose -f docker-compose.prod.yml --env-file ${ENV_FILE}"
+
+# Encrypted backups (BACKUP_PASSPHRASE): decrypt into a private temporary folder first.
+if [ -f "${DIR}/db.sql.gz.enc" ]; then
+  : "${BACKUP_PASSPHRASE:?this backup is encrypted: export BACKUP_PASSPHRASE first}"
+  PLAIN=$(mktemp -d); chmod 700 "${PLAIN}"
+  trap 'rm -rf "${PLAIN}"' EXIT
+  for f in db.sql.gz uploads.tar.gz; do
+    [ ! -f "${DIR}/${f}.enc" ] || openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -pass env:BACKUP_PASSPHRASE -in "${DIR}/${f}.enc" -out "${PLAIN}/${f}"
+  done
+  DIR="${PLAIN}"
+fi
 [ -f "${DIR}/db.sql.gz" ] || { echo "No db.sql.gz in ${DIR}" >&2; exit 1; }
 gzip -t "${DIR}/db.sql.gz" || { echo "${DIR}/db.sql.gz is damaged" >&2; exit 1; }
 [ ! -f "${DIR}/uploads.tar.gz" ] || gzip -t "${DIR}/uploads.tar.gz" || { echo "${DIR}/uploads.tar.gz is damaged" >&2; exit 1; }
@@ -17,8 +28,8 @@ gzip -t "${DIR}/db.sql.gz" || { echo "${DIR}/db.sql.gz is damaged" >&2; exit 1; 
 read -r -p "This REPLACES the database and uploads with ${DIR}. Type 'restore' to continue: " ok
 [ "${ok}" = "restore" ] || { echo "Cancelled."; exit 1; }
 
-# Whatever happens below, bring the app back up.
-trap 'echo "Starting the app…"; ${COMPOSE} up -d backend frontend >/dev/null' EXIT
+# Whatever happens below, bring the app back up (and remove any decrypted copy).
+trap 'echo "Starting the app…"; ${COMPOSE} up -d backend frontend >/dev/null; [ -z "${PLAIN:-}" ] || rm -rf "${PLAIN}"' EXIT
 
 echo "Stopping the app…"
 ${COMPOSE} stop backend frontend

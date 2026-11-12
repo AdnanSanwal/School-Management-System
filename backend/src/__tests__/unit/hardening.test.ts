@@ -19,6 +19,8 @@ describe('start-up configuration check', () => {
     JWT_SECRET: 'a'.repeat(40),
     REFRESH_TOKEN_SECRET: 'b'.repeat(40),
     AES_SECRET_KEY: 'c'.repeat(64),
+    FILE_URL_SECRET: 'd'.repeat(40),
+    METRICS_TOKEN: 'e'.repeat(40),
     FRONTEND_URL: 'https://erp.example.org',
     BACKEND_URL: 'https://erp.example.org',
   };

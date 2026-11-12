@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { newPassword } from '../../utils/passwordPolicy';
 
 export const loginSchema = z.object({
   body: z.object({
@@ -22,15 +23,17 @@ export const profileSchema = z.object({
 export const forgotPasswordSchema = z.object({ body: z.object({ email: z.string().email() }) });
 
 export const resetPasswordSchema = z.object({
-  body: z.object({ token: z.string().min(10), newPassword: z.string().min(8).max(100) }),
+  body: z.object({ token: z.string().min(10), newPassword: newPassword }),
 });
 
 export const mfaCodeSchema = z.object({ body: z.object({ code: z.string().regex(/^\d{6}$/, '6-digit code') }) });
 export const disableMfaSchema = z.object({ body: z.object({ password: z.string().min(1) }) });
+/** Turning two-step login on needs the password, so a borrowed session can't lock the owner out (AUTH-6). */
+export const enableMfaSchema = z.object({ body: z.object({ password: z.string().min(1, 'Enter your password') }) });
 
 export const changePasswordSchema = z.object({
   body: z.object({
     currentPassword: z.string(),
-    newPassword: z.string().min(8).max(100),
+    newPassword: newPassword,
   }),
 });

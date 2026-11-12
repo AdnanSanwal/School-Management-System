@@ -400,7 +400,7 @@ const sheetBody = z.object({
     obtained: z.number({ error: 'Marks must be a number' }).min(0, { error: 'Marks cannot be negative' }).max(1000, { error: 'Marks are too large' })
       .multipleOf(0.25, { error: 'Marks can only be in steps of 0.25' }).nullable().optional(),
     isAbsent: z.boolean().default(false),
-  })).max(10_000).default([]),
+  })).max(3_000).default([]), // one section × its papers is far below this (API-3)
 });
 
 /** Saves marks (and sheet remarks); with submit, also checks completeness and locks the sheet. */

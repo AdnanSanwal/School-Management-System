@@ -248,7 +248,7 @@ router.get('/', handler(async (req, res) => {
 }));
 
 router.get('/:type', can('school.view'), handler(async (req, res) => {
-  const def = REPORTS[req.params.type];
+  const def = Object.prototype.hasOwnProperty.call(REPORTS, req.params.type) ? REPORTS[req.params.type] : undefined;
   if (!def) throw new AppError('Unknown report', 404);
   const user = me(req);
   if (!def.perms.some((p) => hasPermission(user.role, p)) || (def.schoolWideOnly && !isSchoolWide(user))) {

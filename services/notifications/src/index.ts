@@ -22,6 +22,18 @@ const app = express();
 app.use(helmet());
 app.use(express.json());
 
+// Only the backend may queue messages (SECURITY_FINDINGS HOOK-2): a shared token, compared in constant time.
+const TOKEN = process.env.NOTIFY_SERVICE_TOKEN ?? '';
+app.use((req, res, next) => {
+  if (req.path === '/health') return next();
+  const given = Buffer.from(String(req.headers['x-service-token'] ?? ''));
+  const want = Buffer.from(TOKEN);
+  if (TOKEN.length < 32 || given.length !== want.length || !require('crypto').timingSafeEqual(given, want)) {
+    return res.status(401).json({ error: 'unauthorized' });
+  }
+  next();
+});
+
 // Health check
 app.get('/health', (_req, res) => res.json({ status: 'ok', service: 'notifications' }));
 

@@ -19,7 +19,16 @@ const prodSchema = z.object({
   FRONTEND_URL: z.string().url('FRONTEND_URL must be the web address, e.g. https://erp.example.com'),
   BACKEND_URL: z.string().url('BACKEND_URL must be the public API address'),
   PAYMENT_GATEWAY: z.string().optional().refine((v) => v !== 'test', 'PAYMENT_GATEWAY=test is a simulator and is not allowed in production'),
-}).refine((e) => e.JWT_SECRET !== e.REFRESH_TOKEN_SECRET, { message: 'JWT_SECRET and REFRESH_TOKEN_SECRET must be different', path: ['REFRESH_TOKEN_SECRET'] });
+  PAYMENT_GATEWAY_SECRET: z.string().optional(),
+  // Signs file download links; must not be the login-token secret (SEC-3).
+  FILE_URL_SECRET: secret('FILE_URL_SECRET'),
+  // Protects /metrics (Prometheus scrapes it with this bearer token).
+  METRICS_TOKEN: secret('METRICS_TOKEN'),
+  MESSAGING_PROVIDER: z.string().optional().refine((v) => v !== 'test', 'MESSAGING_PROVIDER=test only pretends to send; not allowed in production'),
+  ALLOW_DEMO_SEED: z.string().optional().refine((v) => v !== 'true', 'ALLOW_DEMO_SEED must not be set on a production server'),
+}).refine((e) => e.JWT_SECRET !== e.REFRESH_TOKEN_SECRET, { message: 'JWT_SECRET and REFRESH_TOKEN_SECRET must be different', path: ['REFRESH_TOKEN_SECRET'] })
+  .refine((e) => e.FILE_URL_SECRET !== e.JWT_SECRET && e.FILE_URL_SECRET !== e.REFRESH_TOKEN_SECRET, { message: 'FILE_URL_SECRET must be different from the token secrets', path: ['FILE_URL_SECRET'] })
+  .refine((e) => !e.PAYMENT_GATEWAY || (!!e.PAYMENT_GATEWAY_SECRET && e.PAYMENT_GATEWAY_SECRET.length >= 32 && e.PAYMENT_GATEWAY_SECRET !== e.JWT_SECRET), { message: 'PAYMENT_GATEWAY_SECRET (32+ characters, not a token secret) is required when PAYMENT_GATEWAY is set', path: ['PAYMENT_GATEWAY_SECRET'] });
 
 export function validateEnv(env: NodeJS.ProcessEnv = process.env): { ok: true } | { ok: false; problems: string[] } {
   if (env.NODE_ENV !== 'production') {

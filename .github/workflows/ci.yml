@@ -1,140 +1,196 @@
-name: CI / CD
+# One pipeline: security gates, backend tests on MySQL, web build, then images.
+# Every job must pass before images are published (SECURITY_FINDINGS CI-1).
+# Actions are pinned to commit SHAs (tag in the comment) and the token is read-only
+# unless a job needs more (CI-2). Update pins with Dependabot or by hand.
+name: CI
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main, develop, erp-v2]
   pull_request:
     branches: [main]
+  schedule:
+    - cron: '0 3 * * 1' # weekly: new advisories and secret patterns, even without commits
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
-  NODE_VERSION: '20'
+  NODE_VERSION: '22'
+  GITLEAKS_VERSION: '8.30.1'
 
 jobs:
-  # ─── Backend ────────────────────────────────────────
-  backend-test:
-    name: Backend — Lint & Test
+  # ── Secrets in the whole git history and the working tree ──────────────────
+  secrets:
+    name: Secret scan (gitleaks)
     runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Install gitleaks (checksum verified)
+        run: |
+          set -euo pipefail
+          base="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}"
+          file="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -fsSLO "${base}/${file}"
+          curl -fsSL "${base}/gitleaks_${GITLEAKS_VERSION}_checksums.txt" | grep " ${file}\$" | sha256sum -c -
+          tar -xzf "${file}" gitleaks
+      - name: Scan history
+        run: ./gitleaks git --redact --no-banner --exit-code 1 .
+      - name: Scan working tree
+        run: ./gitleaks dir --redact --no-banner --exit-code 1 .
 
+  # ── Known-vulnerable dependencies ──────────────────────────────────────────
+  audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Backend + web (production dependencies)
+        run: npm audit --omit=dev --audit-level=high
+      - name: Backend + web (all dependencies, report only)
+        run: npm audit --audit-level=critical
+      - name: Mobile
+        working-directory: mobile
+        run: npm audit --omit=dev --audit-level=high
+      - name: Registry signatures
+        run: npm ci --ignore-scripts --no-audit --no-fund && npm audit signatures
+
+  # ── Backend: types and every test, including the security regression tests ─
+  backend:
+    name: Backend tests (MySQL 8.4)
+    runs-on: ubuntu-latest
     services:
-      postgres:
-        image: postgres:16-alpine
+      mysql:
+        image: mysql:8.4
         env:
-          POSTGRES_USER: test
-          POSTGRES_PASSWORD: test
-          POSTGRES_DB: school_test
-        ports: ['5432:5432']
+          MYSQL_ROOT_PASSWORD: ci_root_only
+          MYSQL_DATABASE: school_db_test
+        ports: ['3306:3306']
         options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
+          --health-cmd "mysqladmin ping -h 127.0.0.1 -uroot -pci_root_only --silent"
+          --health-interval 10s --health-timeout 5s --health-retries 10
       redis:
         image: redis:7-alpine
         ports: ['6379:6379']
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
-    defaults:
-      run:
+        options: --health-cmd "redis-cli ping" --health-interval 10s --health-timeout 5s --health-retries 5
+    env:
+      NODE_ENV: test
+      RUN_DB_TESTS: '1'
+      DATABASE_URL: mysql://root:ci_root_only@127.0.0.1:3306/school_db_test
+      REDIS_URL: redis://127.0.0.1:6379
+      # Throw-away values for the test run only.
+      JWT_SECRET: ci-only-jwt-secret-0123456789abcdef0123
+      REFRESH_TOKEN_SECRET: ci-only-refresh-secret-0123456789abcdef
+      FILE_URL_SECRET: ci-only-file-secret-0123456789abcdef0123
+      AES_SECRET_KEY: '0000000000000000000000000000000000000000000000000000000000000000'
+      FRONTEND_URL: http://localhost:3000
+      BACKEND_URL: http://localhost:5000
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - run: npx prisma generate
+        working-directory: backend
+      - run: npx prisma migrate deploy
+        working-directory: backend
+      - run: npx tsc --noEmit
+        working-directory: backend
+      - run: npx jest --ci
         working-directory: backend
 
+  # ── Web: types, lint (errors fail the build) and production build ──────────
+  frontend:
+    name: Web build
+    runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
-          cache-dependency-path: backend/package-lock.json
-
-      - run: npm ci
-
-      - name: Generate Prisma client
-        run: npx prisma generate
-        env:
-          DATABASE_URL: postgresql://test:test@localhost:5432/school_test
-
-      - name: Run migrations
-        run: npx prisma migrate deploy
-        env:
-          DATABASE_URL: postgresql://test:test@localhost:5432/school_test
-
-      - name: Lint
-        run: npm run lint || true
-
-      - name: Build
-        run: npm run build
-
-      - name: Test
-        run: npm test
-        env:
-          DATABASE_URL: postgresql://test:test@localhost:5432/school_test
-          REDIS_URL: redis://localhost:6379
-          JWT_SECRET: test-secret
-          REFRESH_TOKEN_SECRET: test-refresh-secret
-          NODE_ENV: test
-
-  # ─── Frontend ───────────────────────────────────────
-  frontend-test:
-    name: Frontend — Lint & Build
-    runs-on: ubuntu-latest
-
-    defaults:
-      run:
+          cache-dependency-path: package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - run: npx tsc --noEmit -p .
         working-directory: frontend
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-
-      - run: npm ci
-      - run: npm run lint || true
+      - run: npm run lint
+        working-directory: frontend
       - run: npm run build
+        working-directory: frontend
         env:
-          NEXT_TELEMETRY_DISABLED: 1
+          NEXT_PUBLIC_API_URL: /api/v1
+          NEXT_TELEMETRY_DISABLED: '1'
+      - name: No source maps or secrets in the browser bundle
+        working-directory: frontend
+        run: |
+          set -euo pipefail
+          if find .next/static -name '*.map' | grep -q .; then echo "Source maps found in .next/static"; exit 1; fi
+          if grep -rEl '(JWT_SECRET|REFRESH_TOKEN_SECRET|AES_SECRET_KEY|FILE_URL_SECRET|DATABASE_URL|-----BEGIN)' .next/static; then echo "Secret-looking text in the bundle"; exit 1; fi
 
-  # ─── Docker Build & Push (main only) ────────────────
-  docker:
-    name: Build & Push Docker images
+  # ── Images (main only, after every gate passed) ────────────────────────────
+  images:
+    name: Build & push images
     runs-on: ubuntu-latest
-    needs: [backend-test, frontend-test]
-    if: github.ref == 'refs/heads/main'
-
+    needs: [secrets, audit, backend, frontend]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    permissions:
+      contents: read
+      packages: write
+    env:
+      IMAGE_PREFIX: ghcr.io/${{ github.repository_owner }}/schoolms
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v3
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build & push backend
-        uses: docker/build-push-action@v5
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - id: meta-backend
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
-          context: ./backend
+          images: ${{ env.IMAGE_PREFIX }}-backend
+          tags: |
+            type=sha,prefix=
+            type=raw,value=latest
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: backend/Dockerfile
+          target: runner
           push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/sms-backend:latest
+          tags: ${{ steps.meta-backend.outputs.tags }}
+          labels: ${{ steps.meta-backend.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-
-      - name: Build & push frontend
-        uses: docker/build-push-action@v5
+      - id: meta-frontend
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
-          context: ./frontend
+          images: ${{ env.IMAGE_PREFIX }}-frontend
+          tags: |
+            type=sha,prefix=
+            type=raw,value=latest
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: frontend/Dockerfile
+          target: runner
           push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/sms-frontend:latest
+          tags: ${{ steps.meta-frontend.outputs.tags }}
+          labels: ${{ steps.meta-frontend.outputs.labels }}
+          build-args: |
+            NEXT_PUBLIC_API_URL=/api/v1
           cache-from: type=gha
           cache-to: type=gha,mode=max

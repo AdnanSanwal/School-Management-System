@@ -153,6 +153,8 @@ router.post('/staff/:id/salary', can('salary.manage'), handler(async (req, res) 
   const b = parseBody(structureBody, req);
   const staffId = req.params.id;
   await ensureInSchool(prisma.staff, staffId, 'Staff member');
+  // Nobody sets their own pay, except the owner (AUTHZ-5).
+  if (me(req).role !== 'OWNER' && await prisma.staff.count({ where: { id: staffId, userId: me(req).id } })) throw new AppError('You cannot set your own salary — ask the owner', 403);
   const names = b.components.map((c) => `${c.kind}:${c.name.toLowerCase()}`);
   if (new Set(names).size !== names.length) throw new AppError('The same allowance or deduction is listed twice', 422);
   const deductions = b.components.filter((c) => c.kind === 'DEDUCTION').reduce((t, c) => t + c.amount, 0);

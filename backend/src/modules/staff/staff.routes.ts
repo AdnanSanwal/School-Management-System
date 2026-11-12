@@ -19,6 +19,7 @@ import type { StaffStatus } from '@prisma/client';
 import type { AuthRequest } from '../../middleware/auth';
 import { activityFor, audit } from '../../utils/audit';
 import { isOnRoll, onRoll, STAFF_STATUS_LABEL } from '../../utils/staffStatus';
+import { canManageRole } from '../../utils/accounts';
 
 // Teachers and other staff (spec: Teacher / Staff Management).
 
@@ -164,8 +165,13 @@ const staffUpdate = patchOf(staffBody.omit({ login: true, isTeacher: true })).ex
  * Records the change (with the previous status) in the activity log.
  */
 async function changeStaffStatus(req: AuthRequest, staffId: string, status: StaffStatus, opts: { date?: string; reason?: string } = {}) {
-  const before = await prisma.staff.findFirst({ where: { id: staffId }, select: { id: true, name: true, status: true, userId: true, leftOn: true } });
+  const before = await prisma.staff.findFirst({ where: { id: staffId }, select: { id: true, name: true, status: true, userId: true, leftOn: true, user: { select: { role: true } } } });
   if (!before) throw new AppError('Staff member not found', 404);
+  // The status switches their login on or off, so it needs the right to manage that login (AUTHZ-2).
+  if (before.user && !canManageRole(me(req).role, before.user.role)) {
+    throw new AppError(`You cannot change the status of a ${before.user.role.toLowerCase()} — ask the owner`, 403);
+  }
+  if (before.userId === me(req).id) throw new AppError('You cannot change your own status', 403);
   if (before.status === status) throw new AppError(`${before.name} is already ${STAFF_STATUS_LABEL[status].toLowerCase()}`, 409);
   const on = isOnRoll(status);
   const effective = opts.date ? toDate(opts.date) : await schoolToday();
@@ -197,6 +203,13 @@ router.post('/:id/status', can('staff.manage'), handler(async (req, res) => {
 
 router.patch('/:id', can('staff.manage'), handler(async (req, res) => {
   const { joiningDate, dateOfBirth, status, ...body } = parseBody(staffUpdate, req);
+  // Salary goes to these bank details: only the owner may change their own, and every change is logged (AUTHZ-5).
+  const bankChange = body.bankName !== undefined || body.bankAccountTitle !== undefined || body.bankAccountNo !== undefined;
+  if (bankChange) {
+    const target = await prisma.staff.findFirst({ where: { id: req.params.id }, select: { userId: true, name: true, bankName: true, bankAccountNo: true } });
+    if (target?.userId === me(req).id && me(req).role !== 'OWNER') throw new AppError('You cannot change your own bank details — ask the owner', 403);
+    if (target) await audit(req, { action: 'Bank details changed', entity: 'staff', entityId: req.params.id, meta: { name: target.name, previousBank: target.bankName, previousAccountEnding: target.bankAccountNo?.slice(-4) ?? null, newAccountEnding: body.bankAccountNo?.slice(-4) ?? null } });
+  }
   let staff = await prisma.staff.update({
     where: { id: req.params.id },
     data: {

@@ -1,0 +1,25 @@
+# Keep secrets, data and local clutter out of every Docker build context (SECURITY_FINDINGS INFRA-1).
+.git
+.github
+.claude
+**/node_modules
+**/.env
+**/.env.*
+!**/.env.example
+!**/.env.production.example
+backups
+**/uploads
+**/logs
+**/*.log
+**/coverage
+frontend/.next
+frontend/.next-dev
+frontend/out
+mobile
+k8s
+monitoring
+docs
+**/*.pem
+**/*.key
+**/*.p12
+gitleaks-report.json

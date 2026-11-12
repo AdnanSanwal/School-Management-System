@@ -323,6 +323,9 @@ router.post('/concessions', can('fee.concession.request'), handler(async (req, r
 
 router.post('/concessions/:id/decision', can('fee.concession.approve'), handler(async (req, res) => {
   const { approve } = parseBody(z.object({ approve: z.boolean() }), req);
+  // Separation of duties (AUTHZ-5): the person who asked for it can't also approve it — except the owner, whose business it is.
+  const own = await prisma.concession.findFirst({ where: { id: req.params.id }, select: { requestedById: true } });
+  if (own?.requestedById === me(req).id && me(req).role !== 'OWNER') throw new AppError('You cannot decide a concession you asked for', 403);
   const { count } = await prisma.concession.updateMany({
     where: { id: req.params.id, status: 'PENDING' },
     data: { status: approve ? 'APPROVED' : 'REJECTED', decidedById: me(req).id, decidedAt: new Date() },

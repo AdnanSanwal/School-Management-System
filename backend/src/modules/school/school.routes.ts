@@ -25,7 +25,7 @@ const schoolUpdate = z.object({
   address: z.string().max(500).nullable().optional(),
   phone: z.string().max(32).nullable().optional(),
   email: z.string().email().nullable().optional(),
-  logoUrl: z.string().url().max(1024).nullable().optional(),
+  logoUrl: z.string().url().max(1024).refine((u) => /^https?:\/\//i.test(u), 'Use an http(s) link').nullable().optional(),
   timezone: z.string().max(64).optional(),
   lateFeeAmount: z.coerce.number().min(0).max(100_000).optional(),
   lateFeeGraceDays: z.coerce.number().int().min(0).max(90).optional(),

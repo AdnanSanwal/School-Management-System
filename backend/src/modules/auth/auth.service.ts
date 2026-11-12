@@ -12,6 +12,9 @@ import { normalizeUsername, usernameProblem, isUsernameTaken } from '../../utils
 import { customRoleList, customRoleOf, permissionsFor, roleOverrides } from '../../utils/rolePermissions';
 import { creatableRoles } from '../../utils/accounts';
 import { licenceStatus } from '../../utils/licence';
+import { encrypt, decrypt } from '../../utils/encryption';
+import { getRedis } from '../../config/redis';
+import { assertStrongPassword } from '../../utils/passwordPolicy';
 
 // Auth runs before a tenant is known (login, refresh, reset) or concerns only
 // the caller's own User row, so it uses the unscoped client and filters by user id.
@@ -63,16 +66,20 @@ const timingDecoy = (password: string) => {
 };
 
 /** Signs in with an email or a username (CR-05). */
-export async function login(identifier: string, password: string, mfaCode?: string) {
+export async function login(identifier: string, password: string, mfaCode?: string, ip?: string) {
   const id = identifier.toLowerCase().trim();
   const user = await basePrisma.user.findUnique({ where: id.includes('@') ? { email: id } : { username: id } });
   if (!user) {
     await timingDecoy(password);
+    await authEvent(null, null, 'Sign-in failed', { identifier: id.slice(0, 120), reason: 'unknown account' }, ip);
     throw new AppError('Invalid credentials', 401);
   }
 
   const valid = await verifyPassword(password, user.password);
-  if (!valid) throw new AppError('Invalid credentials', 401);
+  if (!valid) {
+    await authEvent(user.schoolId, user.id, 'Sign-in failed', { reason: 'wrong password' }, ip);
+    throw new AppError('Invalid credentials', 401);
+  }
   // Older hashes used a slower cost; upgrade quietly so the next login is fast.
   if (needsRehash(user.password)) {
     hashPassword(password)
@@ -84,11 +91,14 @@ export async function login(identifier: string, password: string, mfaCode?: stri
 
   if (user.mfaEnabled) {
     if (!mfaCode) throw new AppError('MFA code required', 403);
-    const isValid = authenticator.verify({ token: mfaCode, secret: user.mfaSecret! });
-    if (!isValid) throw new AppError('Invalid MFA code', 401);
+    if (!(await checkTotp(user.id, user.mfaSecret, mfaCode))) {
+      await authEvent(user.schoolId, user.id, 'Sign-in failed', { reason: 'wrong two-step code' }, ip);
+      throw new AppError('Invalid MFA code', 401);
+    }
   }
 
   await basePrisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
+  await authEvent(user.schoolId, user.id, 'Signed in', {}, ip);
   const tokens = await issueTokens(user);
   const profile = await basePrisma.user.findUniqueOrThrow({ where: { id: user.id }, select: publicUser });
   return { user: await withPermissions(profile), ...tokens };
@@ -131,8 +141,9 @@ export async function forgotPassword(email: string) {
 
   const resetUrl = `${(process.env.FRONTEND_URL || '').split(',')[0]}/reset-password?token=${token}`;
   // Never fail (or reveal anything) because email isn't configured; the office can still
-  // reset the password from Users & logins.
-  await sendEmail({
+  // reset the password from Users & logins. Not awaited, so a known address doesn't answer
+  // slower than an unknown one (AUTH-12).
+  void sendEmail({
     to: user.email!,
     subject: 'Password Reset',
     html: `<p>Click <a href="${resetUrl}">here</a> to reset your password. Link expires in 1 hour.</p>`,
@@ -148,6 +159,7 @@ export async function resetPassword(token: string, newPassword: string) {
     where: { resetToken: hashResetToken(token), resetTokenExpires: { gt: new Date() } },
   });
   if (!user) throw new AppError('Invalid or expired reset token', 400);
+  assertStrongPassword(newPassword, user);
 
   const hash = await hashPassword(newPassword);
   await basePrisma.user.update({
@@ -155,6 +167,7 @@ export async function resetPassword(token: string, newPassword: string) {
     data: { password: hash, resetToken: null, resetTokenExpires: null },
   });
   await endAllSessions(user.id); // a reset means the old password may be known: sign out everywhere
+  await authEvent(user.schoolId, user.id, 'Password reset by email link', {});
 }
 
 /** Returns fresh tokens: the old ones may carry the "must change password" mark. */
@@ -164,6 +177,7 @@ export async function changePassword(userId: string, currentPassword: string, ne
   if (!valid) throw new AppError('Current password is incorrect', 400);
 
   if (await verifyPassword(newPassword, user.password)) throw new AppError('Choose a password different from the current one', 400);
+  assertStrongPassword(newPassword, user);
   const hash = await hashPassword(newPassword);
   const updated = await basePrisma.user.update({ where: { id: userId }, data: { password: hash, mustChangePassword: false } });
   await endAllSessions(userId); // every device, this one included, continues on the new tokens below
@@ -203,15 +217,17 @@ export async function updateProfile(userId: string, body: { name: string; phone?
   });
 }
 
-export async function enableMFA(userId: string) {
+export async function enableMFA(userId: string, password: string) {
   const secret = authenticator.generateSecret();
   const user = await basePrisma.user.findUniqueOrThrow({ where: { id: userId } });
   // Replacing the secret of an active 2FA would let a stolen session lock the owner out.
   if (user.mfaEnabled) throw new AppError('Two-step login is already on. Turn it off first.', 409);
+  // …and so would turning it on with an attacker's authenticator: the password is needed (AUTH-6).
+  if (!(await verifyPassword(password, user.password))) throw new AppError('Password is incorrect', 400);
   const otpauth = authenticator.keyuri(user.email ?? user.username ?? user.name, process.env.MFA_ISSUER || 'School ERP', secret);
   const qrCodeUrl = await QRCode.toDataURL(otpauth);
 
-  await basePrisma.user.update({ where: { id: userId }, data: { mfaSecret: secret } });
+  await basePrisma.user.update({ where: { id: userId }, data: { mfaSecret: sealMfaSecret(secret) } });
   return { secret, qrCodeUrl };
 }
 
@@ -219,14 +235,47 @@ export async function verifyMFA(userId: string, code: string) {
   const user = await basePrisma.user.findUniqueOrThrow({ where: { id: userId } });
   if (!user.mfaSecret) throw new AppError('MFA not set up', 400);
 
-  const isValid = authenticator.verify({ token: code, secret: user.mfaSecret });
-  if (!isValid) throw new AppError('Invalid MFA code', 400);
+  if (!(await checkTotp(user.id, user.mfaSecret, code))) throw new AppError('Invalid MFA code', 400);
 
   await basePrisma.user.update({ where: { id: userId }, data: { mfaEnabled: true } });
 }
 
-export async function disableMFA(userId: string, password: string) {
+export async function disableMFA(userId: string, password: string, keepSid?: string) {
   const user = await basePrisma.user.findUniqueOrThrow({ where: { id: userId } });
   if (!(await verifyPassword(password, user.password))) throw new AppError('Password is incorrect', 400);
   await basePrisma.user.update({ where: { id: userId }, data: { mfaEnabled: false, mfaSecret: null } });
+  await endAllSessions(userId, { keepSid }); // a weaker sign-in from now on: other devices sign in again
+}
+
+// ─── Two-step codes (AUTH-7) ───
+// Secrets are encrypted at rest when AES_SECRET_KEY is set (always, in production);
+// older plaintext secrets keep working. A code is accepted once: replaying an observed
+// code within its 30-second window fails.
+
+function sealMfaSecret(secret: string) {
+  return process.env.AES_SECRET_KEY ? `enc:${encrypt(secret)}` : secret;
+}
+function openMfaSecret(stored: string) {
+  return stored.startsWith('enc:') ? decrypt(stored.slice(4)) : stored;
+}
+async function checkTotp(userId: string, stored: string | null, code: string) {
+  if (!stored || !/^\d{6}$/.test(code)) return false;
+  let secret: string;
+  try { secret = openMfaSecret(stored); } catch { return false; }
+  if (!authenticator.verify({ token: code, secret })) return false;
+  const key = `mfa-used:${userId}:${code}`;
+  const redis = getRedis();
+  if (await redis.get(key)) return false;
+  await redis.setex(key, 120, '1');
+  return true;
+}
+
+/**
+ * Sign-in events in the activity log (LOG-3), so the owner can see failed attempts and
+ * takeovers. Never the password; the identifier is kept only for unknown accounts.
+ */
+async function authEvent(schoolId: string | null, userId: string | null, action: string, meta: Record<string, unknown>, ip?: string | null) {
+  try {
+    await basePrisma.auditLog.create({ data: { schoolId, userId, action, entity: 'auth', entityId: userId, meta: meta as object, ipAddress: ip ?? null } });
+  } catch { /* never block sign-in on logging */ }
 }

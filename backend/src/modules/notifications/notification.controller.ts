@@ -7,6 +7,9 @@ import { getIO } from '../../config/socket';
 import { sendEmail, sendSMS } from '../../utils/email';
 import { schoolRoom } from '../../config/socket';
 import { currentSchoolId } from '../../config/tenancy';
+import { z } from 'zod';
+import { parseBody } from '../../utils/http';
+import { hasPermission } from '../../middleware/rbac';
 
 export async function list(req: AuthRequest, res: Response, next: NextFunction) {
   try {
@@ -23,9 +26,17 @@ const BROADCAST_ROLES = new Set<Role>(['OWNER', 'PRINCIPAL', 'ADMIN', 'ACCOUNTAN
 
 export async function broadcast(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const { title, message, roles, channels } = req.body as {
-      title: string; message: string; roles?: Role[]; channels?: string[];
-    };
+    // Validated (API-2): bounded text, known roles and channels. Email and SMS go to the
+    // whole school, so they need message.broadcast, not just notice.publish.
+    const { title, message, roles, channels } = parseBody(z.object({
+      title: z.string().trim().min(1).max(150),
+      message: z.string().trim().min(1).max(2000),
+      roles: z.array(z.enum(['OWNER', 'PRINCIPAL', 'ADMIN', 'ACCOUNTANT', 'TEACHER', 'PARENT', 'STUDENT'])).max(7).optional(),
+      channels: z.array(z.enum(['socket', 'email', 'sms', 'push'])).max(4).optional(),
+    }), req);
+    if (channels?.some((c) => c === 'email' || c === 'sms') && !hasPermission(req.user!.role, 'message.broadcast')) {
+      return res.status(403).json({ success: false, message: 'Sending email or SMS to everyone needs the "send messages" permission' });
+    }
     const targetRoles = (roles ?? []).filter((r) => BROADCAST_ROLES.has(r));
     const users = await prisma.user.findMany({
       where: { isActive: true, ...(targetRoles.length ? { role: { in: targetRoles } } : { role: { not: 'SUPER_ADMIN' } }) },

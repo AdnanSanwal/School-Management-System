@@ -10,6 +10,7 @@ import { validate } from '../../middleware/validate';
 import { sendSuccess } from '../../utils/apiResponse';
 import { AppError } from '../../middleware/errorHandler';
 import { DEFAULT_DESIGNATIONS } from '../../utils/staffStatus';
+import { endSchoolSessions } from '../../utils/sessions';
 
 // Platform (SaaS operator) endpoints: onboard and suspend schools.
 // SUPER_ADMIN only; runs in system context, so it uses the unscoped client.
@@ -89,6 +90,7 @@ router.patch(
     try {
       const school = await basePrisma.school.update({ where: { id: req.params.id }, data: { isActive: req.body.isActive } });
       forgetLicence(school.id);
+      if (!school.isActive) await endSchoolSessions(school.id); // signed out everywhere, at once
       return sendSuccess(res, school, school.isActive ? 'School activated' : 'School suspended');
     } catch (err) { next(err); }
   },
