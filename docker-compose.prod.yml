@@ -133,6 +133,10 @@ services:
       backend: { condition: service_healthy }
     environment:
       NODE_ENV: production
+      PORTAL_NAME: ${PORTAL_NAME:-School ERP}
+      PORTAL_LOGO_PATH: ${PORTAL_LOGO_PATH:-}
+      PORTAL_ICON_PATH: ${PORTAL_ICON_PATH:-}
+      PORTAL_DESCRIPTION: ${PORTAL_DESCRIPTION:-Your school management portal}
     healthcheck:
       test: ['CMD-SHELL', "node -e \"fetch('http://127.0.0.1:3000/login').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
       interval: 30s

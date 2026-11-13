@@ -491,3 +491,11 @@ separate (every query is scoped to the signed-in school automatically) and the r
 ## License
 
 MIT
+
+### Login page branding
+
+Set `PORTAL_NAME="Your School or Brand"` and `PORTAL_LOGO_PATH=/brand/logo.png` in `frontend/.env.local` for local development, or in the deployment `.env` for production Docker Compose. Place the logo at `frontend/public/brand/logo.png`. Use a transparent PNG, WebP or SVG and a same-origin path (external logo URLs are intentionally excluded by the security policy). The default is School ERP with the education emblem from the supplied login reference; missing or invalid images fall back to that emblem.
+
+Restart the web server after changing settings (`docker compose --env-file .env -f docker-compose.prod.yml up -d frontend` in Docker). Text and path changes do not require rebuilding; adding a new image to the Docker image requires rebuilding frontend. Login branding is shared across the deployment; each school's existing name and logo settings still apply after sign-in. All roles use the same login form, with access determined by the authenticated account.
+
+The same branding settings apply throughout the web app: browser tab title and icon, sidebar product name and logo, loading indicators, installable app name/icon, and web notification fallback branding. `PORTAL_ICON_PATH=/brand/icon.png` optionally supplies a separate compact icon (otherwise the logo is used). `PORTAL_DESCRIPTION` controls the page/manifest description. Use a square high-resolution PNG for the broadest browser and installed-app icon support. Existing installed apps may need to be reinstalled to refresh OS-cached names/icons; browser favicon caches may need a hard refresh. These settings configure the web deployment, not the native Expo app's compiled name/icons.

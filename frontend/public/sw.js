@@ -2,12 +2,12 @@ self.addEventListener('push', event => {
   if (!event.data) return;
   const data = event.data.json();
   event.waitUntil(
-    self.registration.showNotification(data.title || 'School SMS', {
+    fetch('/branding.json').then(r => r.json()).catch(() => ({ name: 'School ERP', icon: '/default-logo.svg' })).then(brand => self.registration.showNotification(data.title || brand.name, {
       body: data.body || '',
-      icon: '/icon-192.png',
-      badge: '/icon-72.png',
+      icon: brand.icon,
+      badge: brand.icon,
       data: { url: data.url || '/' },
-    })
+    }))
   );
 });
 

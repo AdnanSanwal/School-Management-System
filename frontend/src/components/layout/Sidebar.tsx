@@ -6,6 +6,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { prefetchPage } from '@/lib/prefetch';
 import { usePathname } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
+import { useBranding } from '@/components/BrandingProvider';
 import { cn } from '@/lib/utils';
 import {
   LayoutDashboard, Users, GraduationCap, Bell, Settings, ChevronLeft, ChevronRight,
@@ -131,6 +132,7 @@ const kept = { scrollTop: 0, collapsed: false };
 
 export function Sidebar() {
   const pathname = usePathname();
+  const brand = useBranding();
   const { user } = useAuthStore();
   const qc = useQueryClient();
   const [collapsed, setCollapsedState] = useState(kept.collapsed);
@@ -186,14 +188,15 @@ export function Sidebar() {
       style={{ minHeight: '100vh' }}
     >
       {/* Logo */}
-      <div className={cn('flex items-center border-b border-slate-100 h-16 flex-shrink-0 overflow-hidden', collapsed ? 'px-4 justify-center' : 'px-5 gap-3')}>
-        <div className="w-9 h-9 rounded-xl gradient-primary flex items-center justify-center flex-shrink-0 shadow-sm">
-          <GraduationCap className="w-5 h-5 text-white" />
+      <div className={cn('flex items-center border-b border-slate-100 h-16 flex-shrink-0 overflow-hidden', collapsed ? 'px-2 justify-center' : 'px-3 gap-2.5')}>
+        <div className="w-12 h-12 flex items-center justify-center flex-shrink-0">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={brand.logo} alt={brand.name} className="w-12 h-12 object-contain" />
         </div>
         {!collapsed && (
-          <div className="min-w-0">
-            <p className="font-bold text-sm text-gray-900 leading-tight truncate">{user?.school?.name ?? 'School ERP'}</p>
-            <p className="text-2xs text-slate-400 font-medium">School ERP</p>
+          <div className="min-w-0 flex-1">
+            <p title={user?.school?.name ?? brand.name} className="font-bold text-sm text-gray-900 leading-tight truncate">{user?.school?.name ?? brand.name}</p>
+            <p className="text-2xs text-slate-400 font-medium">{brand.name}</p>
           </div>
         )}
       </div>

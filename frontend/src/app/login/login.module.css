@@ -1,0 +1,55 @@
+﻿.page { min-height: 100svh; position: relative; overflow: clip; background: #06284c; display: flex; align-items: center; justify-content: flex-end; color: #072447; }
+.scene { position: absolute; inset: 0 auto 0 0; width: 56%; background: url('/login-campus.svg') left center / 100% 100% no-repeat; pointer-events: none; }
+.sweep { position: absolute; width: 64%; height: 140%; right: -42%; bottom: -120%; border-radius: 50%; border: 55px solid #009eaa; box-shadow: 0 0 0 34px #00b9bd; transform: rotate(-24deg); }
+.panel { position: relative; width: 55%; padding: 64px 4%; z-index: 1; display: flex; justify-content: center; }
+.card { width: 100%; max-width: 680px; flex-shrink: 0; background: #fff; border-radius: 30px; padding: clamp(28px, 3.4vw, 58px); box-shadow: 0 24px 65px #00162f55; border: 1px solid #e8edf2; }
+.brand { display: flex; align-items: center; flex-direction: column; text-align: center; margin-bottom: 32px; }
+.brand h1 { font-size: clamp(28px, 3.2vw, 48px); font-weight: 800; letter-spacing: -1.5px; line-height: 1.15; overflow-wrap: anywhere; margin-top: 12px; }
+.logo { width: 140px; height: 106px; object-fit: contain; }
+.emblem { height: 106px; display: flex; align-items: center; flex-direction: column; color: #008e95; }
+.emblem svg:first-child { color: #06284c; margin-bottom: -26px; z-index: 1; }
+.rule { display: block; width: 88px; height: 5px; border-radius: 6px; background: #009da4; margin-top: 22px; }
+.form { display: flex; flex-direction: column; gap: 22px; }
+.inputWrap { display: flex; align-items: center; gap: 18px; border: 1.5px solid #cbd1da; border-radius: 15px; min-height: 62px; padding: 0 22px; transition: border-color .15s, box-shadow .15s; }
+.inputWrap:focus-within { border-color: #009da4; box-shadow: 0 0 0 3px #009da420; }
+.inputWrap input { width: 100%; min-width: 0; border: 0; outline: none; background: transparent; font-size: 18px; padding: 16px 0; color: #102842; }
+.inputWrap input::placeholder { color: #616b7a; opacity: 1; }
+.inputWrap > svg { flex-shrink: 0; }
+.inputWrap button { display: flex; padding: 6px; color: #526071; border-radius: 6px; }
+.options { display: flex; justify-content: flex-end; color: #008b93; font-weight: 600; font-size: 15px; margin-top: -4px; }
+.options a:hover { text-decoration: underline; }
+.submit { min-height: 62px; display: flex; align-items: center; justify-content: center; gap: 10px; color: white; background: #05264d; border-radius: 15px; font-size: 24px; font-weight: 700; box-shadow: 0 8px 20px #06284c16; transition: background .15s; }
+.submit:hover { background: #0b3a66; }
+.submit:disabled { opacity: .65; cursor: wait; }
+.submit:focus-visible, .options a:focus-visible, .inputWrap button:focus-visible { outline: 3px solid #00b6bc; outline-offset: 4px; }
+.error { color: #b42318; font-size: 13px; margin: 6px 0 0; }
+.codeLabel { display: block; margin-bottom: 8px; font-size: 14px; font-weight: 600; }
+@media (min-width: 1800px) { .panel { padding-inline: 4%; } }
+@media (max-width: 900px) { .scene { width: 49%; } .panel { width: 65%; padding: 40px 4%; } .card { padding: 30px; } }
+@media (max-width: 640px) { .page { justify-content: center; background: linear-gradient(145deg, #063356, #031c38); } .scene { display: none; } .panel { width: 100%; max-width: 500px; padding: 28px 18px; } .card { border-radius: 24px; padding: 32px 24px; } .brand h1 { font-size: 34px; } .inputWrap { padding: 0 14px; gap: 12px; min-height: 58px; } .inputWrap input { font-size: 16px; } .submit { font-size: 21px; min-height: 58px; } }
+/* Fit the available viewport, including mobile browser chrome. Only the form
+   scrolls when zoom, the keyboard or validation makes it taller than the screen. */
+.page { height: 100dvh; min-height: 0; }
+.panel { max-height: 100%; overflow-y: auto; overscroll-behavior: contain; padding-block: clamp(12px, 4dvh, 48px); }
+.card { padding-block: clamp(20px, 4dvh, 48px); }
+.brand { margin-bottom: clamp(16px, 3dvh, 32px); }
+.logo, .emblem { height: clamp(64px, 12dvh, 106px); }
+.emblem svg { flex-shrink: 1; min-height: 0; }
+.brand h1 { font-size: clamp(26px, min(3.2vw, 5dvh), 48px); }
+.rule { margin-top: clamp(12px, 2.5dvh, 22px); }
+.form { gap: clamp(12px, 2.5dvh, 22px); }
+.inputWrap, .submit { min-height: clamp(46px, 7.5dvh, 62px); }
+.inputWrap input { padding-block: clamp(10px, 1.8dvh, 16px); }
+@media (max-height: 600px) {
+  .panel { padding-block: 12px; }
+  .card { padding-block: 18px; }
+  .brand { margin-bottom: 14px; }
+  .logo, .emblem { height: 54px; }
+  .brand h1 { margin-top: 6px; font-size: 26px; }
+  .rule { margin-top: 10px; height: 4px; }
+  .form { gap: 12px; }
+  .submit { font-size: 20px; }
+}
+
+/* Decorative overflow must never become a focus-scrollable container. */
+@media (max-width: 640px) { .sweep { display: none; } }
