@@ -121,6 +121,7 @@ const navGroups: NavGroup[] = [
       { label: 'Users & logins', href: '/users', icon: KeyRound, cap: 'manageUsers' },
       { label: 'School settings', href: '/settings/school', icon: School, cap: 'manageSchool' },
       { label: 'Roles & permissions', href: '/settings/roles', icon: ShieldCheck, cap: 'manageRoles' },
+      { label: 'Audit log', href: '/audit', icon: ClipboardCheck, cap: 'viewAudit' },
       { label: 'Subscription', href: '/licence', icon: BadgeCheck, roles: ['OWNER', 'ADMIN'] },
       { label: 'My account', href: '/settings', icon: Settings, roles: ['OWNER', 'PRINCIPAL', 'ADMIN', 'ACCOUNTANT', 'TEACHER', 'PARENT', 'STUDENT', 'SUPER_ADMIN'] },
     ],

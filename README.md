@@ -20,6 +20,8 @@ and owners.
 
 See [Reports and verification](docs/REPORTS.md) for report coverage, filters, retained QA logins and test results.
 
+Owners and principals can review branch activity in **System → Audit log**. See [Audit log](docs/AUDIT_LOG.md) for filters, permissions and history coverage.
+
 **Stack:** Node 20 + Express + Prisma (MySQL) · Next.js 14 web panel · Expo (React Native) mobile app · Redis (optional in development).
 
 ---

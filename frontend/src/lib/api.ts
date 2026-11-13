@@ -91,6 +91,16 @@ export function apiError(err: any, fallback = 'Something went wrong') {
   return d?.message || fallback;
 }
 
+export interface AuditEntry {
+  id: string; action: string; entity: string; entityId: string | null;
+  userId: string | null; user: { id: string; name: string; role: string } | null;
+  createdAt: string; ipAddress: string | null; meta: unknown; kind: 'activity' | 'request' | 'security';
+}
+export const auditAPI = {
+  list: (params: Record<string, string | number>) => api.get<{ data: AuditEntry[]; pagination: { total: number; page: number; limit: number; pages: number }; timezone: string }>('/audit', { params }).then(r => r.data),
+  options: () => data<{ entities: string[]; users: { id: string; name: string; role: string }[]; timezone: string }>(api.get('/audit/options')),
+};
+
 export const authAPI = {
   login: (body: { email: string; password: string; mfaCode?: string }) => data(api.post('/auth/login', body)),
   logout: () => api.post('/auth/logout'),

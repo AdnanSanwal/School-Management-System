@@ -63,6 +63,7 @@ const PAGES: PageLink[] = [
   { label: 'Users & logins', href: '/users', cap: 'manageUsers', keywords: 'accounts passwords' },
   { label: 'School settings', href: '/settings/school', cap: 'manageSchool' },
   { label: 'Roles & permissions', href: '/settings/roles', cap: 'manageRoles' },
+  { label: 'Audit log', href: '/audit', cap: 'viewAudit' },
   { label: 'Subscription', href: '/licence', roles: ['OWNER', 'ADMIN'], keywords: 'licence billing' },
   { label: 'My account', href: '/settings', keywords: 'password profile settings' },
 ];

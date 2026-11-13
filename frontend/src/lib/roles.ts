@@ -71,6 +71,7 @@ export const CAN = {
   viewLibrary: ['OWNER', 'PRINCIPAL', 'ADMIN'],
   manageLibrary: ['PRINCIPAL', 'ADMIN'],
   manageRoles: ['OWNER'],
+  viewAudit: ['OWNER', 'PRINCIPAL'],
   platform: ['SUPER_ADMIN'],
 } satisfies Record<string, Role[]>;
 
@@ -82,6 +83,7 @@ export type Capability = keyof typeof CAN;
  * this gives exactly the same answer as CAN.
  */
 const CAP_PERMISSIONS: Partial<Record<Capability, string[]>> = {
+  viewAudit: ['audit.view'],
   viewStudents: ['student.view'], manageStudents: ['student.manage'], admitStudents: ['student.admit'], setStudentFee: ['student.fee.set'],
   viewStaff: ['staff.view'], manageStaff: ['staff.manage'], manageHr: ['hr.manage'], viewSalary: ['salary.view'], manageSalary: ['salary.manage'],
   viewLeaveBalances: ['leave.view'], applyLeave: ['leave.apply'],
