@@ -1,3 +1,4 @@
+import brandRoutes from './modules/brands/brands.routes';
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -138,6 +139,7 @@ app.use(`${api}/audit`, auditRoutes);
 app.use(`${api}/auth`, authRoutes);
 app.use(`${api}/auth/oauth`, oauthRoutes);
 app.use(`${api}/platform`, platformRoutes);
+app.use(`${api}/brands`, brandRoutes);
 app.use(`${api}/school`, schoolRoutes);
 app.use(`${api}/users`, userRoutes);
 app.use(`${api}/academics`, classRoutes);

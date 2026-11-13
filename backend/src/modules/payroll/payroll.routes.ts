@@ -1,3 +1,5 @@
+import { staffLogin } from '../../utils/scope';
+import { branchOwners } from '../../utils/branches';
 import { Router } from 'express';
 import { z } from 'zod';
 import { Prisma } from '@prisma/client';
@@ -148,7 +150,7 @@ router.post('/runs/:id/submit', can('payroll.manage'), handler(async (req, res) 
   const negative = lines.find((l) => l.net.lt(0));
   if (negative) throw new AppError(`${negative.name}'s deductions are more than their pay. Fix that line first.`, 422);
   await prisma.payrollRun.update({ where: { id: run.id }, data: { status: 'SUBMITTED', submittedAt: new Date(), decidedById: null, decidedAt: null, decisionNote: null } });
-  const owners = await prisma.user.findMany({ where: { role: 'OWNER', isActive: true }, select: { id: true } });
+  const owners = await branchOwners(currentSchoolId());
   const net = lines.reduce((t, l) => t.plus(l.net), D(0));
   await notify(owners.map((o) => o.id), {
     type: 'PAYROLL_APPROVAL', title: 'Payroll needs your approval',
@@ -232,7 +234,7 @@ router.post('/runs/:id/pay', can('payroll.manage'), handler(async (req, res) => 
       if (left.gt(0)) throw new AppError(`${line.name} no longer owes the ${D(line.loanDeduction).toFixed(0)} this payroll recovers. Reopen the payroll and recalculate.`, 409);
     }
   });
-  await notify(lines.map((l) => l.staff.userId).filter(Boolean) as string[], {
+  await notify((await Promise.all(lines.map(l => staffLogin(l.staffId)))).filter((u): u is NonNullable<typeof u> => !!u).map(u => u.id), {
     type: 'PAYSLIP_READY', title: 'Salary paid', body: `Your payslip for ${monthLabel(run.period)} is ready.`, data: { runId: run.id },
   });
   return sendSuccess(res, null, `Paid ${net.toFixed(0)} from ${account.name}`);

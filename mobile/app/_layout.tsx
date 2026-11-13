@@ -24,6 +24,7 @@ if (Platform.OS !== 'web') {
 /** Where a tapped notification should open. */
 function openFromNotification(data: Record<string, any> | undefined) {
   if (!data) return;
+  if (data.schoolId && data.schoolId !== useAuthStore.getState().user?.school?.id) return;
   const area = areaFor(useAuthStore.getState().user?.role);
   if (data.studentId) useChildStore.getState().setChild(String(data.studentId));
   switch (data.type) {
@@ -64,7 +65,7 @@ export default function RootLayout() {
 
   useEffect(() => {
     if (user) registerForPushNotifications();
-  }, [user?.id]);
+  }, [user?.id, user?.school?.id]);
 
   useEffect(() => {
     if (Platform.OS === 'web') return;

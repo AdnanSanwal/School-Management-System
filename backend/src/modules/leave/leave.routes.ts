@@ -9,7 +9,7 @@ import { AppError } from '../../middleware/errorHandler';
 import { sendSuccess } from '../../utils/apiResponse';
 import { handler, parseBody, parseQuery, dateOnly, me } from '../../utils/http';
 import { addDays, schoolToday, toDate, toIso } from '../../utils/dates';
-import { currentAcademicYear, staffForUser } from '../../utils/scope';
+import { currentAcademicYear, staffForUser, staffLogin } from '../../utils/scope';
 import { notify } from '../../utils/notify';
 import { leaveBalances } from '../../utils/hr';
 
@@ -100,15 +100,16 @@ router.post('/:id/decision', can('leave.approve'), handler(async (req, res) => {
   const b = parseBody(z.object({ approve: z.boolean(), note: z.string().max(300).optional() }), req);
   const leave = await prisma.leaveRequest.findFirst({ where: { id: req.params.id }, include });
   if (!leave) throw new AppError('Leave request not found', 404);
-  if (leave.staff.userId === me(req).id) throw new AppError('You cannot decide your own leave', 403);
+  const login = await staffLogin(leave.staff.id);
+  if (login?.id === me(req).id) throw new AppError('You cannot decide your own leave', 403);
   const { count } = await prisma.leaveRequest.updateMany({
     where: { id: leave.id, status: 'PENDING' },
     data: { status: b.approve ? 'APPROVED' : 'REJECTED', decidedById: me(req).id, decidedAt: new Date(), decisionNote: b.note ?? null },
   });
   if (!count) throw new AppError('This request was already decided', 409);
   // Spec: "Leave Approved / Rejected → Teacher".
-  if (leave.staff.userId) {
-    await notify([leave.staff.userId], {
+  if (login) {
+    await notify([login.id], {
       type: 'LEAVE_DECIDED',
       title: `Leave ${b.approve ? 'approved' : 'rejected'}`,
       body: `${toIso(leave.fromDate)}${leave.toDate.getTime() !== leave.fromDate.getTime() ? ` to ${toIso(leave.toDate)}` : ''}${b.note ? ` — ${b.note}` : ''}`,

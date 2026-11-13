@@ -1,3 +1,7 @@
+import { z } from 'zod';
+import { handler, parseBody } from '../../utils/http';
+import { sendSuccess } from '../../utils/apiResponse';
+import { switchBranch } from './auth.service';
 import { Router } from 'express';
 import * as authController from './auth.controller';
 import { authenticate } from '../../middleware/auth';
@@ -16,6 +20,10 @@ router.post('/change-password', authenticate, passwordCheckLimiter, validate(cha
 router.post('/mfa/enable', authenticate, passwordCheckLimiter, validate(enableMfaSchema), authController.enableMFA);
 router.post('/mfa/verify', authenticate, mfaLimiter, validate(mfaCodeSchema), authController.verifyMFA);
 router.post('/mfa/disable', authenticate, passwordCheckLimiter, validate(disableMfaSchema), authController.disableMFA);
+router.post('/switch-branch', authenticate, handler(async (req, res) => {
+  const { schoolId } = parseBody(z.object({ schoolId: z.string().uuid() }).strict(), req);
+  return sendSuccess(res, await switchBranch(req.user!.id, schoolId, req.user!, req.headers.authorization!.split(' ')[1]), 'Branch switched');
+}));
 router.get('/me', authenticate, authController.getMe);
 router.patch('/profile', authenticate, passwordCheckLimiter, validate(profileSchema), authController.updateProfile);
 router.get('/username-check', authenticate, lookupLimiter, authController.usernameCheck);

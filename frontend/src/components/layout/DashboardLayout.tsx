@@ -21,7 +21,7 @@ function useSessionRefresh() {
   const { data } = useQuery({ queryKey: ['session'], queryFn: authAPI.me, enabled: signedIn, staleTime: 60_000, refetchInterval: 5 * 60_000, meta: { quiet: true } });
   useEffect(() => {
     const current = useAuthStore.getState().user;
-    if (!data || !current || data.id !== current.id) return;
+    if (!data || !current || data.id !== current.id || data.school?.id !== current.school?.id) return;
     const next = { ...current, ...data };
     if (JSON.stringify(next) !== JSON.stringify(current)) useAuthStore.setState({ user: next });
   }, [data]);

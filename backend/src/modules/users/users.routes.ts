@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { hashPassword } from '../../utils/password';
 import { z } from 'zod';
 import { Role } from '@prisma/client';
-import prisma, { transaction } from '../../config/database';
+import prisma, { basePrisma, transaction } from '../../config/database';
 import { endAllSessions } from '../../utils/sessions';
 import { checkUsername } from '../../utils/usernames';
 import { authenticate } from '../../middleware/auth';
@@ -78,6 +78,10 @@ router.post('/', handler(async (req, res) => {
   const body = parseBody(createBody, req);
   const result = await transaction(async (tx) => {
     const account = await createAccount(tx, me(req).role, body);
+    if (body.role === 'OWNER') {
+      const branch = await tx.school.findUniqueOrThrow({ where: { id: currentSchoolId() }, select: { brandId: true } });
+      if (branch.brandId) await tx.brandOwner.create({ data: { brandId: branch.brandId, userId: account.user.id } });
+    }
     // Office logins are staff: give them a staff record so leave, attendance and
     // reports include them (e.g. an owner creating the principal).
     let staff = null;
@@ -123,6 +127,10 @@ router.patch('/:id', handler(async (req, res) => {
   const data = { ...body, ...(body.role && body.role !== target.role && body.customRoleId === undefined ? { customRoleId: null } : {}) };
   const before = await prisma.user.findFirst({ where: { id: target.id }, select: { role: true, isActive: true, customRoleId: true } });
   const user = await prisma.user.update({ where: { id: target.id }, data, select: userSelect });
+  if (body.role === 'OWNER') {
+    const branch = await prisma.school.findUniqueOrThrow({ where: { id: currentSchoolId() }, select: { brandId: true } });
+    if (branch.brandId) await basePrisma.brandOwner.upsert({ where: { brandId_userId: { brandId: branch.brandId, userId: user.id } }, create: { brandId: branch.brandId, userId: user.id }, update: {} });
+  }
   // Who changed whose access, and from what (LOG-4).
   if (before && (before.role !== user.role || before.isActive !== user.isActive || before.customRoleId !== (user.customRole?.id ?? null))) {
     await audit(req, { action: 'Login access changed', entity: 'users', entityId: target.id, meta: {

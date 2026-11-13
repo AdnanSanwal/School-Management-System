@@ -3,7 +3,8 @@ import { verifyToken, JwtPayload } from '../utils/jwt';
 import { sendError } from '../utils/apiResponse';
 import { isRevoked } from '../utils/sessions';
 import { tenantStorage, TenantContext } from '../config/tenancy';
-import { customRoleOf, roleOverrides } from '../utils/rolePermissions';
+import { branchIdentity, validateBranchToken } from '../utils/branches';
+import { customRoleList, roleOverrides } from '../utils/rolePermissions';
 import { licenceStatus, LOCKED_MESSAGE } from '../utils/licence';
 
 export interface AuthRequest extends Request {
@@ -39,9 +40,18 @@ export async function authenticate(req: AuthRequest, res: Response, next: NextFu
   }
 
   let ctx: TenantContext;
-  if (user.role === 'SUPER_ADMIN') ctx = { kind: 'system' };
+  if (user.role === 'SUPER_ADMIN') {
+    try { await validateBranchToken(user); } catch { return sendError(res, 'Session ended', 401); }
+    ctx = { kind: 'system' };
+  }
   else if (user.schoolId) {
-    const [roles, custom] = await Promise.all([roleOverrides(user.schoolId), customRoleOf(user.schoolId, user.id)]);
+    let identity;
+    try { identity = await branchIdentity(user.id, user.schoolId); }
+    catch { return sendError(res, 'Branch access is unavailable. Please sign in again.', 403); }
+    if (identity.role !== user.role) return sendError(res, 'Branch permissions changed. Please sign in again.', 401);
+    const roles = await roleOverrides(user.schoolId);
+    const custom = identity.customRoleId ? (await customRoleList(user.schoolId)).find(r => r.id === identity.customRoleId && r.baseRole === user.role) : undefined;
+    if (identity.customRoleId && !custom) return sendError(res, 'Assigned branch role is unavailable', 403);
     ctx = { kind: 'tenant', schoolId: user.schoolId, roles, ...(custom && custom.baseRole === user.role ? { custom: { role: user.role, perms: custom.perms } } : {}) };
   }
   else return sendError(res, 'Token has no school', 401);

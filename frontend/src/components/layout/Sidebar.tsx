@@ -36,9 +36,10 @@ const navGroups: NavGroup[] = [
     title: 'Overview',
     items: [
       { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, cap: 'dashboard' },
+      { label: 'All branches', href: '/brands', icon: Building2, roles: ['OWNER'] },
       { label: 'My children', href: '/family', icon: Home, roles: ['PARENT'] },
       { label: 'My school record', href: '/family', icon: Home, roles: ['STUDENT'] },
-      { label: 'Schools', href: '/platform', icon: Building2, cap: 'platform' },
+      { label: 'Brands & branches', href: '/platform', icon: Building2, cap: 'platform' },
       { label: 'Approvals', href: '/approvals', icon: Inbox, cap: 'approvals' },
       { label: 'Reports', href: '/reports', icon: FileBarChart, cap: 'reports' },
     ],
@@ -191,12 +192,12 @@ export function Sidebar() {
       <div className={cn('flex items-center border-b border-slate-100 h-16 flex-shrink-0 overflow-hidden', collapsed ? 'px-2 justify-center' : 'px-3 gap-2.5')}>
         <div className="w-12 h-12 flex items-center justify-center flex-shrink-0">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={brand.logo} alt={brand.name} className="w-12 h-12 object-contain" />
+          <img src={user?.brand?.logoUrl || brand.logo} alt={user?.brand?.name || brand.name} className="w-12 h-12 object-contain" />
         </div>
         {!collapsed && (
           <div className="min-w-0 flex-1">
             <p title={user?.school?.name ?? brand.name} className="font-bold text-sm text-gray-900 leading-tight truncate">{user?.school?.name ?? brand.name}</p>
-            <p className="text-2xs text-slate-400 font-medium">{brand.name}</p>
+            <p className="text-2xs text-slate-400 font-medium truncate">{user?.brand?.name || brand.name}</p>
           </div>
         )}
       </div>

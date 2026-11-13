@@ -12,7 +12,9 @@ jest.mock('../../config/database', () => {
       update: jest.fn(),
       findMany: jest.fn().mockResolvedValue([]),
     },
-    school: { findUnique: jest.fn() },
+    school: { findUnique: jest.fn(), findMany: jest.fn().mockResolvedValue([]) },
+    branchAccess: { findMany: jest.fn().mockResolvedValue([]) },
+    brandOwner: { findMany: jest.fn().mockResolvedValue([]) },
     rolePermission: { findMany: jest.fn().mockResolvedValue([]) },
     customRole: { findMany: jest.fn().mockResolvedValue([]) },
   };
@@ -51,7 +53,7 @@ describe('POST /api/v1/auth/login', () => {
     mockPrisma.user.findUnique.mockResolvedValue(mockUser);
     mockPrisma.user.findUniqueOrThrow.mockResolvedValue({ ...mockUser, school: { id: 'school-1', name: 'Test School' } });
     mockPrisma.user.update.mockResolvedValue(mockUser);
-    mockPrisma.school.findUnique.mockResolvedValue({ isActive: true });
+    mockPrisma.school.findUnique.mockResolvedValue({ id: 'school-1', name: 'Test School', isActive: true });
   });
 
   it('returns 200 with tokens on valid credentials', async () => {

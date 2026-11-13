@@ -287,6 +287,23 @@ async function seedRiverside(hash: string) {
   return school;
 }
 
+/** Demo topology: two Greenfield branches under one owner, plus a separate Riverside brand. */
+async function seedBrands() {
+  for (const code of ['greenfield', 'riverside']) {
+    const school = await prisma.school.findUnique({ where: { code } });
+    if (!school) continue;
+    const brand = await prisma.brand.upsert({ where: { code }, create: { name: code === 'greenfield' ? 'Greenfield Schools' : 'Riverside Schools', code, maxBranches: 3, maxStudents: 500, licencePlan: 'Multi-branch' }, update: {} });
+    await prisma.school.update({ where: { id: school.id }, data: { brandId: brand.id } });
+    const owners = await prisma.user.findMany({ where: { schoolId: school.id, role: 'OWNER' } });
+    for (const owner of owners) await prisma.brandOwner.upsert({ where: { brandId_userId: { brandId: brand.id, userId: owner.id } }, create: { brandId: brand.id, userId: owner.id }, update: {} });
+    if (code === 'greenfield') {
+      const north = await prisma.school.upsert({ where: { code: 'greenfield-north' }, create: { name: 'Greenfield North Campus', code: 'greenfield-north', brandId: brand.id }, update: {} });
+      await prisma.academicYear.upsert({ where: { schoolId_name: { schoolId: north.id, name: '2026-27' } }, create: { schoolId: north.id, name: '2026-27', startDate: day('2026-04-01'), endDate: day('2027-03-31'), isCurrent: true }, update: {} });
+      await prisma.designation.createMany({ data: DEFAULT_DESIGNATIONS.map(name => ({ schoolId: north.id, name })), skipDuplicates: true });
+    }
+  }
+}
+
 async function main() {
   // Demo logins share a published password (README). Never create them on a production
   // server unless someone explicitly asks for a demo there (SECURITY_FINDINGS SEC-1).
@@ -295,6 +312,7 @@ async function main() {
     process.exit(1);
   }
   if (await prisma.school.findUnique({ where: { code: 'greenfield' } })) {
+    await seedBrands();
     console.log('Demo data already present — run `npx prisma migrate reset` to reseed.');
     return;
   }
@@ -303,6 +321,7 @@ async function main() {
   await seedPlatform(hash);
   const gf = await seedGreenfield(hash);
   await seedRiverside(hash);
+  await seedBrands();
 
   console.log(`
 Greenfield: ${gf.students} students, ${gf.dates} attendance days, fee invoices Aug–Nov 2026.

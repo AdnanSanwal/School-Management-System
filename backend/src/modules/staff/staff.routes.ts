@@ -9,7 +9,7 @@ import { AppError } from '../../middleware/errorHandler';
 import { sendSuccess, sendPaginated } from '../../utils/apiResponse';
 import { handler, parseBody, parseQuery, paginationSchema, paging, dateOnly, me, patchOf } from '../../utils/http';
 import { schoolToday, toDate, toIso } from '../../utils/dates';
-import { currentAcademicYear } from '../../utils/scope';
+import { currentAcademicYear, staffForUser, staffLogin } from '../../utils/scope';
 import { leaveBalances, salariesOn } from '../../utils/hr';
 import { assertKind, deleteFile, MIME, saveFile, signedUrl } from '../../utils/storage';
 import { uploadOne } from '../files/files.routes';
@@ -168,10 +168,11 @@ async function changeStaffStatus(req: AuthRequest, staffId: string, status: Staf
   const before = await prisma.staff.findFirst({ where: { id: staffId }, select: { id: true, name: true, status: true, userId: true, leftOn: true, user: { select: { role: true } } } });
   if (!before) throw new AppError('Staff member not found', 404);
   // The status switches their login on or off, so it needs the right to manage that login (AUTHZ-2).
-  if (before.user && !canManageRole(me(req).role, before.user.role)) {
-    throw new AppError(`You cannot change the status of a ${before.user.role.toLowerCase()} — ask the owner`, 403);
+  const login = await staffLogin(staffId);
+  if (login && !canManageRole(me(req).role, login.role)) {
+    throw new AppError(`You cannot change the status of a ${login.role.toLowerCase()} — ask the owner`, 403);
   }
-  if (before.userId === me(req).id) throw new AppError('You cannot change your own status', 403);
+  if (login?.id === me(req).id) throw new AppError('You cannot change your own status', 403);
   if (before.status === status) throw new AppError(`${before.name} is already ${STAFF_STATUS_LABEL[status].toLowerCase()}`, 409);
   const on = isOnRoll(status);
   const effective = opts.date ? toDate(opts.date) : await schoolToday();
@@ -187,7 +188,7 @@ async function changeStaffStatus(req: AuthRequest, staffId: string, status: Staf
     }
     return row;
   });
-  if (!on && before.userId) await endAllSessions(before.userId); // signed out on every device now
+  if (!on && login) await endAllSessions(login.id); // signed out on every device now
   await audit(req, {
     action: 'Status changed', entity: 'staff', entityId: before.id,
     meta: { name: before.name, from: before.status, to: status, fromLabel: STAFF_STATUS_LABEL[before.status], toLabel: STAFF_STATUS_LABEL[status], effective: toIso(effective), reason: opts.reason ?? null },
@@ -207,7 +208,7 @@ router.patch('/:id', can('staff.manage'), handler(async (req, res) => {
   const bankChange = body.bankName !== undefined || body.bankAccountTitle !== undefined || body.bankAccountNo !== undefined;
   if (bankChange) {
     const target = await prisma.staff.findFirst({ where: { id: req.params.id }, select: { userId: true, name: true, bankName: true, bankAccountNo: true } });
-    if (target?.userId === me(req).id && me(req).role !== 'OWNER') throw new AppError('You cannot change your own bank details — ask the owner', 403);
+    if (me(req).role !== 'OWNER' && (await staffForUser(me(req).id))?.id === req.params.id) throw new AppError('You cannot change your own bank details — ask the owner', 403);
     if (target) await audit(req, { action: 'Bank details changed', entity: 'staff', entityId: req.params.id, meta: { name: target.name, previousBank: target.bankName, previousAccountEnding: target.bankAccountNo?.slice(-4) ?? null, newAccountEnding: body.bankAccountNo?.slice(-4) ?? null } });
   }
   let staff = await prisma.staff.update({
@@ -258,7 +259,7 @@ router.post('/:id/login', can('users.manage'), handler(async (req, res) => {
   const result = await transaction(async (tx) => {
     const staff = await tx.staff.findFirst({ where: { id: req.params.id } });
     if (!staff) throw new AppError('Staff member not found', 404);
-    if (staff.userId) throw new AppError('This staff member already has a login', 409);
+    if (await staffLogin(staff.id)) throw new AppError('This staff member already has a login or branch access assignment', 409);
     const account = await createAccount(tx, me(req).role, { name: staff.name, phone: staff.phone, ...login });
     await tx.staff.update({ where: { id: staff.id }, data: { userId: account.user.id } });
     return account;

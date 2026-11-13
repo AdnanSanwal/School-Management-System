@@ -15,6 +15,8 @@ export interface User {
   mustChangePassword?: boolean;
   role: Role;
   avatar?: string | null;
+  brand?: { id: string; name: string; logoUrl?: string | null } | null;
+  branches?: { id: string; name: string; code: string; isActive: boolean }[];
   school?: { id: string; name: string; code: string; currency: string; logoUrl?: string | null } | null;
   /** What this user may do in their school (the school can tune its staff roles). */
   permissions?: string[];

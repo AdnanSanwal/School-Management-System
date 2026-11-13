@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import prisma from '../../config/database';
+import prisma, { basePrisma } from '../../config/database';
 import { currentSchoolId } from '../../config/tenancy';
 import { authenticate } from '../../middleware/auth';
 import { hasPermission } from '../../middleware/rbac';
@@ -20,6 +20,19 @@ router.get('/', handler(async (req, res) => {
   // Payment history and usage are for the people who run the school.
   const full = user.role === 'OWNER' || hasPermission(user.role, 'school.manage');
   if (!full) return sendSuccess(res, { status });
+  const branch = await basePrisma.school.findUniqueOrThrow({ where: { id: currentSchoolId() }, include: { brand: true } });
+  if (branch.brand) {
+    const brand = branch.brand;
+    if (user.role !== 'OWNER') return sendSuccess(res, { status, brand: { id: brand.id, name: brand.name }, activeStudents: await prisma.student.count({ where: { status: 'ACTIVE' } }) });
+    const [payments, branches] = await Promise.all([
+      basePrisma.brandLicencePayment.findMany({ where: { brandId: brand.id }, orderBy: { createdAt: 'desc' }, take: 24 }),
+      basePrisma.school.findMany({ where: { brandId: brand.id }, select: { id: true, name: true } }),
+    ]);
+    const counts = await basePrisma.student.groupBy({ by: ['schoolId'], where: { schoolId: { in: branches.map(b => b.id) }, status: 'ACTIVE' }, _count: true });
+    return sendSuccess(res, { status, brand: { id: brand.id, name: brand.name }, maxBranches: brand.maxBranches,
+      branchCount: branches.length, activeStudents: counts.find(c => c.schoolId === branch.id)?._count ?? 0,
+      branches: branches.map(b => ({ ...b, activeStudents: counts.find(c => c.schoolId === b.id)?._count ?? 0 })), payments });
+  }
   const [payments, students] = await Promise.all([
     prisma.licencePayment.findMany({ orderBy: [{ paidOn: 'desc' }, { createdAt: 'desc' }], take: 24 }),
     prisma.student.count({ where: { status: 'ACTIVE' } }),

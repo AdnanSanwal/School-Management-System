@@ -17,6 +17,8 @@ interface User {
   mustChangePassword?: boolean;
   role: Role;
   avatar?: string;
+  brand?: { id: string; name: string; logoUrl?: string | null } | null;
+  branches?: { id: string; name: string; code: string; isActive: boolean; brand?: { id: string; name: string } | null }[];
   school?: { id: string; name: string; code: string; logoUrl?: string | null; currency: string } | null;
   /** What this user may do in their school (the school can tune its staff roles). */
   permissions?: string[];

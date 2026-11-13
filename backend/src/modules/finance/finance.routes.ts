@@ -1,3 +1,4 @@
+import { branchOwners } from '../../utils/branches';
 import crypto from 'crypto';
 import { Router } from 'express';
 import { z } from 'zod';
@@ -309,7 +310,7 @@ router.post('/expenses', can('finance.manage'), uploadOne, handler(async (req, r
       include: expenseInclude,
     }));
     if (needsApproval) {
-      const owners = await prisma.user.findMany({ where: { role: 'OWNER', isActive: true }, select: { id: true } });
+      const owners = await branchOwners(currentSchoolId());
       await notify(owners.map((o) => o.id), {
         type: 'EXPENSE_APPROVAL', title: 'Expense needs your approval',
         body: `${category.name}: ${D(b.amount).toFixed(0)} — ${b.description.slice(0, 100)}`, data: { expenseId: expense.id },

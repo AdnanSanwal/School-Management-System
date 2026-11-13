@@ -1,6 +1,7 @@
 import { Server as HttpServer } from 'http';
 import { Server as SocketServer } from 'socket.io';
 import { verifyToken } from '../utils/jwt';
+import { validateBranchToken } from '../utils/branches';
 import { isRevoked } from '../utils/sessions';
 import logger from '../utils/logger';
 
@@ -25,6 +26,7 @@ export function initSocketIO(server: HttpServer) {
     try {
       const user = verifyToken(token);
       if (await isRevoked(token, user)) return next(new Error('Authentication error'));
+      await validateBranchToken(user);
       (socket as any).user = user;
       (socket as any).token = token;
       next();
@@ -36,7 +38,7 @@ export function initSocketIO(server: HttpServer) {
   io.on('connection', (socket) => {
     const user = (socket as any).user;
     logger.debug(`Socket connected: ${user.id}`);
-    socket.join(`user:${user.id}`);
+    socket.join(`school:${user.schoolId}:user:${user.id}`);
     if (user.schoolId) {
       socket.join(schoolRoom(user.schoolId));
       socket.join(schoolRoom(user.schoolId, user.role));
@@ -53,6 +55,7 @@ export function initSocketIO(server: HttpServer) {
       try {
         const payload = verifyToken(s.token);
         if (await isRevoked(s.token, payload)) socket.disconnect(true);
+        else await validateBranchToken(payload);
       } catch { socket.disconnect(true); }
     }
   }, 60_000);

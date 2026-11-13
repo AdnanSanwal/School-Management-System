@@ -176,6 +176,7 @@ d('Licensing (database)', () => {
       await basePrisma.user.deleteMany({ where: { schoolId: made.body.data.school.id } });
       await basePrisma.academicYear.deleteMany({ where: { schoolId: made.body.data.school.id } });
       await basePrisma.school.delete({ where: { id: made.body.data.school.id } });
+      await basePrisma.brand.delete({ where: { id: made.body.data.brand.id } });
     }
   });
 });

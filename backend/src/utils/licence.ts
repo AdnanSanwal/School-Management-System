@@ -52,7 +52,6 @@ export function evaluateLicence(f: Partial<LicenceFields> | null | undefined, to
   return { ...dates, state: 'LOCKED', summary: `The subscription ended on ${nice(paidUntil)} and the system is locked until it is renewed.` };
 }
 
-const FIELDS = { licencePlan: true, licencePaidUntil: true, licenceGraceDays: true, licenceNotifyDays: true, licenceOverride: true, licenceMessage: true, maxStudents: true, timezone: true } as const;
 const TTL_MS = 15_000;
 const cache = new Map<string, { at: number; day: string; status: LicenceStatus }>();
 
@@ -60,13 +59,24 @@ const cache = new Map<string, { at: number; day: string; status: LicenceStatus }
 export async function licenceStatus(schoolId: string): Promise<LicenceStatus> {
   const hit = cache.get(schoolId);
   if (hit && Date.now() - hit.at < TTL_MS) return hit.status;
-  const school = await basePrisma.school.findUnique({ where: { id: schoolId }, select: FIELDS });
-  const status = evaluateLicence(school, dayInTimezone(school?.timezone || 'Asia/Karachi'));
+  const school = await basePrisma.school.findUnique({ where: { id: schoolId }, include: { brand: true } });
+  const source = school?.brand ?? school;
+  const status = evaluateLicence(source, dayInTimezone(source?.timezone || 'Asia/Karachi'));
   cache.set(schoolId, { at: Date.now(), day: '', status });
   return status;
 }
 
-export const forgetLicence = (schoolId: string) => { cache.delete(schoolId); };
+export const forgetLicence = (schoolId: string) => { cache.clear(); };
 
 /** What a locked school is told. */
 export const LOCKED_MESSAGE = 'This school’s subscription has expired. Please contact your provider to renew it.';
+
+/** Serialize admissions/reactivations per branch to enforce capacity under concurrency. */
+export async function assertStudentCapacity(tx: import('../config/database').ScopedTx, schoolId: string) {
+  await tx.$queryRaw`SELECT id FROM schools WHERE id = ${schoolId} FOR UPDATE`;
+  const school = await tx.school.findUniqueOrThrow({ where: { id: schoolId }, include: { brand: true } });
+  const limit = school.brand?.maxStudents ?? (school.brandId ? null : school.maxStudents);
+  if (limit !== null && await tx.student.count({ where: { status: 'ACTIVE' } }) >= limit) {
+    throw new (await import('../middleware/errorHandler')).AppError(`This branch allows ${limit} active students. Ask your provider to raise the brand licence limit.`, 409);
+  }
+}

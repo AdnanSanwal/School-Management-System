@@ -1,5 +1,6 @@
 'use client';
 
+import { BranchSwitcher } from '@/components/brands/BranchSwitcher';
 import { useState, useRef, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
@@ -248,7 +249,7 @@ function GlobalSearch() {
 
   let index = -1;
   return (
-    <div ref={boxRef} className="relative hidden md:block">
+    <div ref={boxRef} className="relative hidden xl:block">
       <SearchInput
         ref={inputRef}
         value={text}
@@ -340,6 +341,7 @@ export function Header({ title }: HeaderProps) {
 
       {/* Right: actions */}
       <div className="flex items-center gap-2">
+        <BranchSwitcher />
         {/* Search */}
         <GlobalSearch />
 

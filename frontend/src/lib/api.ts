@@ -94,6 +94,7 @@ export function apiError(err: any, fallback = 'Something went wrong') {
 export const authAPI = {
   login: (body: { email: string; password: string; mfaCode?: string }) => data(api.post('/auth/login', body)),
   logout: () => api.post('/auth/logout'),
+  switchBranch: (schoolId: string) => data<{ user: any; accessToken: string; refreshToken: string }>(api.post('/auth/switch-branch', { schoolId })),
   me: () => data(api.get('/auth/me')),
   /** Returns fresh tokens (the old ones may require a password change). */
   changePassword: (body: { currentPassword: string; newPassword: string }) => data<{ user: any; accessToken: string; refreshToken: string }>(api.post('/auth/change-password', body)),
@@ -479,7 +480,7 @@ export type ReportView = {
 
 /** The school's own subscription: status for everyone, payments and usage for those who run the school. */
 export const licenceAPI = {
-  get: () => data<{ status: LicenceStatus; activeStudents?: number; payments?: { id: string; amount: string; currency: string; paidOn: string; coversUntil: string; method: string | null; reference: string | null; note: string | null }[] }>(api.get('/licence')),
+  get: () => data<{ status: LicenceStatus; brand?: { id: string; name: string }; maxBranches?: number | null; branchCount?: number; activeStudents?: number; payments?: { id: string; amount: string; currency: string; paidOn: string; coversUntil: string; method: string | null; reference: string | null; note: string | null }[] }>(api.get('/licence')),
 };
 
 export const platformAPI = {
@@ -537,4 +538,18 @@ export const notificationsAPI = {
   broadcast: (body: any) => api.post('/notifications/broadcast', body),
   markRead: (id: string) => api.put(`/notifications/${id}/read`),
   markAllRead: () => api.put('/notifications/read-all'),
+};
+
+export const brandsAPI = {
+  list: () => data<any[]>(api.get('/brands')),
+  create: (body: any) => data(api.post('/brands', body)),
+  update: (id: string, body: any) => data(api.patch(`/brands/${id}`, body)),
+  createBranch: (id: string, body: any) => data(api.post(`/brands/${id}/branches`, body)),
+  licence: (id: string, body: any) => data(api.patch(`/brands/${id}/licence`, body)),
+  payment: (id: string, body: any) => data(api.post(`/brands/${id}/licence/payments`, body)),
+  removePayment: (id: string, paymentId: string) => data(api.delete(`/brands/${id}/licence/payments/${paymentId}`)),
+  summary: (id: string) => data<any>(api.get(`/brands/${id}/summary`)),
+  access: (id: string) => data<any>(api.get(`/brands/${id}/access`)),
+  assign: (id: string, body: any) => data(api.put(`/brands/${id}/access`, body)),
+  removeAccess: (id: string, accessId: string) => data(api.delete(`/brands/${id}/access/${accessId}`)),
 };

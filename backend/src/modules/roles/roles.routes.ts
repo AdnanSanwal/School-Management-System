@@ -128,8 +128,9 @@ router.delete('/custom/:id', handler(async (req, res) => {
   if (!existing) throw new AppError('Role not found', 404);
   const moved = await transaction(async (tx) => {
     const r = await tx.user.updateMany({ where: { customRoleId: existing.id }, data: { customRoleId: null } });
+    const shared = await tx.branchAccess.updateMany({ where: { customRoleId: existing.id }, data: { customRoleId: null } });
     await tx.customRole.delete({ where: { id: existing.id } });
-    return r.count;
+    return r.count + shared.count;
   });
   forgetCustomRoles(currentSchoolId());
   await audit(req, { action: 'Custom role deleted', entity: 'roles', entityId: existing.id, meta: { name: existing.name, baseRole: existing.baseRole, usersMoved: moved } });

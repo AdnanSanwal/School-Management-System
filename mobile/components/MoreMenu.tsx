@@ -5,7 +5,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { API, apiError } from '../lib/api';
 import { unregisterPush } from '../lib/pushNotifications';
-import { useAuthStore } from '../store/authStore';
+import { useChildStore } from '../store/childStore';
+import { useAuthStore, areaFor } from '../store/authStore';
 import { Button, Card, H, Muted, Row } from './ui';
 import { colors } from '../lib/theme';
 import { day } from '../lib/format';
@@ -27,8 +28,24 @@ export function MoreMenu({ extra }: { extra?: React.ReactNode }) {
   const qc = useQueryClient();
   const notices = useQuery({ queryKey: ['notices', 1], queryFn: () => API.notices(1) });
   const events = useQuery({ queryKey: ['events'], queryFn: API.events });
+  const [switching, setSwitching] = useState(false);
   const [pw, setPw] = useState({ open: false, current: '', next: '', saving: false });
 
+  const switchBranch = async (schoolId: string) => {
+    if (switching || schoolId === user?.school?.id) return;
+    setSwitching(true);
+    try {
+      await qc.cancelQueries();
+      await unregisterPush();
+      const result = await API.switchBranch(schoolId);
+      qc.clear();
+      useChildStore.setState({ childId: null });
+      useAuthStore.getState().setAuth(result.user, result.accessToken, result.refreshToken);
+      const area = areaFor(result.user.role);
+      router.replace(area === 'teacher' ? '/(teacher)' : area === 'family' ? '/(family)' : '/(office)');
+    } catch (e) { Alert.alert('Could not switch branch', apiError(e)); }
+    finally { setSwitching(false); }
+  };
   const signOut = async () => {
     await unregisterPush();
     await API.logout();
@@ -52,6 +69,7 @@ export function MoreMenu({ extra }: { extra?: React.ReactNode }) {
 
   return (
     <>
+      {!!user?.branches?.length && <Card><H>{user.brand?.name || 'Your branches'}</H>{user.branches.map(b => <Button key={b.id} title={`${b.id === user.school?.id ? '✓ ' : ''}${b.name}${!b.isActive ? ' (suspended)' : ''}`} variant="secondary" disabled={switching || !b.isActive || b.id === user.school?.id} onPress={() => switchBranch(b.id)} />)}</Card>}
       <Card>
         <H>{user?.name}</H>
         <Muted>{user?.email}</Muted>

@@ -15,7 +15,7 @@ const router = Router();
 router.use(authenticate);
 
 router.get('/', can('school.view'), handler(async (_req, res) => {
-  const school = await prisma.school.findUniqueOrThrow({ where: { id: currentSchoolId() } });
+  const school = await prisma.school.findUniqueOrThrow({ where: { id: currentSchoolId() }, include: { brand: { select: { id: true, name: true, logoUrl: true } } } });
   const currentYear = await prisma.academicYear.findFirst({ where: { isCurrent: true } });
   return sendSuccess(res, { ...school, currentYear });
 }));

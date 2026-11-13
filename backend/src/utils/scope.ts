@@ -1,5 +1,6 @@
 import type { Prisma } from '@prisma/client';
 import prisma from '../config/database';
+import { currentSchoolId } from '../config/tenancy';
 import { AppError } from '../middleware/errorHandler';
 import type { JwtPayload } from './jwt';
 
@@ -25,7 +26,18 @@ export async function currentAcademicYear() {
 }
 
 export async function staffForUser(userId: string) {
-  return prisma.staff.findUnique({ where: { userId } });
+  const own = await prisma.staff.findUnique({ where: { userId } });
+  if (own) return own;
+  const access = await prisma.branchAccess.findFirst({ where: { userId, schoolId: currentSchoolId() } });
+  return access?.staffId ? prisma.staff.findFirst({ where: { id: access.staffId } }) : null;
+}
+
+/** Login attached to a branch-local HR record (home login or shared branch assignment). */
+export async function staffLogin(staffId: string) {
+  const staff = await prisma.staff.findFirst({ where: { id: staffId }, select: { user: { select: { id: true, role: true } } } });
+  if (staff?.user) return staff.user;
+  const access = await prisma.branchAccess.findFirst({ where: { staffId }, select: { userId: true, role: true } });
+  return access ? { id: access.userId, role: access.role } : null;
 }
 
 /** Sections a teacher is responsible for in the current academic year. */

@@ -12,6 +12,8 @@ import { normalizeUsername, usernameProblem, isUsernameTaken } from '../../utils
 import { customRoleList, customRoleOf, permissionsFor, roleOverrides } from '../../utils/rolePermissions';
 import { creatableRoles } from '../../utils/accounts';
 import { licenceStatus } from '../../utils/licence';
+import { availableBranches, branchIdentity } from '../../utils/branches';
+import { effectivePermissions } from '../../middleware/rbac';
 import { encrypt, decrypt } from '../../utils/encryption';
 import { getRedis } from '../../config/redis';
 import { assertStrongPassword } from '../../utils/passwordPolicy';
@@ -30,7 +32,7 @@ async function withPermissions<T extends { id: string; role: string; school: { i
   const creatable = creatableRoles(profile?.role ?? '', schoolId ? await roleOverrides(schoolId) : undefined);
   const custom = schoolId && profile?.id ? await customRoleOf(schoolId, profile.id) : undefined;
   return {
-    ...profile, permissions: await permissionsFor(profile?.role ?? '', schoolId, profile?.id),
+    ...profile, branches: profile?.id ? await availableBranches(profile.id) : [], permissions: await permissionsFor(profile?.role ?? '', schoolId, profile?.id),
     creatableRoles: creatable,
     // The school-defined role this user holds, and the ones they may give out (built on a role they can create).
     customRole: custom && custom.baseRole === profile.role ? { id: custom.id, name: custom.name } : null,
@@ -87,7 +89,13 @@ export async function login(identifier: string, password: string, mfaCode?: stri
       .catch(() => { /* keep the old hash; try again next login */ });
   }
 
-  await assertCanSignIn(user);
+  let loginSchoolId = user.schoolId;
+  if (user.role === 'OWNER') {
+    const branches = await availableBranches(user.id);
+    loginSchoolId = branches.find(b => b.id === user.schoolId && b.isActive)?.id ?? branches.find(b => b.isActive)?.id ?? null;
+    if (!loginSchoolId) throw new AppError('No active branches are available', 403);
+    await branchIdentity(user.id, loginSchoolId);
+  } else await assertCanSignIn(user);
 
   if (user.mfaEnabled) {
     if (!mfaCode) throw new AppError('MFA code required', 403);
@@ -99,9 +107,9 @@ export async function login(identifier: string, password: string, mfaCode?: stri
 
   await basePrisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
   await authEvent(user.schoolId, user.id, 'Signed in', {}, ip);
-  const tokens = await issueTokens(user);
+  const tokens = await issueTokens({ ...user, schoolId: loginSchoolId });
   const profile = await basePrisma.user.findUniqueOrThrow({ where: { id: user.id }, select: publicUser });
-  return { user: await withPermissions(profile), ...tokens };
+  return { user: await getMe(profile.id, loginSchoolId), ...tokens };
 }
 
 export async function refreshAccessToken(token: string) {
@@ -117,9 +125,9 @@ export async function refreshAccessToken(token: string) {
   // Re-read the user so role changes / deactivation take effect on refresh.
   const user = await basePrisma.user.findUnique({ where: { id: payload.id } });
   if (!user) throw new AppError('Invalid refresh token', 401);
-  await assertCanSignIn(user);
-
-  const accessToken = signToken({ id: user.id, role: user.role, email: user.email, schoolId: user.schoolId, sid: payload.sid, pwc: user.mustChangePassword });
+  if (!user.isActive) throw new AppError('Account is disabled', 403);
+  const active = payload.schoolId && user.role !== 'SUPER_ADMIN' ? await branchIdentity(user.id, payload.schoolId) : null;
+  const accessToken = signToken({ id: user.id, role: active?.role ?? user.role, email: user.email, schoolId: active?.school.id ?? user.schoolId, sid: payload.sid, pwc: user.mustChangePassword });
   return { accessToken };
 }
 
@@ -171,7 +179,7 @@ export async function resetPassword(token: string, newPassword: string) {
 }
 
 /** Returns fresh tokens: the old ones may carry the "must change password" mark. */
-export async function changePassword(userId: string, currentPassword: string, newPassword: string, keepSid?: string) {
+export async function changePassword(userId: string, currentPassword: string, newPassword: string, keepSid?: string, schoolId?: string | null) {
   const user = await basePrisma.user.findUniqueOrThrow({ where: { id: userId } });
   const valid = await verifyPassword(currentPassword, user.password);
   if (!valid) throw new AppError('Current password is incorrect', 400);
@@ -181,13 +189,34 @@ export async function changePassword(userId: string, currentPassword: string, ne
   const hash = await hashPassword(newPassword);
   const updated = await basePrisma.user.update({ where: { id: userId }, data: { password: hash, mustChangePassword: false } });
   await endAllSessions(userId); // every device, this one included, continues on the new tokens below
-  const tokens = await issueTokens(updated);
-  const profile = await basePrisma.user.findUniqueOrThrow({ where: { id: userId }, select: publicUser });
-  return { user: await withPermissions(profile), ...tokens };
+  const active = schoolId && updated.role !== 'SUPER_ADMIN' ? await branchIdentity(userId, schoolId) : null;
+  const tokens = await issueTokens({ ...updated, schoolId: active?.school.id ?? updated.schoolId, role: active?.role ?? updated.role });
+  return { user: await getMe(userId, active?.school.id ?? updated.schoolId), ...tokens };
 }
 
-export async function getMe(userId: string) {
-  return withPermissions(await basePrisma.user.findUniqueOrThrow({ where: { id: userId }, select: publicUser }));
+export async function getMe(userId: string, schoolId?: string | null) {
+  const profile = await basePrisma.user.findUniqueOrThrow({ where: { id: userId }, select: publicUser });
+  if (!schoolId || profile.role === 'SUPER_ADMIN') return withPermissions(profile);
+  const active = await branchIdentity(userId, schoolId);
+  const school = active.school;
+  const adjusted = { ...profile, role: active.role, school: {
+    id: school.id, name: school.name, code: school.code, currency: school.currency,
+    logoUrl: school.brand?.logoUrl ?? school.logoUrl,
+  } };
+  const result = await withPermissions(adjusted);
+  const custom = active.customRoleId ? (await customRoleList(schoolId)).find(r => r.id === active.customRoleId && r.baseRole === active.role) : undefined;
+  return { ...result, brand: school.brand ? { id: school.brand.id, name: school.brand.name, logoUrl: school.brand.logoUrl } : null,
+    permissions: custom ? [...custom.perms] : effectivePermissions(active.role, await roleOverrides(schoolId)),
+    customRole: custom ? { id: custom.id, name: custom.name } : null };
+}
+
+export async function switchBranch(userId: string, schoolId: string, old: JwtPayload, token: string) {
+  const active = await branchIdentity(userId, schoolId);
+  const profile = await getMe(userId, schoolId);
+  const tokens = await issueTokens({ ...active.user, role: active.role, schoolId });
+  await endSession(userId, old.sid, token, old.exp);
+  await authEvent(schoolId, userId, 'Branch switched', { fromBranchId: old.schoolId, toBranchId: schoolId });
+  return { user: profile, ...tokens };
 }
 
 export async function updateProfile(userId: string, body: { name: string; phone?: string | null; email?: string | null; username?: string | null; currentPassword?: string }) {

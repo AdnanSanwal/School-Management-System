@@ -45,7 +45,7 @@ export async function resetPassword(req: Request, res: Response, next: NextFunct
 
 export async function changePassword(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const result = await authService.changePassword(req.user!.id, req.body.currentPassword, req.body.newPassword, req.user!.sid);
+    const result = await authService.changePassword(req.user!.id, req.body.currentPassword, req.body.newPassword, req.user!.sid, req.user!.schoolId);
     return sendSuccess(res, result, 'Password changed');
   } catch (err) { next(err); }
 }
@@ -73,14 +73,14 @@ export async function disableMFA(req: AuthRequest, res: Response, next: NextFunc
 
 export async function getMe(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    return sendSuccess(res, await authService.getMe(req.user!.id));
+    return sendSuccess(res, await authService.getMe(req.user!.id, req.user!.schoolId));
   } catch (err) { next(err); }
 }
 
 export async function updateProfile(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const user = await authService.updateProfile(req.user!.id, req.body);
-    return sendSuccess(res, user, 'Profile saved');
+    return sendSuccess(res, await authService.getMe(req.user!.id, req.user!.schoolId), 'Profile saved');
   } catch (err) { next(err); }
 }
 

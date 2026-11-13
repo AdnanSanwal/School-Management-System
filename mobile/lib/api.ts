@@ -74,6 +74,7 @@ export function apiError(err: any, fallback = 'Something went wrong') {
 const data = <T = any>(p: Promise<{ data: { data: T } }>) => p.then((r) => r.data.data);
 
 export const API = {
+  switchBranch: (schoolId: string) => data(api.post('/auth/switch-branch', { schoolId })),
   login: (email: string, password: string) => data(api.post('/auth/login', { email, password })),
   logout: () => api.post('/auth/logout').catch(() => {}),
   /** Returns fresh tokens: changing the password signs out every other session. */

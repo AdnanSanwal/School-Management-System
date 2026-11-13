@@ -1,4 +1,4 @@
-import { licenceStatus } from '../../utils/licence';
+import { licenceStatus, assertStudentCapacity } from '../../utils/licence';
 import { Router } from 'express';
 import { z } from 'zod';
 import { Prisma } from '@prisma/client';
@@ -193,6 +193,7 @@ router.post('/', can('student.admit'), handler(async (req, res) => {
   const schoolId = currentSchoolId();
   const today = await schoolToday();
   const result = await transaction(async (tx) => {
+    await assertStudentCapacity(tx, schoolId);
     const admissionNo = body.admissionNo;
     if (await tx.student.findFirst({ where: { admissionNo }, select: { id: true } })) {
       throw new AppError(`Admission number ${admissionNo} is already used by another student`, 409);
@@ -276,6 +277,7 @@ router.post('/:id/status', can('student.manage'), handler(async (req, res) => {
   const effective = body.date ? toDate(body.date) : await schoolToday();
   // Only the status changes: fees, attendance, marks, documents and history all stay.
   const student = await transaction(async (tx) => {
+    if (!leaving) await assertStudentCapacity(tx, currentSchoolId());
     const s = await tx.student.update({
       where: { id: before.id },
       data: { status: body.status, leftOn: leaving ? effective : null, leftReason: leaving ? body.reason ?? null : null },

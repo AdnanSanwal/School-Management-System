@@ -1,6 +1,6 @@
 // School ERP — multi-school (SaaS) schema.
 //
-// Tenancy rule: every model except `School` carries `schoolId`. The scoped
+// Branch data carries `schoolId`; Brand/BrandOwner and brand licence payments are platform data. The scoped
 // Prisma client in src/config/database.ts injects/filters `schoolId`
 // automatically for top-level queries, so always write `schoolId` as a scalar
 // (never `school: { connect }`) and never rely on nested writes to set it.
@@ -16,7 +16,78 @@ datasource db {
 
 // ─── Tenancy ─────────────────────────────────────────────────────────────────
 
+// Brand is the customer/licence boundary; School is an operational branch.
+model Brand {
+  id String @id @default(uuid())
+  name String
+  code String @unique
+  logoUrl String? @db.VarChar(1024)
+  isActive Boolean @default(true)
+  timezone String @default("Asia/Karachi")
+  currency String @default("PKR")
+  licencePlan String? @db.VarChar(60)
+  licencePaidUntil DateTime? @db.Date
+  licenceGraceDays Int @default(7)
+  licenceNotifyDays Int @default(10)
+  licenceOverride Boolean @default(false)
+  licenceMessage String? @db.VarChar(300)
+  maxBranches Int?
+  maxStudents Int? // active students per branch, never a shared pool
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  branches School[]
+  owners BrandOwner[]
+  payments BrandLicencePayment[]
+  @@map("brands")
+}
+
+model BrandOwner {
+  brandId String
+  userId String
+  brand Brand @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@id([brandId, userId])
+  @@index([userId])
+  @@map("brand_owners")
+}
+
+model BranchAccess {
+  id String @id @default(uuid())
+  schoolId String
+  userId String
+  role Role
+  customRoleId String?
+  staffId String? // optional branch-local HR profile for a shared staff login
+  createdAt DateTime @default(now())
+  school School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([schoolId, userId])
+  @@index([userId])
+  @@map("branch_access")
+}
+
+model BrandLicencePayment {
+  id String @id @default(uuid())
+  brandId String
+  amount Decimal @db.Decimal(14, 2)
+  currency String @default("PKR")
+  paidOn DateTime @db.Date
+  coversUntil DateTime @db.Date
+  paidUntilBefore DateTime? @db.Date
+  method String?
+  reference String?
+  note String? @db.VarChar(300)
+  recordedById String
+  createdAt DateTime @default(now())
+  brand Brand @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  @@index([brandId, createdAt])
+  @@map("brand_licence_payments")
+}
+
 model School {
+  brandId String? // nullable only for legacy integrations; new branches always have a brand
+  brand Brand? @relation(fields: [brandId], references: [id])
+  branchAccess BranchAccess[]
   id                     String           @id @default(uuid())
   name                   String
   code                   String           @unique // short slug, e.g. "greenfield"
@@ -121,6 +192,8 @@ model User {
   createdAt          DateTime       @default(now())
   updatedAt          DateTime       @updatedAt
 
+  ownedBrands       BrandOwner[]
+  branchAccess      BranchAccess[]
   school            School?            @relation(fields: [schoolId], references: [id])
   staff             Staff?
   guardian          Guardian?

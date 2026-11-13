@@ -1,3 +1,4 @@
+import { assertStrongPassword } from '../../utils/passwordPolicy';
 import { evaluateLicence, forgetLicence } from '../../utils/licence';
 import { dayInTimezone, toDate, toIso } from '../../utils/dates';
 import { Router, Response, NextFunction } from 'express';
@@ -17,6 +18,18 @@ import { endSchoolSessions } from '../../utils/sessions';
 
 const router = Router();
 router.use(authenticate, can('platform.manage'));
+// Brand-linked branches must never acquire an independent subscription through legacy APIs.
+router.use('/schools/:id/licence', async (req, res, next) => {
+  try {
+    const school = await basePrisma.school.findUnique({ where: { id: req.params.id }, select: { brandId: true } });
+    if (school?.brandId && req.method === 'GET') {
+      const brand = await basePrisma.brand.findUniqueOrThrow({ where: { id: school.brandId } });
+      return sendSuccess(res, { status: evaluateLicence(brand, dayInTimezone(brand.timezone)), brand, payments: [] });
+    }
+    if (school?.brandId) return res.status(409).json({ success: false, message: 'Licensing belongs to the brand. Use the brand subscription screen.', brandId: school.brandId });
+    next();
+  } catch (error) { next(error); }
+});
 
 const createSchoolSchema = z.object({
   body: z.object({
@@ -64,11 +77,13 @@ router.get('/schools', async (_req: AuthRequest, res: Response, next: NextFuncti
 router.post('/schools', validate(createSchoolSchema), async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { academicYear, owner, licence, ...school } = req.body as z.infer<typeof createSchoolSchema>['body'];
+    assertStrongPassword(owner.password, owner);
     const password = await hashPassword(owner.password);
 
     const created = await basePrisma.$transaction(async (tx) => {
+      const brand = await tx.brand.create({ data: { name: school.name, code: school.code, licencePlan: licence?.plan || null, licencePaidUntil: licence?.paidUntil ? toDate(licence.paidUntil) : null, maxStudents: licence?.maxStudents ?? null } });
       const s = await tx.school.create({
-        data: { ...school, licencePlan: licence?.plan || null, licencePaidUntil: licence?.paidUntil ? toDate(licence.paidUntil) : null, maxStudents: licence?.maxStudents ?? null },
+        data: { ...school, brandId: brand.id, licencePlan: licence?.plan || null, licencePaidUntil: licence?.paidUntil ? toDate(licence.paidUntil) : null, maxStudents: licence?.maxStudents ?? null },
       });
       await tx.academicYear.create({ data: { ...academicYear, schoolId: s.id, isCurrent: true } });
       // The standard job titles for the staff forms (the school can change the list).
@@ -77,7 +92,8 @@ router.post('/schools', validate(createSchoolSchema), async (req: AuthRequest, r
         data: { schoolId: s.id, role: 'OWNER', name: owner.name, email: owner.email.toLowerCase(), phone: owner.phone, password, mustChangePassword: true },
         select: { id: true, name: true, email: true, role: true },
       });
-      return { school: s, owner: o };
+      await tx.brandOwner.create({ data: { brandId: brand.id, userId: o.id } });
+      return { school: s, owner: o, brand };
     });
     return sendSuccess(res, created, 'School created', 201);
   } catch (err) { next(err); }

@@ -74,8 +74,9 @@ export default function LicencePage() {
                 <div><dt className="text-xs text-gray-500">Plan</dt><dd className="font-medium">{s.plan ?? 'Standard'}</dd></div>
                 <div><dt className="text-xs text-gray-500">Paid until</dt><dd className="font-medium">{s.paidUntil ? formatDate(s.paidUntil) : 'No end date'}</dd></div>
                 {s.paidUntil && s.lockDate && <div><dt className="text-xs text-gray-500">{locked ? 'Locked since' : 'Locks on'}</dt><dd className="font-medium">{formatDate(s.lockDate)}<span className="block text-xs font-normal text-gray-500">{s.graceDays} grace day{s.graceDays === 1 ? '' : 's'} after the end date</span></dd></div>}
-                {data.activeStudents !== undefined && <div><dt className="text-xs text-gray-500">Active students</dt><dd className="font-medium">{data.activeStudents}{s.maxStudents ? ` of ${s.maxStudents} allowed` : ''}</dd></div>}
+                {data.activeStudents !== undefined && <div><dt className="text-xs text-gray-500">Active students in this branch</dt><dd className="font-medium">{data.activeStudents}{s.maxStudents ? ` of ${s.maxStudents} allowed` : ''}</dd></div>}
               </dl>
+              {data.brand && <p className="text-sm text-gray-600">Brand licence: {data.brand.name} · Branches: {data.branchCount ?? '—'} / {data.maxBranches ?? 'Unlimited'}. Expiry and renewal apply to all branches.</p>}
               {data.payments && (
                 <div className="border-t border-slate-100 pt-4">
                   <h2 className="section-title mb-2">Payments received</h2>

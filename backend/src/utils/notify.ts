@@ -49,7 +49,7 @@ export async function notifyEach(items: ({ userId: string } & Message)[]): Promi
   emitLive(items);
   if (pushEnabled()) {
     // Not awaited: delivery happens after the response is sent.
-    deliverPush(items).catch((err) => logger.warn('Push delivery failed', { message: (err as Error).message }));
+    deliverPush(items, schoolId).catch((err) => logger.warn('Push delivery failed', { message: (err as Error).message }));
   }
   return new Set(items.map((i) => i.userId)).size;
 }
@@ -60,19 +60,19 @@ function emitLive(items: ({ userId: string } & Message)[]) {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const { getIO } = require('../config/socket');
     const io = getIO();
-    for (const i of items) io.to(`user:${i.userId}`).emit('notification', { type: i.type, title: i.title, body: i.body, data: i.data });
+    for (const i of items) io.to(`school:${currentSchoolId()}:user:${i.userId}`).emit('notification', { type: i.type, title: i.title, body: i.body, data: i.data });
   } catch {
     /* socket server not running */
   }
 }
 
-async function deliverPush(items: ({ userId: string } & Message)[]) {
+async function deliverPush(items: ({ userId: string } & Message)[], schoolId: string) {
   const userIds = [...new Set(items.map((i) => i.userId))];
   // Unscoped on purpose: runs after the request's tenant context may be gone; filtered by user ids.
   const [devices, subs] = await Promise.all([
-    basePrisma.deviceToken.findMany({ where: { userId: { in: userIds } }, select: { token: true, userId: true } }),
+    basePrisma.deviceToken.findMany({ where: { schoolId, userId: { in: userIds } }, select: { token: true, userId: true } }),
     process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY
-      ? basePrisma.pushSubscription.findMany({ where: { userId: { in: userIds } } })
+      ? basePrisma.pushSubscription.findMany({ where: { schoolId, userId: { in: userIds } } })
       : Promise.resolve([]),
   ]);
 
@@ -81,7 +81,7 @@ async function deliverPush(items: ({ userId: string } & Message)[]) {
   // ─── Expo (mobile) ───
   const expoMessages = devices.map((d) => {
     const m = byUser.get(d.userId)!;
-    return { to: d.token, title: m.title, body: m.body, data: { type: m.type, ...(m.data ?? {}) }, sound: 'default', channelId: 'default' };
+    return { to: d.token, title: m.title, body: m.body, data: { type: m.type, ...(m.data ?? {}), schoolId }, sound: 'default', channelId: 'default' };
   });
   for (let i = 0; i < expoMessages.length; i += 100) {
     const chunk = expoMessages.slice(i, i + 100);
