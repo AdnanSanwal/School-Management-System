@@ -1,3 +1,4 @@
+import { temporaryPassword } from '../../utils/accounts';
 ﻿import { Router } from 'express';
 import { z } from 'zod';
 import { basePrisma } from '../../config/database';
@@ -114,13 +115,39 @@ router.post('/:id/branches', can('platform.manage'), handler(async (req, res) =>
   return sendSuccess(res, branch, 'Branch created', 201);
 }));
 router.post('/:id/owners', can('platform.manage'), handler(async (req, res) => {
-  const { userId } = parseBody(z.object({ userId: z.string().uuid() }).strict(), req);
+  const b = parseBody(z.union([
+    z.object({ userId: z.string().uuid() }).strict(),
+    z.object({ name: z.string().trim().min(2).max(100), email: z.string().email(), phone: z.string().max(32).optional(), schoolId: z.string().uuid(), password: z.string().min(8).max(72).optional() }).strict(),
+  ]), req);
   const brand = await authorizedBrand(me(req).id, me(req).role, req.params.id);
-  const user = await basePrisma.user.findUnique({ where: { id: userId }, include: { school: true } });
-  if (!user || user.role !== 'OWNER' || user.school?.brandId !== brand.id) throw new AppError('Choose an owner login belonging to this brand', 422);
-  await basePrisma.brandOwner.upsert({ where: { brandId_userId: { brandId: brand.id, userId } }, create: { brandId: brand.id, userId }, update: {} });
-  await audit(req, { action: 'Brand owner assigned', entity: 'brands', entityId: brand.id, meta: { userId } });
-  return sendSuccess(res, null, 'Owner assigned');
+  if ('userId' in b) {
+    const user = await basePrisma.user.findUnique({ where: { id: b.userId }, include: { school: true } });
+    if (!user || user.role !== 'OWNER' || user.school?.brandId !== brand.id) throw new AppError('Choose an owner login belonging to this brand', 422);
+    await basePrisma.brandOwner.upsert({ where: { brandId_userId: { brandId: brand.id, userId: user.id } }, create: { brandId: brand.id, userId: user.id }, update: {} });
+    await audit(req, { action: 'Brand owner assigned', entity: 'brands', entityId: brand.id, meta: { userId: user.id } });
+    return sendSuccess(res, null, 'Owner assigned');
+  }
+  const branch = await basePrisma.school.findFirst({ where: { id: b.schoolId, brandId: brand.id }, select: { id: true } });
+  if (!branch) throw new AppError('Choose a home branch belonging to this brand', 422);
+  const plain = b.password ?? temporaryPassword();
+  assertStrongPassword(plain, b);
+  const password = await hashPassword(plain);
+  const owner = await basePrisma.$transaction(async tx => {
+    const user = await tx.user.create({ data: { name: b.name, email: b.email.trim().toLowerCase(), phone: b.phone, schoolId: branch.id, role: 'OWNER', password, mustChangePassword: true }, select: { id: true, name: true, email: true, role: true, mustChangePassword: true } });
+    await tx.brandOwner.create({ data: { brandId: brand.id, userId: user.id } });
+    return user;
+  });
+  await audit(req, { action: 'Brand owner created', entity: 'brands', entityId: brand.id, meta: { userId: owner.id, schoolId: branch.id } });
+  return sendSuccess(res, { owner, temporaryPassword: plain }, 'Owner created — share the temporary password securely', 201);
+}));
+router.post('/:id/owners/:userId/reset-password', can('platform.manage'), handler(async (req, res) => {
+  const link = await basePrisma.brandOwner.findUnique({ where: { brandId_userId: { brandId: req.params.id, userId: req.params.userId } }, include: { user: true } });
+  if (!link || link.user.role !== 'OWNER') throw new AppError('Owner not found in this brand', 404);
+  const plain = temporaryPassword();
+  await basePrisma.user.update({ where: { id: link.userId }, data: { password: await hashPassword(plain), mustChangePassword: true, resetToken: null, resetTokenExpires: null } });
+  await endAllSessions(link.userId);
+  await audit(req, { action: 'Brand owner password reset by platform', entity: 'brands', entityId: link.brandId, meta: { userId: link.userId } });
+  return sendSuccess(res, { temporaryPassword: plain }, 'Password reset — all owner sessions ended; MFA remains enabled if configured');
 }));
 router.get('/:id/access', handler(async (req, res) => {
   await authorizedBrand(me(req).id, me(req).role, req.params.id);

@@ -541,6 +541,8 @@ export const notificationsAPI = {
 };
 
 export const brandsAPI = {
+  createOwner: (id: string, body: { name: string; email: string; phone?: string; schoolId: string }) => data<{ owner: any; temporaryPassword: string }>(api.post(`/brands/${id}/owners`, body)),
+  resetOwnerPassword: (id: string, userId: string) => data<{ temporaryPassword: string }>(api.post(`/brands/${id}/owners/${userId}/reset-password`)),
   list: () => data<any[]>(api.get('/brands')),
   create: (body: any) => data(api.post('/brands', body)),
   update: (id: string, body: any) => data(api.patch(`/brands/${id}`, body)),

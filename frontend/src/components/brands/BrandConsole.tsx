@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 import { apiError, brandsAPI, platformAPI } from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
 import { Field, Modal, Spinner } from '@/components/ui/kit';
+import { BrandOwners } from './BrandOwners';
 import { formatMoney, formatDate } from '@/lib/utils';
 
 export function BrandConsole() {
@@ -31,14 +32,14 @@ export function BrandConsole() {
           <div className="min-w-0"><h3 className="font-bold">{brand.name}</h3><p className="text-sm text-gray-500">{brand.licence.summary}</p><p className="text-sm mt-1">Branches: {brand.branches.length} / {brand.maxBranches ?? 'Unlimited'} · Students per branch: {brand.maxStudents ?? 'Unlimited'}</p><p className="text-xs text-gray-500 mt-1">Owners: {brand.owners.map((o: any) => o.name).join(', ')}</p></div>
           <div className="flex flex-wrap items-center gap-2"><button className="btn btn-secondary" onClick={() => setDialog({ kind: 'branding', brand })}>Brand settings</button>
           <button className="btn btn-secondary" onClick={() => setDialog({ kind: 'access', brand })}>Staff branch access</button>
-          {platform && <><button className="btn btn-secondary" disabled={toggleBrand.isPending} onClick={() => toggleBrand.mutate({ id: brand.id, isActive: !brand.isActive })}>{brand.isActive ? 'Suspend brand' : 'Activate brand'}</button><button className="btn btn-secondary" onClick={() => setDialog({ kind: 'licence', brand })}>Licence</button><button className="btn btn-secondary" onClick={() => setDialog({ kind: 'payment', brand })}>Record renewal</button><button className="btn btn-primary" disabled={brand.maxBranches !== null && brand.branches.length >= brand.maxBranches} onClick={() => setDialog({ kind: 'branch', brand })}>Add branch</button></>}
+          {platform && <><button className="btn btn-secondary" onClick={() => setDialog({ kind: 'owners', brand })}>Manage owners</button><button className="btn btn-secondary" disabled={toggleBrand.isPending} onClick={() => toggleBrand.mutate({ id: brand.id, isActive: !brand.isActive })}>{brand.isActive ? 'Suspend brand' : 'Activate brand'}</button><button className="btn btn-secondary" onClick={() => setDialog({ kind: 'licence', brand })}>Licence</button><button className="btn btn-secondary" onClick={() => setDialog({ kind: 'payment', brand })}>Record renewal</button><button className="btn btn-primary" disabled={brand.maxBranches !== null && brand.branches.length >= brand.maxBranches} onClick={() => setDialog({ kind: 'branch', brand })}>Add branch</button></>}
           </div>
         </div>
         <div className="card overflow-x-auto"><table className="table"><thead><tr><th>Branch</th><th>Code</th><th>Active students</th><th>Status</th>{platform && <th>Actions</th>}</tr></thead><tbody>{brand.branches.map((b: any) => <tr key={b.id}><td>{b.name}</td><td>{b.code}</td><td>{b.activeStudents} / {brand.maxStudents ?? 'Unlimited'}</td><td>{b.isActive ? 'Active' : 'Suspended'}</td>{platform && <td><button className="btn btn-secondary" disabled={change.isPending} onClick={() => change.mutate({ id: b.id, active: !b.isActive })}>{b.isActive ? 'Suspend' : 'Activate'}</button></td>}</tr>)}</tbody></table></div>
         {!platform && <div className="card overflow-x-auto"><h3 className="font-bold mb-2">Consolidated summary</h3><p className="text-sm text-gray-500 mb-3">Read only · financial totals cover all recorded dates in {brand.currency}. Choose a branch in the header to work on records.</p>{summary.isLoading ? <Spinner /> : summary.error ? <p>{apiError(summary.error)}</p> : <table className="table"><thead><tr><th>Branch</th><th>Students</th><th>Staff</th><th>Fee collections</th><th>Other income</th><th>Approved expenses</th></tr></thead><tbody>{summary.data?.branches.map((b: any) => <tr key={b.id}><td>{b.name}</td><td>{b.activeStudents}</td><td>{b.activeStaff}</td><td>{formatMoney(b.feeCollections)}</td><td>{formatMoney(b.otherIncome)}</td><td>{formatMoney(b.expenses)}</td></tr>)}</tbody></table>}</div>}
       </>}
     </>}
-    {dialog && <BrandDialog kind={dialog.kind} brand={dialog.brand} onClose={() => setDialog(null)} />}
+    {dialog && (dialog.kind === 'owners' ? <BrandOwners brand={dialog.brand} onClose={() => setDialog(null)} /> : <BrandDialog kind={dialog.kind} brand={dialog.brand} onClose={() => setDialog(null)} />)}
   </div>;
 }
 

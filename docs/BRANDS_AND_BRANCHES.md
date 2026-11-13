@@ -50,3 +50,7 @@ On Windows, stop running backends first if Prisma generation reports a locked en
 - Production Next.js Webpack build passed. Default Turbopack build hit a local worker-process failure; no release was deployed.
 - In-app browser: owner login, switching to North Campus with no previous-branch dashboard data, consolidated brand overview, platform brand/branch forms and saved licence limits verified.
 - Local Redis was unavailable, so development tests/preview used the existing in-memory fallback. Shared Redis behavior across production workers, native mobile device builds/push delivery and production deployment have not been verified.
+
+### Additional owner management
+
+Superadmin uses Manage owners on an existing brand to create more owner logins or reset an assigned owner’s password. Both operations are platform-only and audited without password values. Owner creation validates the home branch against the target brand; resets require an explicit brand-owner link and preserve MFA. The current temporary password is displayed in the modal and discarded when closed. Backend regression coverage includes brand-scoped authorization, duplicate email rejection, forced password changes, refresh/access-session revocation and MFA preservation. All 13 brand tests pass; backend/web type-checks and targeted lint pass. UI and reset confirmation were verified in-app without changing demo credentials.

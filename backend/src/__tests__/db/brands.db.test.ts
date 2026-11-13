@@ -6,6 +6,7 @@ jest.setTimeout(120_000);
 import { basePrisma } from '../../config/database';
 import { createTestSchool, tokenFor } from './helpers';
 import { forgetLicence } from '../../utils/licence';
+import { verifyPassword } from '../../utils/password';
 import { verifyToken } from '../../utils/jwt';
 
 const suite = process.env.RUN_DB_TESTS === '1' ? describe : describe.skip;
@@ -65,6 +66,49 @@ suite('Brand tenancy, switching and shared licensing', () => {
     expect((await as(admin.token).get('/auth/me')).body.data.branches.map((s: any) => s.id)).toEqual([a.school.id]);
     expect((await as(owner.token).get('/brands')).body.data.map((s: any) => s.id)).toEqual([brandId]);
     expect((await as(admin.token).get('/brands')).status).toBe(403);
+  });
+  it('only superadmin creates owners for an existing brand, with a matching home branch', async () => {
+    const body = { name: 'Additional Owner', email: `additional.${a.code}@test.local`, schoolId: b.school.id };
+    expect((await as(owner.token).post(`/brands/${brandId}/owners`, body)).status).toBe(403);
+    expect((await as(admin.token).post(`/brands/${brandId}/owners`, body)).status).toBe(403);
+    expect((await as(superUser.token).post(`/brands/${brandId}/owners`, { ...body, schoolId: other.school.id })).status).toBe(422);
+    const created = await as(superUser.token).post(`/brands/${brandId}/owners`, body);
+    expect(created.status).toBe(201);
+    const extra = created.body.data.owner;
+    expect(extra).toMatchObject({ role: 'OWNER', mustChangePassword: true });
+    expect(await basePrisma.brandOwner.findUnique({ where: { brandId_userId: { brandId, userId: extra.id } } })).not.toBeNull();
+    expect((await as(superUser.token).post(`/brands/${brandId}/owners`, body)).status).toBe(409);
+    const login = await request(app).post('/api/v1/auth/login').send({ email: body.email, password: created.body.data.temporaryPassword });
+    expect(login.status).toBe(200);
+    expect(login.body.data.user.branches).toHaveLength(2);
+    expect((await as(login.body.data.accessToken).get('/students')).status).toBe(403);
+  });
+  it('superadmin resets only a brand owner, revokes sessions and preserves MFA', async () => {
+    const target = await basePrisma.user.findUniqueOrThrow({ where: { email: `additional.${a.code}@test.local` } });
+    const oldPassword = 'Temporary@12345';
+    const { hashPassword } = await import('../../utils/password');
+    await basePrisma.user.update({ where: { id: target.id }, data: { password: await hashPassword(oldPassword), mustChangePassword: false, resetToken: 'old-reset-token', resetTokenExpires: new Date('2030-01-01') } });
+    const login = await request(app).post('/api/v1/auth/login').send({ email: target.email, password: oldPassword });
+    expect(login.status).toBe(200);
+    await basePrisma.user.update({ where: { id: target.id }, data: { mfaEnabled: true, mfaSecret: 'preserve-existing-mfa' } });
+    const path = `/brands/${brandId}/owners/${target.id}/reset-password`;
+    expect((await as(owner.token).post(path, {})).status).toBe(403);
+    expect((await as(admin.token).post(path, {})).status).toBe(403);
+    expect((await as(superUser.token).post(`/brands/${other.school.id}/owners/${target.id}/reset-password`, {})).status).toBe(404);
+    expect((await as(superUser.token).post(`/brands/${brandId}/owners/${admin.id}/reset-password`, {})).status).toBe(404);
+    const reset = await as(superUser.token).post(path, {});
+    expect(reset.status).toBe(200);
+    const after = await basePrisma.user.findUniqueOrThrow({ where: { id: target.id } });
+    expect(after).toMatchObject({ mustChangePassword: true, resetToken: null, resetTokenExpires: null, mfaEnabled: true, mfaSecret: 'preserve-existing-mfa' });
+    expect(await verifyPassword(reset.body.data.temporaryPassword, after.password)).toBe(true);
+    expect(await verifyPassword(oldPassword, after.password)).toBe(false);
+    expect((await as(login.body.data.accessToken).get('/students')).status).toBe(401);
+    const refreshed = await request(app).post('/api/v1/auth/refresh').send({ refreshToken: login.body.data.refreshToken });
+    expect(refreshed.status).toBe(401);
+    const audit = await basePrisma.auditLog.findFirst({ where: { entityId: brandId, action: 'Brand owner password reset by platform' }, orderBy: { createdAt: 'desc' } });
+    expect(audit?.userId).toBe(superUser.id);
+    expect(audit?.meta).toMatchObject({ userId: target.id });
+    expect(JSON.stringify(audit?.meta)).not.toContain(reset.body.data.temporaryPassword);
   });
   it('rejects switching outside ownership and forged target-branch tokens', async () => {
     expect((await as(owner.token).post('/auth/switch-branch', { schoolId: other.school.id })).status).toBe(403);
