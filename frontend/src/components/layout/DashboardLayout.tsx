@@ -89,12 +89,12 @@ export function DashboardLayout({ children, title, allowedRoles, subtitle, actio
           <div className="p-6 max-w-screen-2xl mx-auto animate-fade-in">
             {/* Optional page header with actions */}
             {subtitle || actions ? (
-              <div className="flex items-start justify-between mb-6 gap-4 rounded-2xl border border-white/70 bg-white/70 backdrop-blur-md px-5 py-4 shadow-sm">
+              <div className="flex flex-wrap items-start justify-between mb-6 gap-4 rounded-2xl border border-white/70 bg-white/70 backdrop-blur-md px-5 py-4 shadow-sm">
                 <div>
                   <h2 className="page-title">{title}</h2>
                   {subtitle && <p className="page-subtitle">{subtitle}</p>}
                 </div>
-                {actions && <div className="flex items-center gap-2 flex-shrink-0">{actions}</div>}
+                {actions && <div className="flex flex-wrap items-center gap-2 max-w-full">{actions}</div>}
               </div>
             ) : null}
             <div className="space-y-6">{children}</div>

@@ -457,6 +457,7 @@ export const paymentsAPI = {
 };
 
 export const reportsAPI = {
+  options: (type: string) => data<Record<string, any>>(api.get(`/reports/${type}/options`)),
   available: () => data<string[]>(api.get('/reports')),
   /** Downloads a report file and hands it to the browser. */
   download: async (type: string, params: Record<string, string | undefined>) => {
@@ -555,3 +556,13 @@ export const brandsAPI = {
   assign: (id: string, body: any) => data(api.put(`/brands/${id}/access`, body)),
   removeAccess: (id: string, accessId: string) => data(api.delete(`/brands/${id}/access/${accessId}`)),
 };
+
+/** File endpoints can return JSON or proxy text inside a Blob on failure. */
+export async function reportDownloadError(err: any) {
+  const body = err?.response?.data;
+  if (body instanceof Blob) {
+    try { const parsed = JSON.parse(await body.text()); return parsed.message || 'Could not download report'; }
+    catch { return 'Could not download report. Please try again.'; }
+  }
+  return apiError(err);
+}

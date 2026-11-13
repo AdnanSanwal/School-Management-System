@@ -2,14 +2,14 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { ArrowLeft, FileDown, FileSpreadsheet, Filter, RotateCcw } from 'lucide-react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Spinner, Empty } from '@/components/ui/kit';
 import { SearchInput, NoMatches, matchesSearch } from '@/components/ui/SearchInput';
-import { reportsAPI, apiError, type ReportColumn } from '@/lib/api';
+import { reportsAPI, apiError, reportDownloadError, type ReportColumn } from '@/lib/api';
 import { CAN } from '@/lib/roles';
 import { cn } from '@/lib/utils';
 import { REPORT_META, ReportFilters, defaultFilters, missingFilter, toParams, type FilterValues } from '@/components/reports/ReportFilters';
@@ -21,8 +21,15 @@ import { REPORT_META, ReportFilters, defaultFilters, missingFilter, toParams, ty
 export default function ReportViewPage() {
   const { type } = useParams<{ type: string }>();
   const meta = REPORT_META[type];
-  const [draft, setDraft] = useState<FilterValues>(() => defaultFilters(type));
-  const [applied, setApplied] = useState<FilterValues>(() => defaultFilters(type));
+  const urlParams = useSearchParams();
+  const initial = () => {
+    const p = defaultFilters(type);
+    for (const key of Object.keys(p)) if (key !== 'student' && urlParams.has(key)) (p as any)[key] = urlParams.get(key) ?? '';
+    if (urlParams.get('studentId')) p.student = { id: urlParams.get('studentId')!, name: 'Selected student' };
+    return p;
+  };
+  const [draft, setDraft] = useState<FilterValues>(initial);
+  const [applied, setApplied] = useState<FilterValues>(initial);
   const [search, setSearch] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
   const missing = missingFilter(type, applied);
@@ -47,8 +54,7 @@ export default function ReportViewPage() {
     try {
       await reportsAPI.download(type, { format, ...params });
     } catch (e) {
-      const blob = (e as any)?.response?.data;
-      toast.error(blob instanceof Blob ? JSON.parse(await blob.text()).message : apiError(e));
+      toast.error(await reportDownloadError(e));
     } finally {
       setBusy(null);
     }

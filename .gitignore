@@ -58,3 +58,6 @@ backups/
 
 # Real Kubernetes secrets never go in git (SECURITY_FINDINGS SEC-2)
 k8s/secrets.yml
+
+# Retained local report QA exports (dummy database records are intentionally kept).
+artifacts/reports-qa/

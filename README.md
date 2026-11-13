@@ -15,8 +15,10 @@ and owners.
 | Academics | Exams with date sheet → principal approves → marks entry → publish; grades, positions, PDF report cards; timetable with clash checks |
 | Communication | Daily diary/homework with attachments (parents tick homework done), notices by audience, holidays calendar, push notifications, WhatsApp/SMS alerts |
 | Facilities | Transport routes, stops and riders (fee added to the invoice), library catalogue, issue/return and late fines |
-| Office | Owner dashboard, approvals inbox, leave management, PDF/Excel reports, year-end promotion, daily automation |
+| Office | Owner dashboard, approvals inbox, leave management, 29 filtered PDF/Excel reports, year-end promotion, daily automation |
 | Platform | Platform admin screen to onboard, list and suspend schools |
+
+See [Reports and verification](docs/REPORTS.md) for report coverage, filters, retained QA logins and test results.
 
 **Stack:** Node 20 + Express + Prisma (MySQL) · Next.js 14 web panel · Expo (React Native) mobile app · Redis (optional in development).
 

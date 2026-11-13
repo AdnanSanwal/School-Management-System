@@ -33,7 +33,8 @@ function fmt(v: unknown, type: Column['type'], currency: string) {
 export async function toXlsx(r: TableReport): Promise<Buffer> {
   const wb = new ExcelJS.Workbook();
   wb.creator = 'School ERP';
-  const ws = wb.addWorksheet(r.title.slice(0, 31));
+  const sheetName = Array.from(r.title).filter(c => !['*', '?', ':', '\\', '/', '[', ']'].includes(c)).join('').slice(0, 31).trim() || 'Report';
+  const ws = wb.addWorksheet(sheetName);
   ws.addRow([r.school]).font = { bold: true, size: 14 };
   ws.addRow([r.title]).font = { bold: true, size: 12 };
   if (r.subtitle) ws.addRow([r.subtitle]).font = { color: { argb: 'FF6B7280' } };

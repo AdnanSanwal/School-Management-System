@@ -1,3 +1,6 @@
+import { EXTENDED_REPORTS, reportDate } from './extendedReports';
+import type { ReportBuilder } from './reportTypes';
+import { ensureLedgerSetup } from '../../utils/ledger';
 import { Router } from 'express';
 import { sendSuccess } from '../../utils/apiResponse';
 import { z } from 'zod';
@@ -28,7 +31,7 @@ type Builder = { perms: Permission[]; schoolWideOnly?: boolean; params: z.ZodTyp
 
 const fmtDate = (iso: string) => new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeZone: 'UTC' }).format(toDate(iso));
 
-const REPORTS: Record<string, Builder> = {
+const REPORTS: Record<string, ReportBuilder> = {
   // Daily / date-range fee collection (Owner, Principal, Accountant)
   'fee-collection': {
     perms: ['reports.finance'], schoolWideOnly: true,
@@ -237,6 +240,8 @@ const REPORTS: Record<string, Builder> = {
   },
 };
 
+Object.assign(REPORTS, EXTENDED_REPORTS);
+
 router.get('/', handler(async (req, res) => {
   const role = me(req).role;
   return res.json({
@@ -247,6 +252,29 @@ router.get('/', handler(async (req, res) => {
   });
 }));
 
+router.get('/:type/options', can('school.view'), handler(async (req, res) => {
+  const def = Object.prototype.hasOwnProperty.call(REPORTS, req.params.type) ? REPORTS[req.params.type] : undefined;
+  if (!def) throw new AppError('Unknown report', 404);
+  if (!def.perms.some(p => hasPermission(me(req).role,p)) || (def.schoolWideOnly && !isSchoolWide(me(req)))) throw new AppError('Forbidden: insufficient permissions',403);
+  const result: Record<string,unknown> = {};
+  for (const option of def.options ?? []) {
+    if (option === 'academicYears') result.academicYears = await prisma.academicYear.findMany({select:{id:true,name:true},orderBy:{startDate:'desc'}});
+    if (option === 'staff') result.staff = await prisma.staff.findMany({select:{id:true,name:true,employeeNo:true},orderBy:{name:'asc'}});
+    if (option === 'departments' || option === 'designations') {
+      const field = option === 'departments' ? 'department' : 'designation';
+      const rows = await prisma.staff.findMany({select:{department:true,designation:true}});
+      result[option] = [...new Set(rows.map(r=>r[field]).filter(Boolean))].sort();
+    }
+    if (option === 'accounts') result.accounts = await prisma.moneyAccount.findMany({select:{id:true,name:true},orderBy:{name:'asc'}});
+    if (option === 'expenseCategories' || option === 'incomeCategories') result.categories = await prisma.financeCategory.findMany({where:{kind:option==='expenseCategories'?'EXPENSE':'INCOME'},select:{id:true,name:true},orderBy:{name:'asc'}});
+    if (option === 'routes') result.routes = await prisma.transportRoute.findMany({select:{id:true,name:true},orderBy:{name:'asc'}});
+    if (option === 'books') result.books = await prisma.book.findMany({select:{id:true,title:true},orderBy:{title:'asc'}});
+    if (option === 'libraryCategories') result.libraryCategories = [...new Set((await prisma.book.findMany({select:{category:true}})).map(b=>b.category).filter(Boolean))].sort();
+    if (option === 'ledgerAccounts') result.ledgerAccounts = (await ensureLedgerSetup()).map(a=>({id:a.id,name:`${a.code} ${a.name}`}));
+  }
+  return sendSuccess(res,result);
+}));
+
 router.get('/:type', can('school.view'), handler(async (req, res) => {
   const def = Object.prototype.hasOwnProperty.call(REPORTS, req.params.type) ? REPORTS[req.params.type] : undefined;
   if (!def) throw new AppError('Unknown report', 404);
@@ -255,10 +283,15 @@ router.get('/:type', can('school.view'), handler(async (req, res) => {
     throw new AppError('Forbidden: insufficient permissions', 403);
   }
   const { format, ...rest } = req.query;
+  for (const k of ['from', 'to', 'asOf']) if (rest[k] !== undefined) reportDate.parse(rest[k]);
+  if (typeof rest.from === 'string' && typeof rest.to === 'string' && rest.from > rest.to) throw new AppError('From must not be after To',422);
+  if (typeof rest.fromPeriod === 'string' && typeof rest.toPeriod === 'string' && rest.fromPeriod > rest.toPeriod) throw new AppError('First payroll month must not be after last month',422);
   const fmtParam = z.enum(['pdf', 'xlsx', 'view']).default('pdf').parse(format);
   const q = def.params.parse(rest) as Record<string, unknown>;
   const school = await prisma.school.findUniqueOrThrow({ where: { id: currentSchoolId() }, select: { name: true, currency: true } });
   const report = { ...(await def.build({ user, q, school })), school: school.name, currency: school.currency };
+  if ([...report.rows, report.totals ?? {}].some(row => Object.values(row).some(value => typeof value === 'number' && !Number.isFinite(value)))) throw new AppError('The report contains an invalid numeric value. Please contact support.',500);
+  if (report.rows.length > 20_000) throw new AppError('This report is too large. Narrow its filters to 20,000 rows or fewer.',422);
   // CR-02: the same table as JSON, shown on screen. Never a file download.
   if (fmtParam === 'view') return sendSuccess(res, report);
   const file = fmtParam === 'pdf' ? await toPdf(report) : await toXlsx(report);
