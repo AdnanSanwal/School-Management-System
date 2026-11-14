@@ -7,7 +7,7 @@ import toast from 'react-hot-toast';
 import { BookOpen, Bus, CalendarDays, ChevronLeft, ChevronRight, Clock, Download, GraduationCap, Home, Library, Wallet } from 'lucide-react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Empty, Spinner } from '@/components/ui/kit';
-import { familyAPI, apiError } from '@/lib/api';
+import { familyAPI, diaryAPI, apiError } from '@/lib/api';
 import { cn, formatDate, formatMoney, formatPeriod, todayIso } from '@/lib/utils';
 import { useAuthStore } from '@/store/authStore';
 
@@ -212,6 +212,8 @@ function Attendance({ id }: { id: string }) {
 function Diary({ id }: { id: string }) {
   const [only, setOnly] = useState(false);
   const q = useQuery({ queryKey: ['family', 'diary', id], queryFn: () => familyAPI.diary(id) });
+  const role=useAuthStore(s=>s.user?.role);
+  useEffect(()=>{if(role==='PARENT'&&q.data?.length)void diaryAPI.markViews(id,q.data.map((e:any)=>e.id)).catch(()=>{});},[role,id,q.data]);
   if (!q.data) return <Loading q={q} />;
   const rows = q.data.filter((e: any) => !only || e.isHomework);
   return (

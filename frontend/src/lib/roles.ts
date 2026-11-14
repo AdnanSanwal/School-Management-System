@@ -28,6 +28,9 @@ export const CAN = {
   approveExpense: ['OWNER'],
   // Payroll: accountant prepares and pays, owner approves; staff see their own payslips.
   viewPayroll: ['OWNER', 'PRINCIPAL', 'ACCOUNTANT'],
+  viewLoans: ['OWNER', 'PRINCIPAL', 'ACCOUNTANT'],
+  approveLoan: ['OWNER'],
+  configureDiary: ['OWNER', 'PRINCIPAL'],
   managePayroll: ['ACCOUNTANT'],
   approvePayroll: ['OWNER'],
   myPayslips: ['TEACHER', 'PRINCIPAL', 'ADMIN', 'ACCOUNTANT'],
@@ -84,6 +87,7 @@ export type Capability = keyof typeof CAN;
  */
 const CAP_PERMISSIONS: Partial<Record<Capability, string[]>> = {
   viewAudit: ['audit.view'],
+  viewLoans: ['payroll.view','loan.approve'], approveLoan: ['loan.approve'], configureDiary: ['diary.configure'],
   viewStudents: ['student.view'], manageStudents: ['student.manage'], admitStudents: ['student.admit'], setStudentFee: ['student.fee.set'],
   viewStaff: ['staff.view'], manageStaff: ['staff.manage'], manageHr: ['hr.manage'], viewSalary: ['salary.view'], manageSalary: ['salary.manage'],
   viewLeaveBalances: ['leave.view'], applyLeave: ['leave.apply'],

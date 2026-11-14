@@ -112,7 +112,7 @@ export async function buildLines(tx: ScopedTx, run: { id: string; period: string
     const old = existing.find((l) => l.staffId === s.id);
     const auto = Math.min(daysInMonth, half(absentDays + unpaidLeaveDays + notEmployedDays));
     const deductDays = old?.deductDaysManual ? Number(old.deductDays) : auto;
-    const due = loans.filter((l) => l.staffId === s.id && l.startPeriod <= run.period)
+    const due = loans.filter((l) => l.staffId === s.id && l.startPeriod <= run.period && l.recoveryMethod === 'SALARY')
       .reduce((t, l) => t.plus(Prisma.Decimal.min(l.installment, l.outstanding)), D(0));
     const allowances: Part[] = pay.components.filter((c) => c.kind === 'ALLOWANCE').map((c) => ({ name: c.name, amount: Number(c.amount) }));
     const fixedDeductions: Part[] = pay.components.filter((c) => c.kind === 'DEDUCTION').map((c) => ({ name: c.name, amount: Number(c.amount) }));

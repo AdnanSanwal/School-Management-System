@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import Link from 'next/link';
+import PromotionWorkspace from '@/components/promotions/PromotionWorkspace';
 import { Plus, BookOpen, Trash2, Archive, ArchiveRestore, ArrowUpCircle } from 'lucide-react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Field, Modal, Spinner, Empty } from '@/components/ui/kit';
@@ -18,6 +18,7 @@ export default function ClassesPage() {
   const { data: classes = [], isLoading } = useQuery({ queryKey: ['classes'], queryFn: academicsAPI.classes });
   const teachers = useQuery({ queryKey: ['teachers'], queryFn: () => staffAPI.list({ teachers: 'true', limit: 200 }), enabled: manage });
   const [modal, setModal] = useState<null | 'class' | 'subject' | { section: any; classId: string } | { addSectionTo: any } | { archive: any }>(null);
+  const [promoting,setPromoting]=useState(false);
   const [showEmpty, setShowEmpty] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
   const archived = useQuery({ queryKey: ['classes', 'archived'], queryFn: academicsAPI.archivedClasses, enabled: manage });
@@ -53,8 +54,8 @@ export default function ClassesPage() {
           <button className="btn btn-secondary" onClick={() => setModal('subject')}><BookOpen className="h-4 w-4" /> Subjects</button>
           <button className="btn btn-secondary" onClick={() => setModal('class')}><Plus className="h-4 w-4" /> Add class</button>
         </>}
-        {/* CR-03: Promote Students at the top right of the Classes section */}
-        {can(role, 'promotion') && <Link href="/promotions" className="btn btn-primary"><ArrowUpCircle className="h-4 w-4" /> Promote students</Link>}
+        {/* Promotion is shared with the dedicated page to keep all validation intact. */}
+        {can(role, 'promotion') && <button onClick={()=>setPromoting(true)} className="btn btn-primary"><ArrowUpCircle className="h-4 w-4" /> Promote students</button>}
       </>}>
       {(empty.length > 0 || (archived.data?.length ?? 0) > 0) && (
         <div className="flex flex-wrap gap-3 text-sm">
@@ -132,7 +133,8 @@ export default function ClassesPage() {
       {modal === 'subject' && <SubjectsModal onClose={() => setModal(null)} />}
       {modal && typeof modal === 'object' && 'addSectionTo' in modal && <SectionModal cls={modal.addSectionTo} onClose={() => setModal(null)} onDone={refresh} />}
       {modal && typeof modal === 'object' && 'section' in modal && <SectionSubjectsModal section={modal.section} teachers={teacherList} onClose={() => setModal(null)} />}
-    </DashboardLayout>
+    {promoting&&<Modal open onClose={()=>setPromoting(false)} title="Promote students" wide><PromotionWorkspace embedded/></Modal>}
+</DashboardLayout>
   );
 }
 

@@ -22,7 +22,7 @@ export const PERMISSIONS = [
   // HR: lists and leave policy; who may see and set salaries.
   'hr.manage', 'salary.view', 'salary.manage',
   'finance.view', 'finance.manage', 'expense.approve',
-  'payroll.view', 'payroll.manage', 'payroll.approve',
+  'payroll.view', 'payroll.manage', 'payroll.approve', 'loan.approve',
   'books.reopen', 'roles.manage',
   'class.view', 'class.manage',
   'attendance.student.mark', 'attendance.student.view', 'attendance.student.correct',
@@ -31,7 +31,7 @@ export const PERMISSIONS = [
   'fee.view', 'fee.structure.view', 'fee.structure.manage', 'fee.invoice.generate', 'fee.collect',
   'fee.concession.request', 'fee.concession.approve', 'fee.pay',
   'exam.view', 'exam.manage', 'exam.approve', 'marks.enter', 'marks.view', 'reportcard.generate',
-  'diary.view', 'diary.post',
+  'diary.view', 'diary.post', 'diary.configure',
   'timetable.view', 'timetable.manage', 'timetable.approve',
   'calendar.view', 'calendar.manage',
   'notice.view', 'notice.publish', 'message.broadcast',
@@ -67,7 +67,7 @@ export const ROLE_PERMISSIONS: Record<Role, ReadonlySet<Permission>> = {
   // Academic + administrative head; approvals. No fee collection or fee-structure edits.
   PRINCIPAL: new Set<Permission>([
     ...EVERYONE_IN_SCHOOL, ...READ_ALL, 'audit.view', 'salary.view', 'finance.view', 'payroll.view',
-    'users.manage', 'dashboard.principal',
+    'users.manage', 'dashboard.principal', 'diary.configure',
     'student.manage', 'student.admit', 'student.status.request', 'student.status.approve',
     'staff.manage', 'class.manage',
     'attendance.student.correct', 'attendance.staff.mark',

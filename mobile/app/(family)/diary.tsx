@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Alert, Pressable, Text, View } from 'react-native';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { API, apiError } from '../../lib/api';
@@ -6,10 +6,12 @@ import { ErrorBox, Loading, Screen } from '../../components/ui';
 import { ChildSwitcher, useChildren } from '../../components/ChildSwitcher';
 import { DiaryList } from '../../components/DiaryList';
 import { colors } from '../../lib/theme';
+import { useAuthStore } from '../../store/authStore';
 
 // Spec §10 Daily Diary + Homework (date-wise posts by teachers, attachments viewable).
 export default function FamilyDiary() {
   const { childId } = useChildren();
+  const role=useAuthStore(s=>s.user?.role);
   const qc = useQueryClient();
   const mark = useMutation({
     mutationFn: ({ id, done }: { id: string; done: boolean }) => API.markHomework(id, childId!, done),
@@ -23,6 +25,7 @@ export default function FamilyDiary() {
     enabled: !!childId,
   });
 
+  useEffect(()=>{if(role==='PARENT'&&childId&&q.data?.data?.length)void API.diaryViews(childId,q.data.data.map((e:any)=>e.id)).catch(()=>{});},[role,childId,q.data]);
   return (
     <Screen refreshing={q.isRefetching} onRefresh={() => q.refetch()}>
       <ChildSwitcher />

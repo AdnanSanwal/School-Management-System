@@ -59,7 +59,7 @@ const navGroups: NavGroup[] = [
       { label: 'Leave balances', href: '/hr/leave', icon: CalendarCheck, cap: 'viewLeaveBalances' },
       { label: 'Salaries', href: '/hr/salaries', icon: Banknote, cap: 'viewSalary' },
       { label: 'Payroll', href: '/payroll', icon: CircleDollarSign, cap: 'viewPayroll' },
-      { label: 'Advances & loans', href: '/payroll/loans', icon: HandCoins, cap: 'viewPayroll' },
+      { label: 'Advances & loans', href: '/payroll/loans', icon: HandCoins, cap: 'viewLoans' },
       { label: 'My payslips', href: '/payroll/my', icon: ReceiptText, cap: 'myPayslips' },
       { label: 'HR settings', href: '/hr/settings', icon: SlidersHorizontal, cap: 'manageHr' },
     ],

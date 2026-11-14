@@ -46,6 +46,8 @@ export const PERMISSION_INFO: Partial<Record<Permission, Info>> = {
 
   'diary.view': { module: 'Communication', label: 'See the class diary' },
   'diary.post': { module: 'Communication', label: 'Post diary and homework' },
+  'diary.configure': { module: 'Communication', label: 'Configure diary expectations and deadlines' },
+  'loan.approve': { module: 'Payroll', label: 'Approve or reject staff advances and loans' },
   'notice.publish': { module: 'Communication', label: 'Publish notices' },
   'message.broadcast': { module: 'Communication', label: 'Send messages to parents and staff' },
 

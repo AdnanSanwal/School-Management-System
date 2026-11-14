@@ -83,7 +83,7 @@ d('Accounting ledger (database)', () => {
     const C = as('ACCOUNTANT');
     const staff = await basePrisma.staff.findFirstOrThrow({ where: { schoolId: t.school.id, employeeNo: 'L-1' } });
     expect((await as('ADMIN').post(`/hr/staff/${staff.id}/salary`, { effectiveFrom: `${month}-01`, basic: dim * 1000, components: [] })).status).toBe(201);
-    expect((await C.post('/payroll/loans', { staffId: staff.id, kind: 'LOAN', amount: 2000, issuedOn: today, accountId: ids.cash, installment: 500 })).status).toBe(201);
+    expect((await as('OWNER').post('/payroll/loans', { staffId: staff.id, kind: 'LOAN', amount: 2000, issuedOn: today, accountId: ids.cash, installment: 500 })).status).toBe(201);
     const run = await C.post('/payroll/runs', { period: month });
     ids.run = run.body.data.id;
     await C.post(`/payroll/runs/${ids.run}/submit`);

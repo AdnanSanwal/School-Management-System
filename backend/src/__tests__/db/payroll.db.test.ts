@@ -90,17 +90,17 @@ d('Payroll (database)', () => {
 
   it('advances and loans leave the account and are listed with what is still owed', async () => {
     const C = as('ACCOUNTANT');
-    const loan = await C.post('/payroll/loans', { staffId: ids.sana, kind: 'LOAN', amount: 6000, issuedOn: today, accountId: ids.cash, installment: 2000 });
+    const loan = await as('OWNER').post('/payroll/loans', { staffId: ids.sana, kind: 'LOAN', amount: 6000, issuedOn: today, accountId: ids.cash, installment: 2000 });
     expect(loan.status).toBe(201);
     expect(loan.body.data).toMatchObject({ loanNo: 'LN-00001', startPeriod: month });
     ids.loan = loan.body.data.id;
-    const adv = await C.post('/payroll/loans', { staffId: ids.bilal, kind: 'ADVANCE', amount: 1000, issuedOn: today, accountId: ids.cash });
+    const adv = await as('OWNER').post('/payroll/loans', { staffId: ids.bilal, kind: 'ADVANCE', amount: 1000, issuedOn: today, accountId: ids.cash });
     expect(adv.body.data).toMatchObject({ loanNo: 'ADV-00002', installment: '1000' });
     ids.advance = adv.body.data.id;
     expect(Number((await cash()).balance)).toBe(13000);
 
-    expect((await C.post('/payroll/loans', { staffId: ids.sana, kind: 'LOAN', amount: 500, issuedOn: today, accountId: ids.cash })).status).toBe(422); // no instalment
-    expect((await C.post('/payroll/loans', { staffId: ids.sana, kind: 'ADVANCE', amount: 999999, issuedOn: today, accountId: ids.cash })).status).toBe(409); // not enough cash
+    expect((await as('OWNER').post('/payroll/loans', { staffId: ids.sana, kind: 'LOAN', amount: 500, issuedOn: today, accountId: ids.cash })).status).toBe(422); // no instalment
+    expect((await as('OWNER').post('/payroll/loans', { staffId: ids.sana, kind: 'ADVANCE', amount: 999999, issuedOn: today, accountId: ids.cash })).status).toBe(409); // not enough cash
     expect((await as('PRINCIPAL').post('/payroll/loans', { staffId: ids.sana, kind: 'ADVANCE', amount: 5, issuedOn: today, accountId: ids.cash })).status).toBe(403);
 
     const list = await as('OWNER').get('/payroll/loans?status=ACTIVE');
@@ -199,15 +199,16 @@ d('Payroll (database)', () => {
     await C.post(`/finance/accounts/${ids.cash}/transactions`, { type: 'DEPOSIT', amount: net, txDate: today, description: 'For salaries' });
 
     expect((await as('PRINCIPAL').post(`/payroll/runs/${ids.run}/pay`, { accountId: ids.cash, paymentDate: today })).status).toBe(403);
-    const paid = await C.post(`/payroll/runs/${ids.run}/pay`, { accountId: ids.cash, paymentDate: today });
+    const paid = await C.post(`/payroll/runs/${ids.run}/pay`, { accountId: ids.cash, paymentDate: today, paymentReference:'QA-PAY-001',paymentRemarks:'Whole monthly run' });
     expect(paid.status).toBe(200);
-    expect(await run()).toMatchObject({ status: 'PAID', account: 'Cash in hand', paymentDate: today });
+    expect(await run()).toMatchObject({ status: 'PAID', account: 'Cash in hand', paymentDate: today,paymentReference:'QA-PAY-001' });
+    expect((await run()).paymentNote).toContain('Whole monthly run');
     expect(Number((await cash()).balance)).toBe(13000);
     expect((await C.post(`/payroll/runs/${ids.run}/pay`, { accountId: ids.cash, paymentDate: today })).status).toBe(409);
     expect((await C.post(`/payroll/runs/${ids.run}/reopen`)).status).toBe(409);
 
     const expense = await basePrisma.expense.findFirstOrThrow({ where: { payrollRunId: ids.run }, include: { category: true } });
-    expect(expense).toMatchObject({ status: 'APPROVED', category: { name: 'Salaries' }, description: `Salaries for ${monthLabel(month)} (2 staff)` });
+    expect(expense).toMatchObject({ status: 'APPROVED', category: { name: 'Salaries' }, description: `Salaries for ${monthLabel(month)} (2 staff) — Whole monthly run`,reference:'QA-PAY-001' });
     expect(Number(expense.amount)).toBe(net);
     expect((await C.del(`/finance/expenses/${expense.id}`)).status).toBe(409);
 
@@ -253,7 +254,7 @@ d('Payroll (database)', () => {
     expect((await C.get('/payroll/loans?status=ACTIVE')).body.data.loans).toHaveLength(0);
     expect((await C.del(`/payroll/loans/${ids.loan}`)).status).toBe(409);
 
-    const wrong = await C.post('/payroll/loans', { staffId: ids.bilal, kind: 'ADVANCE', amount: 700, issuedOn: today, accountId: ids.cash });
+    const wrong = await as('OWNER').post('/payroll/loans', { staffId: ids.bilal, kind: 'ADVANCE', amount: 700, issuedOn: today, accountId: ids.cash });
     expect(Number((await cash()).balance)).toBe(16300);
     expect((await C.del(`/payroll/loans/${wrong.body.data.id}`)).status).toBe(200);
     expect(Number((await cash()).balance)).toBe(17000);

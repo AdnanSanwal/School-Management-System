@@ -93,6 +93,7 @@ export const API = {
 
   // Diary
   diary: (params: Record<string, any>) => api.get('/diary', { params }).then((r) => r.data),
+  diaryViews: (studentId:string,entryIds:string[]) => api.post('/diary/views',{studentId,entryIds}),
   postDiary: (form: FormData) => data(api.post('/diary', form, { headers: { 'Content-Type': 'multipart/form-data' } })),
   deleteDiary: (id: string) => api.delete(`/diary/${id}`),
   markHomework: (id: string, studentId: string, done: boolean) =>

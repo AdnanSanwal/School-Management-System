@@ -19,12 +19,15 @@ import { buildLines, lineTotals, monthLabel, outstandingLoans, runTotals } from 
 import { toPdf, toXlsx } from '../../utils/tableReport';
 import { D } from '../fees/fees.calc';
 import { onRoll } from '../../utils/staffStatus';
+import loanRequests from './loanRequests.routes';
+import { audit } from '../../utils/audit';
 
 // Payroll: monthly runs (draft → submitted → approved by the owner → paid), payslips,
 // the bank transfer sheet, and staff advances / loans recovered from salary.
 
 const router = Router();
 router.use(authenticate);
+router.use('/loan-requests', loanRequests);
 router.use((req, _res, next) => {
   if (!hasPermission(me(req as never).role, 'payroll.view')) return next();
   ensureFinanceSetup().then(() => next(), next);
@@ -76,18 +79,19 @@ router.post('/runs', can('payroll.manage'), handler(async (req, res) => {
 
 router.get('/runs/:id', can('payroll.view'), handler(async (req, res) => {
   const run = await runOr404(req.params.id);
-  const [lines, account, people, active] = await Promise.all([
+  const [lines, account, people, active, payment] = await Promise.all([
     prisma.payrollLine.findMany({ where: { runId: run.id }, orderBy: { name: 'asc' } }),
     run.accountId ? prisma.moneyAccount.findFirst({ where: { id: run.accountId }, select: { name: true } }) : null,
     prisma.user.findMany({ where: { id: { in: [run.createdById, run.decidedById, run.paidById].filter(Boolean) as string[] } }, select: { id: true, name: true } }),
     run.status === 'DRAFT' ? prisma.staff.findMany({ where: { status: onRoll }, select: { id: true, name: true, employeeNo: true, joiningDate: true } }) : [],
+    prisma.expense.findFirst({where:{payrollRunId:run.id},select:{reference:true,description:true}}),
   ]);
   const who = (uid: string | null) => people.find((p) => p.id === uid)?.name ?? null;
   const { end } = periodRange(run.period);
   return sendSuccess(res, {
     ...run, paymentDate: run.paymentDate ? toIso(run.paymentDate) : null, label: monthLabel(run.period),
     account: account?.name ?? null, createdBy: who(run.createdById), decidedBy: who(run.decidedById), paidBy: who(run.paidById),
-    totals: runTotals(lines), lines,
+    totals: runTotals(lines), lines, paymentReference:payment?.reference??null,paymentNote:payment?.description??null,
     // Active staff left out because no salary is set.
     missing: active.filter((s) => (!s.joiningDate || s.joiningDate <= end) && !lines.some((l) => l.staffId === s.id)).map(({ joiningDate: _j, ...s }) => s),
   });
@@ -119,7 +123,7 @@ router.patch('/lines/:id', can('payroll.manage'), handler(async (req, res) => {
   draftOnly(line.run);
   if (b.deductDays !== undefined && b.deductDays > line.daysInMonth) throw new AppError(`The month has only ${line.daysInMonth} days`, 422);
   if (b.loanDeduction !== undefined) {
-    const owed = (await outstandingLoans(prisma, [line.staffId])).reduce((t, l) => t.plus(l.outstanding), D(0));
+    const owed = (await outstandingLoans(prisma, [line.staffId])).filter(l=>l.recoveryMethod==='SALARY').reduce((t, l) => t.plus(l.outstanding), D(0));
     if (D(b.loanDeduction).gt(owed)) throw new AppError(`${line.name} owes only ${owed.toFixed(0)} in advances and loans`, 422);
   }
   const next = {
@@ -187,7 +191,8 @@ router.post('/runs/:id/reopen', can('payroll.manage'), handler(async (req, res) 
 
 /** Pays the approved payroll from one account and recovers the advances / loans on it. */
 router.post('/runs/:id/pay', can('payroll.manage'), handler(async (req, res) => {
-  const b = parseBody(z.object({ accountId: id, paymentDate: dateOnly }), req);
+  const b = parseBody(z.object({ accountId: id, paymentDate: dateOnly, paymentReference:z.string().trim().max(120).optional(),paymentRemarks:z.string().trim().max(300).optional() }), req);
+  if(toIso(toDate(b.paymentDate))!==b.paymentDate)throw new AppError('Choose a valid payment date',422);
   const run = await runOr404(req.params.id);
   if (run.status !== 'APPROVED') throw new AppError(run.status === 'PAID' ? 'This payroll is already paid' : 'The owner has not approved this payroll yet', 409);
   if (toDate(b.paymentDate) > await schoolToday()) throw new AppError('The payment date can’t be in the future', 422);
@@ -212,7 +217,7 @@ router.post('/runs/:id/pay', can('payroll.manage'), handler(async (req, res) => 
       await tx.expense.create({
         data: {
           schoolId, expenseNo: formatNumber('EXP', await nextNumber(tx, 'expense')), categoryId: category.id, accountId: account.id,
-          amount: net, expenseDate: toDate(b.paymentDate), description: `Salaries for ${monthLabel(run.period)} (${lines.length} staff)`,
+          amount: net, expenseDate: toDate(b.paymentDate), reference:b.paymentReference||null, description: `Salaries for ${monthLabel(run.period)} (${lines.length} staff)${b.paymentRemarks?' — '+b.paymentRemarks:''}`,
           status: 'APPROVED', requestedById: user.id, decidedById: run.decidedById, decidedAt: new Date(), payrollRunId: run.id,
         },
       });
@@ -222,7 +227,7 @@ router.post('/runs/:id/pay', can('payroll.manage'), handler(async (req, res) => 
     const loans = await outstandingLoans(tx, owing.map((l) => l.staffId));
     for (const line of owing) {
       let left = D(line.loanDeduction);
-      for (const loan of loans.filter((l) => l.staffId === line.staffId)) {
+      for (const loan of loans.filter((l) => l.staffId === line.staffId && l.recoveryMethod === 'SALARY')) {
         if (left.lte(0)) break;
         const take = Prisma.Decimal.min(left, loan.outstanding);
         if (take.lte(0)) continue;
@@ -337,7 +342,7 @@ async function assertStillCovers(staffId: string, reduceBy: Prisma.Decimal.Value
   }
 }
 
-router.get('/loans', can('payroll.view'), handler(async (req, res) => {
+router.get('/loans', can('payroll.view', 'loan.approve'), handler(async (req, res) => {
   const q = parseQuery(z.object({ status: z.enum(['ACTIVE', 'SETTLED']).optional(), staffId: id.optional() }), req);
   const loans = await prisma.staffLoan.findMany({
     where: { ...(q.status ? { status: q.status } : {}), ...(q.staffId ? { staffId: q.staffId } : {}) },
@@ -361,7 +366,10 @@ router.get('/loans', can('payroll.view'), handler(async (req, res) => {
   });
 }));
 
-router.post('/loans', can('payroll.manage'), handler(async (req, res) => {
+// Legacy direct issuance is an explicit owner approval plus payment.
+// The normal UI uses the staged request / approval / disbursement endpoints.
+router.post('/loans', can('payroll.manage'), can('loan.approve'), handler(async (req, res) => {
+  if(me(req).role!=='OWNER')throw new AppError('Submit a request for independent approval before disbursement',403);
   const b = parseBody(z.object({
     staffId: id, kind: z.enum(['ADVANCE', 'LOAN']), amount: positive, issuedOn: dateOnly, accountId: id,
     installment: positive.optional(), startPeriod: period.optional(), note: z.string().trim().max(300).optional(),
@@ -387,6 +395,7 @@ router.post('/loans', can('payroll.manage'), handler(async (req, res) => {
       amount: b.amount, issuedOn: toDate(b.issuedOn), accountId: account.id, installment, startPeriod, note: b.note || null, createdById: me(req).id,
     },
   }));
+  await audit(req, { action: 'Advance / loan approved and issued', entity: 'staff-loans', entityId: loan.id, meta: { approvedById: me(req).id, amount: b.amount } });
   return sendSuccess(res, loan, `${loan.loanNo}: ${D(b.amount).toFixed(0)} given to ${staff.name} from ${account.name}`, 201);
 }));
 

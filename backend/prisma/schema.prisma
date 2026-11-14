@@ -735,6 +735,42 @@ model DiaryEntry {
   @@map("diary_entries")
 }
 
+model DiaryPolicy {
+  id String @id @default(uuid())
+  schoolId String @unique
+  mode String @default("SUBJECT")
+  deadline String @default("15:00")
+  weekdays Json
+  updatedAt DateTime @updatedAt
+  @@map("diary_policies")
+}
+
+model DiaryView {
+  id String @id @default(uuid())
+  schoolId String
+  diaryEntryId String
+  studentId String
+  viewedAt DateTime @default(now())
+  @@unique([diaryEntryId, studentId])
+  @@index([schoolId, diaryEntryId])
+  @@map("diary_views")
+}
+
+model LoanRequest {
+  id String @id @default(uuid())
+  schoolId String
+  payload Json
+  status String @default("PENDING")
+  requestedById String
+  decidedById String?
+  decidedAt DateTime?
+  decisionNote String? @db.VarChar(300)
+  loanId String? @unique
+  createdAt DateTime @default(now())
+  @@index([schoolId, status])
+  @@map("loan_requests")
+}
+
 model DiaryAttachment {
   id           String @id @default(uuid())
   schoolId     String
@@ -1726,6 +1762,7 @@ model StaffLoan {
   issuedOn    DateTime   @db.Date
   accountId   String // paid out of this account
   installment Decimal    @db.Decimal(12, 2) // recovered from each salary
+  recoveryMethod String @default("SALARY")
   startPeriod String     @db.VarChar(7) // first payroll month that recovers it
   note        String?    @db.VarChar(300)
   status      LoanStatus @default(ACTIVE)

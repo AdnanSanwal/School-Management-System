@@ -1,0 +1,1 @@
+ALTER TABLE `staff_loans` ADD COLUMN `recoveryMethod` VARCHAR(191) NOT NULL DEFAULT 'SALARY';

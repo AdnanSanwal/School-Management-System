@@ -22,6 +22,8 @@ See [Reports and verification](docs/REPORTS.md) for report coverage, filters, re
 
 Owners and principals can review branch activity in **System → Audit log**. See [Audit log](docs/AUDIT_LOG.md) for filters, permissions and history coverage.
 
+See [School workflow changes](docs/SCHOOL_CHANGE_REQUIREMENTS.md) for the revised dashboards, delegated loan approval, configurable diary rules, migration steps and retained QA logins.
+
 **Stack:** Node 20 + Express + Prisma (MySQL) · Next.js 14 web panel · Expo (React Native) mobile app · Redis (optional in development).
 
 ---

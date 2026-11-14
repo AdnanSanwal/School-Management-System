@@ -33,7 +33,7 @@ export default function StudentProfilePage() {
   const { data: s, isLoading, error } = useQuery({ queryKey: ['student', id], queryFn: () => studentsAPI.get(id) });
   const refresh = () => { qc.invalidateQueries({ queryKey: ['student', id] }); qc.invalidateQueries({ queryKey: ['students'] }); };
 
-  const [modal, setModal] = useState<null | 'section' | 'doc' | 'concession' | 'fee' | { loginFor: any } | 'studentLogin'>(null);
+  const [modal, setModal] = useState<null | 'edit' | 'section' | 'doc' | 'concession' | 'fee' | { loginFor: any } | 'studentLogin'>(null);
   const [issued, setIssued] = useState<{ name: string; username: string } | null>(null);
   const mayCreate = useCreatableRoles();
   const manage = can(role, 'manageStudents');
@@ -50,8 +50,10 @@ export default function StudentProfilePage() {
         <>
           {can(role, 'collectFees') && <Link href={`/fees?student=${s.id}`} className="btn btn-primary"><Wallet className="h-4 w-4" /> Collect fee</Link>}
           {manage && <button className="btn btn-secondary" onClick={() => setModal('section')}>Change class</button>}
+          {manage && <button className="btn btn-primary" onClick={() => setModal('edit')}>Edit profile</button>}
         </>
       )}>
+      {modal === 'edit' && s && <EditStudent student={s} onClose={() => setModal(null)} onSaved={refresh} />}
       {isLoading && <Spinner />}
       {error && <div className="card text-sm text-red-600">{apiError(error, 'Student not found')}</div>}
       {s && (
@@ -438,4 +440,10 @@ function MonthlyFeeModal({ s, currency, onClose, onDone }: { s: any; currency: s
       </form>
     </Modal>
   );
+}
+
+function EditStudent({student,onClose,onSaved}:{student:any;onClose:()=>void;onSaved:()=>void}) {
+  const [f,setF]=useState({name:student.name??'',admissionNo:student.admissionNo??'',rollNo:student.rollNo??'',gender:student.gender??'',dateOfBirth:student.dateOfBirth?.slice(0,10)??'',admissionDate:student.admissionDate?.slice(0,10)??'',bloodGroup:student.bloodGroup??'',address:student.address??''});
+  const save=useMutation({mutationFn:()=>studentsAPI.update(student.id,{...Object.fromEntries(Object.entries(f).filter(([k,v])=>v!==''||['rollNo','bloodGroup','address'].includes(k))),dateOfBirth:f.dateOfBirth||null,gender:f.gender||null}),onSuccess:()=>{toast.success('Student profile updated');onSaved();onClose();},onError:e=>toast.error(apiError(e))});
+  return <Modal open onClose={onClose} title="Edit student profile" wide><form className="space-y-4" onSubmit={e=>{e.preventDefault();save.mutate();}}><div className="grid gap-3 sm:grid-cols-2">{([['name','Full name'],['admissionNo','Admission number'],['rollNo','Roll number'],['dateOfBirth','Date of birth'],['admissionDate','Admission date'],['bloodGroup','Blood group']] as const).map(([k,label])=><Field key={k} label={label}><input className="input w-full" required={k==='name'||k==='admissionNo'} type={k==='dateOfBirth'||k==='admissionDate'?'date':'text'} max={k==='dateOfBirth'?todayIso():undefined} value={f[k]} onChange={e=>setF({...f,[k]:e.target.value})}/></Field>)}<Field label="Gender"><select className="select w-full" value={f.gender} onChange={e=>setF({...f,gender:e.target.value})}><option value="">Not specified</option><option value="MALE">Male</option><option value="FEMALE">Female</option><option value="OTHER">Other</option></select></Field></div><Field label="Address"><textarea className="input w-full" rows={3} maxLength={500} value={f.address} onChange={e=>setF({...f,address:e.target.value})}/></Field><div className="flex justify-end gap-2"><button type="button" className="btn-secondary" onClick={onClose}>Cancel</button><button className="btn-primary" disabled={save.isPending}>Save profile</button></div></form></Modal>;
 }

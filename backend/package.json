@@ -14,7 +14,8 @@
     "db:studio": "prisma studio",
     "db:generate": "prisma generate",
     "postinstall": "prisma generate",
-    "db:seed:reports": "ts-node --files src/database/seedReports.ts"
+    "db:seed:reports": "ts-node --files src/database/seedReports.ts",
+    "db:seed:workflows": "ts-node --files src/database/seedSchoolWorkflows.ts"
   },
   "prisma": {
     "seed": "ts-node src/database/seed.ts"

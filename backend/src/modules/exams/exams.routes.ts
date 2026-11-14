@@ -54,9 +54,13 @@ router.put('/grade-scale', can('exam.manage'), handler(async (req, res) => {
 
 // ─── Exams ───
 
+router.get('/options', can('exam.view'), handler(async (_req,res)=>sendSuccess(res,{years:await prisma.academicYear.findMany({select:{id:true,name:true,isCurrent:true},orderBy:{startDate:'desc'}})})));
+
 router.get('/', can('exam.view'), handler(async (req, res) => {
   const user = me(req);
-  const year = await currentAcademicYear();
+  const q=parseQuery(z.object({academicYearId:id.optional()}),req);
+  const year=q.academicYearId?await prisma.academicYear.findFirst({where:{id:q.academicYearId}}):await currentAcademicYear();
+  if(!year)throw new AppError('Academic year not found',404);
   // Parents/students/teachers never see drafts.
   const where: Prisma.ExamWhereInput = {
     academicYearId: year.id,
@@ -66,12 +70,14 @@ router.get('/', can('exam.view'), handler(async (req, res) => {
     where, orderBy: [{ startDate: 'desc' }, { createdAt: 'desc' }],
     include: { subjects: { select: { classId: true, class: { select: { name: true, level: true } }, _count: { select: { marks: true } } } } },
   });
+  const strength = await prisma.section.findMany({ select: { classId: true, _count: { select: { students: { where: { status: 'ACTIVE' } } } } } });
   return sendSuccess(res, exams.map(({ subjects, ...e }) => ({
     ...e,
     startDate: e.startDate ? toIso(e.startDate) : null,
     endDate: e.endDate ? toIso(e.endDate) : null,
     classes: [...new Map(subjects.map((s) => [s.classId, s.class])).values()].sort((a, b) => a.level - b.level).map((c) => c.name),
     papers: subjects.length,
+    marksExpected: subjects.reduce((n, s) => n + strength.filter(sec => sec.classId === s.classId).reduce((total, sec) => total + sec._count.students, 0), 0),
     marksEntered: subjects.reduce((n, s) => n + s._count.marks, 0),
   })));
 }));

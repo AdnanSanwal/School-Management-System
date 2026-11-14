@@ -226,8 +226,14 @@ router.post('/', can('student.admit'), handler(async (req, res) => {
 // Sibling detection at admission: find existing guardians by phone/CNIC.
 router.get('/guardians/search', can('student.manage', 'student.admit'), handler(async (req, res) => {
   const { q } = parseQuery(z.object({ q: z.string().min(4).max(32) }), req);
+  const digits = q.replace(/\D/g, '');
+  if (digits.length < 4) throw new AppError('Enter at least four digits of a phone number or CNIC', 422);
+  // Normalize formatting in SQL, with bound values and an explicit tenant predicate.
+  // Both 03xx and +923xx phone formats refer to the same existing guardian.
+  const variants = [digits, ...(digits.startsWith('0') ? ['92' + digits.slice(1)] : digits.startsWith('92') ? ['0' + digits.slice(2)] : [])];
+  const matches = await prisma.$queryRaw<{ id: string }[]>(Prisma.sql`SELECT id FROM guardians WHERE schoolId = ${currentSchoolId()} AND (${Prisma.join(variants.map(v => Prisma.sql`REGEXP_REPLACE(phone, '[^0-9]', '') LIKE ${'%' + v + '%'} OR REGEXP_REPLACE(cnic, '[^0-9]', '') LIKE ${'%' + v + '%'}`), ' OR ')}) ORDER BY name, id LIMIT 10`);
   const rows = await prisma.guardian.findMany({
-    where: { OR: [{ phone: { contains: q } }, { cnic: { contains: q } }] },
+    where: { id: { in: matches.map(r => r.id) } },
     take: 10,
     include: { students: { include: { student: { select: { id: true, name: true, admissionNo: true, status: true } } } } },
   });
@@ -245,16 +251,19 @@ router.put('/:id/monthly-fee', can('student.fee.set'), handler(async (req, res) 
 }));
 
 router.patch('/:id', can('student.manage'), handler(async (req, res) => {
-  const { dateOfBirth, admissionDate, ...body } = parseBody(patchOf(studentFields).strict(), req);
+  const { dateOfBirth, admissionDate, ...body } = parseBody(patchOf(studentFields).extend({ dateOfBirth: dateOnly.nullable().optional(), gender: z.enum(['MALE','FEMALE','OTHER']).nullable().optional() }).strict(), req);
+  for (const date of [dateOfBirth,admissionDate].filter((v):v is string=>!!v)) if (toIso(toDate(date))!==date) throw new AppError('Choose a valid calendar date',422);
+  if (dateOfBirth && toDate(dateOfBirth)>await schoolToday()) throw new AppError('Date of birth cannot be in the future',422);
   if (body.sectionId) await ensureInSchool(prisma.section, body.sectionId, 'Section');
   const student = await prisma.student.update({
     where: { id: req.params.id },
     data: {
       ...body,
-      ...(dateOfBirth ? { dateOfBirth: toDate(dateOfBirth) } : {}),
+      ...(dateOfBirth !== undefined ? { dateOfBirth: dateOfBirth ? toDate(dateOfBirth) : null } : {}),
       ...(admissionDate ? { admissionDate: toDate(admissionDate) } : {}),
     },
   });
+  await audit(req, { action: 'Student profile updated', entity: 'students', entityId: student.id, meta: { fields: Object.keys(req.body) } });
   return sendSuccess(res, student, 'Student updated');
 }));
 

@@ -53,6 +53,7 @@ export default function AdmissionPage() {
   };
 
   const linkExisting = (g: any) => {
+    if (guardians.some(x => x.kind === 'existing' && x.guardianId === g.id)) return toast.error('This guardian is already linked');
     const existing: GuardianDraft = {
       kind: 'existing', guardianId: g.id, name: g.name, phone: g.phone, children: g.children.map((c: any) => c.name),
       relation: 'FATHER', isPrimary: !guardians.some((x) => x.isPrimary && (x.kind === 'existing' || x.name)),

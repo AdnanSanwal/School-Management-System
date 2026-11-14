@@ -10,11 +10,13 @@ import { diaryAPI, academicsAPI, apiError } from '@/lib/api';
 import { CAN, can } from '@/lib/roles';
 import { formatDate, formatDateTime, sectionLabel, todayIso } from '@/lib/utils';
 import { useAuthStore } from '@/store/authStore';
+import DiaryOverview from '@/components/DiaryOverview';
 
 export default function DiaryPage() {
   const role = useAuthStore((s) => s.user?.role);
   const poster = can(role, 'postDiary');
   const [sectionId, setSectionId] = useState('');
+  const [view,setView]=useState<'overview'|'entries'>('overview');
   const qc = useQueryClient();
   const { data, isLoading } = useQuery({
     queryKey: ['diary', sectionId],
@@ -28,8 +30,8 @@ export default function DiaryPage() {
   const rows: any[] = data?.data ?? [];
 
   return (
-    <DashboardLayout title="Daily diary" allowedRoles={CAN.viewDiary} subtitle="Homework and class updates parents see in the app">
-      <div className="grid gap-4 lg:grid-cols-3">
+    <DashboardLayout title="Daily diary" allowedRoles={CAN.viewDiary} subtitle="Monitor homework and class updates across your school" actions={<button className="btn-primary" onClick={()=>setView(view==='overview'?'entries':'overview')}>{view==='overview'?(poster?'Post / view diaries':'View diary entries'):'Dashboard overview'}</button>}>
+      {view==='overview'?<DiaryOverview onEntries={()=>setView('entries')}/>:<div className="grid gap-4 lg:grid-cols-3">
         {poster && <PostForm />}
         <div className={poster ? 'space-y-3 lg:col-span-2' : 'space-y-3 lg:col-span-3'}>
           <div className="flex justify-end"><SectionSelect value={sectionId} onChange={setSectionId} includeAll="All my sections" className="w-56" /></div>
@@ -55,7 +57,7 @@ export default function DiaryPage() {
             </article>
           ))}
         </div>
-      </div>
+      </div>}
     </DashboardLayout>
   );
 }

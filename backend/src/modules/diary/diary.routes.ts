@@ -14,11 +14,13 @@ import { assertKind, deleteFile, MIME, saveFile, signedUrl } from '../../utils/s
 import { uploadMany } from '../files/files.routes';
 import { familiesOfSections, notify } from '../../utils/notify';
 import type { JwtPayload } from '../../utils/jwt';
+import dashboardRoutes from './dashboard.routes';
 
 // Daily diary & homework (spec §8 Teacher → Post Daily Diary; §10 Parents → Daily Diary).
 
 const router = Router();
 router.use(authenticate);
+router.use(dashboardRoutes);
 
 const include = {
   section: { select: { id: true, name: true, class: { select: { name: true } } } },

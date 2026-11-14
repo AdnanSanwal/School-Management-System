@@ -247,6 +247,7 @@ export type PayrollRun = {
   account: string | null; createdBy: string | null; decidedBy: string | null; paidBy: string | null;
   totals: { staff: number; gross: string; bonus: string; deductions: string; absence: string; loans: string; net: string };
   lines: PayrollLine[]; missing: { id: string; name: string; employeeNo: string }[];
+  paymentReference?:string|null;paymentNote?:string|null;
 };
 
 /** Payroll: monthly runs, payslips, advances and loans. */
@@ -259,7 +260,7 @@ export const payrollAPI = {
   submit: (id: string) => api.post(`/payroll/runs/${id}/submit`),
   decide: (id: string, approve: boolean, note?: string) => api.post(`/payroll/runs/${id}/decision`, { approve, note }),
   reopen: (id: string) => api.post(`/payroll/runs/${id}/reopen`),
-  pay: (id: string, body: { accountId: string; paymentDate: string }) => api.post(`/payroll/runs/${id}/pay`, body),
+  pay: (id: string, body: { accountId: string; paymentDate: string;paymentReference?:string;paymentRemarks?:string }) => api.post(`/payroll/runs/${id}/pay`, body),
   remove: (id: string) => api.delete(`/payroll/runs/${id}`),
   bankSheet: async (id: string, format: 'xlsx' | 'pdf') => {
     const res = await api.get(`/payroll/runs/${id}/bank-sheet`, { params: { format }, responseType: 'blob' });
@@ -272,7 +273,10 @@ export const payrollAPI = {
   payslip: (lineId: string) => data<any>(api.get(`/payroll/lines/${lineId}/payslip`)),
   my: () => data<any>(api.get('/payroll/my')),
   loans: (params?: { status?: string; staffId?: string }) => data<{ loans: any[]; totals: { outstanding: string; active: number } }>(api.get('/payroll/loans', { params })),
-  addLoan: (body: any) => api.post('/payroll/loans', body),
+  addLoan: (body: any) => api.post('/payroll/loan-requests', body),
+  loanRequests: () => data<any[]>(api.get('/payroll/loan-requests')),
+  decideLoan: (id: string, approve: boolean, note?: string) => api.post(`/payroll/loan-requests/${id}/decision`, { approve, note }),
+  disburseLoan: (id: string,paymentDate?:string) => api.post(`/payroll/loan-requests/${id}/disburse`,{paymentDate}),
   repayLoan: (id: string, body: any) => api.post(`/payroll/loans/${id}/repayments`, body),
   deleteLoan: (id: string) => api.delete(`/payroll/loans/${id}`),
 };
@@ -400,6 +404,15 @@ export const feesAPI = {
 };
 
 export const diaryAPI = {
+  options:()=>data<{teachers:{id:string;name:string}[]}>(api.get('/diary/options')),
+  dashboard: (params: Record<string, string>) => data<any>(api.get('/diary/dashboard', { params })),
+  policy: () => data<{mode:string;deadline:string;weekdays:number[]}>(api.get('/diary/policy')),
+  savePolicy: (body: {mode:string;deadline:string;weekdays:number[]}) => api.put('/diary/policy',body),
+  markViews: (studentId:string,entryIds:string[]) => api.post('/diary/views',{studentId,entryIds},{silent:true}),
+  exportDashboard: async (params: Record<string,string>,format:'pdf'|'xlsx') => {
+    const r=await api.get('/diary/dashboard',{params:{...params,format},responseType:'blob'});
+    const url=URL.createObjectURL(r.data);const a=document.createElement('a');a.href=url;a.download=`daily-diary.${format}`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+  },
   list: (params?: any) => page(api.get('/diary', { params })),
   post: (form: FormData) => data(api.post('/diary', form)),
   remove: (id: string) => api.delete(`/diary/${id}`),
@@ -421,7 +434,8 @@ export const calendarAPI = {
 };
 
 export const examsAPI = {
-  list: () => data<any[]>(api.get('/exams')),
+  list: (academicYearId?:string) => data<any[]>(api.get('/exams',{params:{academicYearId:academicYearId||undefined}})),
+  options: () => data<{years:{id:string;name:string;isCurrent:boolean}[]}>(api.get('/exams/options')),
   get: (id: string) => data(api.get(`/exams/${id}`)),
   create: (body: any) => data(api.post('/exams', body)),
   update: (id: string, body: any) => data(api.patch(`/exams/${id}`, body)),

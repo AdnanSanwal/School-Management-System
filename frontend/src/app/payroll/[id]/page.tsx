@@ -54,7 +54,7 @@ export default function PayrollRunPage() {
 
   return (
     <DashboardLayout title={run ? `Payroll — ${run.label}` : 'Payroll'} allowedRoles={CAN.viewPayroll}
-      subtitle={run ? [run.createdBy && `Prepared by ${run.createdBy}`, run.status !== 'DRAFT' && run.decidedBy && `approved by ${run.decidedBy}`, run.paymentDate && `paid ${formatDate(run.paymentDate)} from ${run.account}`].filter(Boolean).join(' · ') : undefined}
+      subtitle={run ? [run.createdBy && `Prepared by ${run.createdBy}`, run.status !== 'DRAFT' && run.decidedBy && `approved by ${run.decidedBy}`, run.paymentDate && `paid ${formatDate(run.paymentDate)} from ${run.account}`,run.paymentReference&&`Ref: ${run.paymentReference}`].filter(Boolean).join(' · ') : undefined}
       actions={run ? <>
         <Link href="/payroll" className="btn-secondary"><ArrowLeft className="h-4 w-4" /> All months</Link>
         {draft && canManage && <>
@@ -226,7 +226,7 @@ function PayModal({ run, onClose, onPaid }: { run: PayrollRun; onClose: () => vo
   const { money } = useFinance();
   const accounts = useAccounts();
   const active = (accounts.data ?? []).filter((a) => a.isActive);
-  const [f, setF] = useState({ accountId: '', paymentDate: todayIso() });
+  const [f, setF] = useState({ accountId: '', paymentDate: todayIso(),paymentReference:'',paymentRemarks:'' });
   const account = active.find((a) => a.id === f.accountId);
   const short = account && Number(account.balance) < Number(run.totals.net);
   const pay = useMutation({
@@ -244,7 +244,7 @@ function PayModal({ run, onClose, onPaid }: { run: PayrollRun; onClose: () => vo
           <Field label="Payment date"><input type="date" required className="input" max={todayIso()} value={f.paymentDate} onChange={(e) => setF({ ...f, paymentDate: e.target.value })} /></Field>
         </div>
         {short && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{account.name} holds only {money(account.balance)}. Transfer money into it first (Finance → Accounts).</p>}
-        <div className="flex justify-end gap-2 pt-2"><button type="button" className="btn-secondary" onClick={onClose}>Cancel</button><button className="btn-primary" disabled={pay.isPending || !!short}>Pay {money(run.totals.net)}</button></div>
+        <Field label="Transaction reference"><input className="input w-full" maxLength={120} value={f.paymentReference} onChange={e=>setF({...f,paymentReference:e.target.value})}/></Field><Field label="Payment remarks"><textarea className="input w-full" maxLength={300} value={f.paymentRemarks} onChange={e=>setF({...f,paymentRemarks:e.target.value})}/></Field><div className="flex justify-end gap-2 pt-2"><button type="button" className="btn-secondary" onClick={onClose}>Cancel</button><button className="btn-primary" disabled={pay.isPending || !!short}>Pay {money(run.totals.net)}</button></div>
       </form>
     </Modal>
   );
