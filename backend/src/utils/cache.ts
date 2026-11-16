@@ -84,20 +84,3 @@ export async function invalidate(...keys: string[]) {
   }
 }
 
-/** Invalidate all keys matching a prefix pattern (e.g. "students:*"). */
-export async function invalidatePattern(pattern: string) {
-  const client = getClient();
-  if (!client) return;
-  try {
-    const keys: string[] = [];
-    let cursor = '0';
-    do {
-      const [next, batch] = await client.scan(cursor, 'MATCH', pattern, 'COUNT', 100);
-      cursor = next;
-      keys.push(...batch);
-    } while (cursor !== '0');
-    if (keys.length) await client.del(...keys);
-  } catch {
-    logger.warn(`cache pattern invalidation failed: ${pattern}`);
-  }
-}

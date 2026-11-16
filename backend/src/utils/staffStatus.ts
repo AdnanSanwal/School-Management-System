@@ -8,7 +8,6 @@ import type { StaffStatus } from '@prisma/client';
  */
 export const ON_ROLL: StaffStatus[] = ['ACTIVE', 'TEMPORARY_LEAVE'];
 export const onRoll = { in: ON_ROLL };
-export const STAFF_STATUSES: StaffStatus[] = ['ACTIVE', 'INACTIVE', 'TEMPORARY_LEAVE', 'LEFT', 'TERMINATED'];
 export const STAFF_STATUS_LABEL: Record<StaffStatus, string> = {
   ACTIVE: 'Active', INACTIVE: 'Inactive', TEMPORARY_LEAVE: 'Temporary leave', LEFT: 'Left', TERMINATED: 'Terminated',
 };

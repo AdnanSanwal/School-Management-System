@@ -97,10 +97,6 @@ export async function accountBalances(opts: { before?: Date } = {}) {
   });
 }
 
-export async function accountBalance(accountId: string) {
-  return (await accountBalances()).find((a) => a.id === accountId)?.balance ?? D(0);
-}
-
 export type Movement = {
   id: string; kind: 'FEE' | 'INCOME' | 'EXPENSE' | 'OPENING' | 'ADVANCE' | 'LOAN_REPAYMENT' | 'JOURNAL' | (typeof IN_TYPES)[number] | 'WITHDRAWAL' | 'ADJUSTMENT_OUT' | 'TRANSFER_OUT';
   date: string; accountId: string; description: string; reference: string | null;

@@ -7,8 +7,7 @@
     "dev:turbo": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint .",
-    "test": "jest --passWithNoTests"
+    "lint": "eslint ."
   },
   "dependencies": {
     "@hookform/resolvers": "^7.0.6",
@@ -18,7 +17,6 @@
     "axios": "^1.21.1",
     "chart.js": "^4.4.3",
     "clsx": "^2.1.1",
-    "date-fns": "^3.6.0",
     "lucide-react": "^0.400.0",
     "next": "16.4.6",
     "react": "^19.3.1",
@@ -26,7 +24,6 @@
     "react-dom": "^19.3.1",
     "react-hook-form": "^7.52.1",
     "react-hot-toast": "^2.4.1",
-    "socket.io-client": "^4.7.5",
     "tailwind-merge": "^2.4.0",
     "zod": "^4.6.7",
     "zustand": "^4.5.4"

@@ -82,7 +82,7 @@ git history (54 commits, every ref), and the production compose file exposes onl
 | SEC-4 | Local `refs/stash` holds a committed `.next-dev` build (no secrets found). | Open — drop with `git stash drop` (needs your OK; not pushed anywhere). |
 | INFRA-4 | Caddy `/metrics` 404 rule never ran. | Fixed† (`handle @internal`; `/ready` also hidden). |
 | INFRA-5 | Redis without password; MySQL root password on a command line; no resource limits; no TLS inside the Docker network. | Redis password + healthcheck Fixed†; limits/TLS Open. |
-| DEP-3 | `services/notifications` has no lockfile. | Open (delete the unused service). |
+| DEP-3 | `services/notifications` has no lockfile. | Closed: the unused service was deleted (16 Nov 2026). |
 | CI-2 | Actions pinned to tags; no `permissions:`. | Fixed: SHA pins, `contents: read` default. |
 
 ## Checklist items verified as already in place (evidence in SECURITY_TEST_REPORT.md)

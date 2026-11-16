@@ -24,7 +24,7 @@ Owners and principals can review branch activity in **System → Audit log**. Se
 
 See [School workflow changes](docs/SCHOOL_CHANGE_REQUIREMENTS.md) for the revised dashboards, delegated loan approval, configurable diary rules, migration steps and retained QA logins.
 
-**Stack:** Node 20 + Express + Prisma (MySQL) · Next.js 14 web panel · Expo (React Native) mobile app · Redis (optional in development).
+**Stack:** Node 22 + Express + Prisma (MySQL) · Next.js 16 web panel · Expo (React Native) mobile app · Redis (optional in development).
 
 ---
 
@@ -220,8 +220,8 @@ Compose sets `DATABASE_URL`, `REDIS_URL` and `UPLOAD_DIR` for the containers its
 `backend/.env`. Uploaded files are kept in the `uploads_data` volume. Change the database passwords with
 `MYSQL_PASSWORD` / `MYSQL_ROOT_PASSWORD` environment variables before the first start.
 
-`docker compose up -d` with no service names also starts the optional monitoring stack (nginx,
-Prometheus, Grafana, ELK).
+`docker compose up -d` with no service names also starts the optional extras (nginx,
+Prometheus, Grafana).
 
 ```bash
 docker compose logs -f backend      # follow API logs
@@ -230,8 +230,6 @@ docker compose down -v              # stop and DELETE the database and uploads
 ```
 
 This compose file is for trying things out. For a real server use `docker-compose.prod.yml` (HTTPS, backups) — see [Deploy to a server](#deploy-to-a-server).
-
-> The Kubernetes manifests in `k8s/` were written for the earlier PostgreSQL version and have not been updated yet.
 
 ---
 

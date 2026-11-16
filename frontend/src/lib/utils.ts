@@ -13,17 +13,9 @@ export function formatMoney(amount: string | number | null | undefined, currency
   }).format(n);
 }
 
-/** Kept for older components. */
-export const formatCurrency = (amount: number, currency = 'PKR') => formatMoney(amount, currency);
-
 export function formatDate(date: string | Date, options?: Intl.DateTimeFormatOptions) {
   // Date-only strings are UTC midnight; format in UTC so the day does not shift.
   return new Intl.DateTimeFormat('en-GB', { timeZone: 'UTC', ...(options || { dateStyle: 'medium' }) }).format(new Date(date));
-}
-
-/** A moment (timestamp) shown as a date in the viewer's own time zone. */
-export function formatLocalDate(date: string | Date) {
-  return new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium' }).format(new Date(date));
 }
 
 export function formatDateTime(date: string | Date) {

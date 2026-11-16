@@ -46,13 +46,6 @@ export function setupSentryErrorHandler(app: Express) {
   Sentry.setupExpressErrorHandler(app);
 }
 
-export function captureError(err: Error, context?: Record<string, unknown>) {
-  Sentry.withScope((scope) => {
-    if (context) scope.setExtras(context);
-    Sentry.captureException(err);
-  });
-}
-
 /** Removes bodies, query strings (signed links), cookies, headers and user details from a Sentry event. */
 export function scrubEvent<T extends { request?: Record<string, unknown>; user?: unknown; extra?: unknown; breadcrumbs?: unknown; spans?: unknown }>(event: T): T {
   if (event.request) {

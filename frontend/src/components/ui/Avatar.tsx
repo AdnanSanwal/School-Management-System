@@ -53,22 +53,3 @@ export function Avatar({ name, src, size = 'md', shape = 'rounded', className }:
     </div>
   );
 }
-
-export function AvatarGroup({ names, max = 4 }: { names: string[]; max?: number }) {
-  const visible = names.slice(0, max);
-  const overflow = names.length - max;
-  return (
-    <div className="flex items-center">
-      {visible.map((name, i) => (
-        <div key={i} className="-ml-2 first:ml-0 ring-2 ring-white rounded-xl">
-          <Avatar name={name} size="sm" />
-        </div>
-      ))}
-      {overflow > 0 && (
-        <div className="-ml-2 w-8 h-8 rounded-xl bg-gray-100 text-gray-600 text-xs font-semibold flex items-center justify-center ring-2 ring-white">
-          +{overflow}
-        </div>
-      )}
-    </div>
-  );
-}

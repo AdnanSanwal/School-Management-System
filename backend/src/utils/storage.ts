@@ -76,10 +76,6 @@ export async function deleteFile(key: string | null | undefined) {
   await fs.rm(fullPath(key), { force: true });
 }
 
-export function keyBelongsTo(key: string, schoolId: string) {
-  return key.startsWith(`${schoolId}/`);
-}
-
 // ─── Signed URLs ───
 
 function secret() {

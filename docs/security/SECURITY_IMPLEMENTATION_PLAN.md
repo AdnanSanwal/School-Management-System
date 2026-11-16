@@ -34,5 +34,5 @@ What was done in this audit, and the prioritized work that remains. IDs refer to
 | 11 | FILE-1, HOOK-5 | Per-school storage quota; per-school SMS limit on `/messaging/test`; timeouts on Twilio/Expo/web-push calls. | S | | |
 | 12 | LOG-4/5 | Audit exports; retention job for audit logs / notifications / outbound messages; written erasure & export procedure. | M | legal input | |
 | 13 | AUTH-15 | Optional HIBP k-anonymity check for new passwords. | S | outbound internet from server | |
-| 14 | SEC-4, DEP-3, k8s | `git stash drop`; delete `services/notifications` and `k8s/` if unused. | S | your OK | Housekeeping. |
+| 14 | SEC-4, DEP-3, k8s | `git stash drop`. (`services/notifications` and `k8s/` were deleted on 16 Nov 2026.) | S | your OK | Housekeeping. |
 | 15 | INFRA-5 | `mem_limit`/`cpus` in prod compose; MySQL `require_secure_transport` if the DB ever leaves the Docker network. | S | | |

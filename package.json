@@ -13,7 +13,7 @@
     "dev:turbo": "concurrently \"npm run dev:backend\" \"npm run dev:turbo --workspace=frontend\"",
     "build": "npm run build --workspace=backend && npm run build --workspace=frontend",
     "start:prod": "npm run build && concurrently \"npm run start --workspace=backend\" \"npm run start --workspace=frontend\"",
-    "test": "npm run test --workspaces",
+    "test": "npm run test --workspaces --if-present",
     "lint": "npm run lint --workspaces",
     "db:migrate": "npm run db:migrate --workspace=backend",
     "db:seed": "npm run db:seed --workspace=backend",

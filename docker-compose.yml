@@ -151,63 +151,6 @@ services:
       - '--path.sysfs=/host/sys'
       - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
 
-  # ─── Logging (ELK Stack) ────────────────────────────────────────────────────
-  elasticsearch:
-    image: docker.elastic.co/elasticsearch/elasticsearch:8.14.0
-    container_name: sms_elasticsearch
-    restart: unless-stopped
-    environment:
-      - discovery.type=single-node
-      - xpack.security.enabled=false
-      - ES_JAVA_OPTS=-Xms512m -Xmx512m
-    ports: ['127.0.0.1:9200:9200']
-    volumes:
-      - elasticsearch_data:/usr/share/elasticsearch/data
-    healthcheck:
-      test: ['CMD-SHELL', 'curl -s http://localhost:9200/_cluster/health | grep -q "green\|yellow"']
-      interval: 30s
-      timeout: 10s
-      retries: 5
-
-  logstash:
-    image: docker.elastic.co/logstash/logstash:8.14.0
-    container_name: sms_logstash
-    restart: unless-stopped
-    depends_on:
-      elasticsearch:
-        condition: service_healthy
-    ports: ['127.0.0.1:5044:5044', '127.0.0.1:9600:9600']
-    volumes:
-      - ./monitoring/logstash/pipeline:/usr/share/logstash/pipeline:ro
-      - ./logs:/logs:ro
-
-  kibana:
-    image: docker.elastic.co/kibana/kibana:8.14.0
-    container_name: sms_kibana
-    restart: unless-stopped
-    depends_on:
-      elasticsearch:
-        condition: service_healthy
-    ports: ['127.0.0.1:5601:5601']
-    environment:
-      ELASTICSEARCH_HOSTS: http://elasticsearch:9200
-
-  # ─── Microservice: Notifications ────────────────────────────────────────────
-  notifications-service:
-    build:
-      context: ./services/notifications
-      dockerfile: Dockerfile
-    container_name: sms_notifications_svc
-    restart: unless-stopped
-    depends_on:
-      redis:
-        condition: service_healthy
-    env_file: .env
-    environment:
-      REDIS_URL: redis://redis:6379
-      PORT: '5010'
-    ports: ['127.0.0.1:5010:5010']
-
   # ─── Error Tracking ─────────────────────────────────────────────────────────
   # Sentry is SaaS — configure SENTRY_DSN in .env
   # Uncomment below to self-host Sentry OSS instead:
@@ -219,4 +162,3 @@ volumes:
   redis_data:
   prometheus_data:
   grafana_data:
-  elasticsearch_data:
