@@ -3,13 +3,16 @@ import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-nati
 import { useQuery } from '@tanstack/react-query';
 import { API } from '../lib/api';
 import { useChildStore } from '../store/childStore';
+import { useAuthStore } from '../store/authStore';
 import { colors } from '../lib/theme';
 import { sectionName } from '../lib/format';
 
 /** Children of the signed-in parent; selecting one drives every family screen. */
 export function useChildren() {
   const { childId, setChild } = useChildStore();
-  const q = useQuery({ queryKey: ['children'], queryFn: API.children });
+  // Only family logins have children; the server refuses this list to staff, who also open the shared screens.
+  const role = useAuthStore((st) => st.user?.role);
+  const q = useQuery({ queryKey: ['children'], queryFn: API.children, enabled: role === 'PARENT' || role === 'STUDENT' });
   useEffect(() => {
     if (q.data?.length && !q.data.some((c) => c.id === childId)) setChild(q.data[0].id);
   }, [q.data, childId, setChild]);
