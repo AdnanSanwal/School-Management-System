@@ -3,7 +3,6 @@ import logger from './logger';
 // Lazy import to avoid crash when Redis is unavailable
 function getClient() {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { getRedis } = require('../config/redis');
     return getRedis() as import('ioredis').Redis;
   } catch {

@@ -4,7 +4,6 @@ import logger from './logger';
 
 function getProfilingIntegration() {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { nodeProfilingIntegration } = require('@sentry/profiling-node');
     return nodeProfilingIntegration();
   } catch {

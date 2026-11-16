@@ -16,7 +16,7 @@ const suite=process.env.RUN_DB_TESTS==='1'?describe:describe.skip;
 jest.setTimeout(180_000);
 suite('Reports — persistent QA fixtures, filters, permissions and exports',()=>{
   let f:Awaited<ReturnType<typeof seedReports>>;
-  let owner:string; let tokens:Record<string,string>={};let chart:any[]=[];
+  let owner:string; const tokens:Record<string,string>={};let chart:any[]=[];
   const exportsPath=path.resolve(__dirname,'../../../../artifacts/reports-qa');
   const query=(type:string,q:Record<string,string>={})=>`/api/v1/reports/${type}?${new URLSearchParams({format:'view',...q})}`;
   const get=(type:string,q:Record<string,string>={},token=owner)=>request(app).get(query(type,q)).auth(token,{type:'bearer'});

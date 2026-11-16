@@ -1,5 +1,5 @@
 import { temporaryPassword } from '../../utils/accounts';
-﻿import { Router } from 'express';
+import { Router } from 'express';
 import { z } from 'zod';
 import { basePrisma } from '../../config/database';
 import { authenticate } from '../../middleware/auth';

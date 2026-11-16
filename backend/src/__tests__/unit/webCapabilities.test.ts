@@ -11,7 +11,6 @@ const source = fs.readFileSync(path.join(__dirname, '../../../../frontend/src/li
 const literal = (start: string, end: string): Record<string, string[]> => {
   const from = source.indexOf(start);
   const body = source.slice(from + start.length, source.indexOf(end, from));
-  // eslint-disable-next-line no-new-func
   return new Function(`return {${body}};`)();
 };
 const CAN = literal('export const CAN = {', '} satisfies');

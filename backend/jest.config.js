@@ -5,6 +5,7 @@ const config = {
   roots: ['<rootDir>/src'],
   testMatch: ['**/__tests__/**/*.test.ts'],
   setupFiles: ['<rootDir>/src/__tests__/setup.ts'],
+  setupFilesAfterEnv: ['<rootDir>/src/__tests__/teardown.ts'],
   // The database suites share one MySQL; running them in parallel caused timeouts and
   // deadlock retries that failed whole suites at random. Run them one at a time.
   ...(process.env.RUN_DB_TESTS ? { maxWorkers: 1 } : {}),
