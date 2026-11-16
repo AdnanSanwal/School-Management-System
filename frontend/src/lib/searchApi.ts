@@ -42,6 +42,7 @@ const PAGES: PageLink[] = [
   { label: 'Timetable', href: '/timetable', cap: 'viewTimetable', keywords: 'schedule periods' },
   { label: 'Year-end promotion', href: '/promotions', cap: 'promotion' },
   { label: 'Notices', href: '/notices', cap: 'viewNotices', keywords: 'announcements' },
+  { label: 'Test maker', href: '/testmaker', cap: 'testMaker', keywords: 'question bank paper generator exam quiz mcq print' },
   { label: 'Send a message', href: '/notifications/broadcasts', cap: 'sendBroadcasts', keywords: 'broadcast announce push schedule delivery report' },
   { label: 'Daily diary', href: '/diary', cap: 'viewDiary', keywords: 'homework' },
   { label: 'Calendar', href: '/calendar', cap: 'viewCalendar', keywords: 'events holidays' },

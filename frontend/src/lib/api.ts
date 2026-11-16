@@ -603,3 +603,27 @@ export async function reportDownloadError(err: any) {
   }
   return apiError(err);
 }
+
+/** Test maker: the school's question bank and the papers built from it. */
+export const testmakerAPI = {
+  scope: () => data<{ classes: { id: string; name: string }[]; subjects: { id: string; name: string }[]; pairs: { classId: string; subjectId: string }[] | null }>(api.get('/testmaker/scope')),
+  chapters: (classId: string, subjectId: string) => data<any[]>(api.get('/testmaker/chapters', { params: { classId, subjectId } })),
+  addChapter: (body: any) => data(api.post('/testmaker/chapters', body)),
+  deleteChapter: (id: string) => api.delete(`/testmaker/chapters/${id}`),
+  addTopic: (chapterId: string, body: any) => data(api.post(`/testmaker/chapters/${chapterId}/topics`, body)),
+  deleteTopic: (id: string) => api.delete(`/testmaker/topics/${id}`),
+  questions: (params: any) => page(api.get('/testmaker/questions', { params })),
+  counts: (params: { classId: string; subjectId: string; chapterIds?: string; topicIds?: string }) => data<Record<string, number>>(api.get('/testmaker/questions/counts', { params })),
+  addQuestion: (body: any) => data(api.post('/testmaker/questions', body)),
+  updateQuestion: (id: string, body: any) => data(api.patch(`/testmaker/questions/${id}`, body)),
+  deleteQuestion: (id: string) => api.delete(`/testmaker/questions/${id}`),
+  importQuestions: (chapterId: string, rows: any[]) => api.post('/testmaker/questions/import', { chapterId, rows }).then((r) => r.data as { message: string }),
+  uploadImage: (id: string, file: File) => { const f = new FormData(); f.append('file', file); return data(api.post(`/testmaker/questions/${id}/image`, f, { headers: { 'Content-Type': 'multipart/form-data' } })); },
+  removeImage: (id: string) => data(api.delete(`/testmaker/questions/${id}/image`)),
+  draw: (body: any) => data<{ sections: any[]; short: { type: string; wanted: number; available: number }[] }>(api.post('/testmaker/papers/draw', body, { silent: true })),
+  papers: (params?: any) => page(api.get('/testmaker/papers', { params })),
+  paper: (id: string) => data(api.get(`/testmaker/papers/${id}`)),
+  savePaper: (body: any) => data(api.post('/testmaker/papers', body)),
+  updatePaper: (id: string, body: any) => data(api.put(`/testmaker/papers/${id}`, body)),
+  deletePaper: (id: string) => api.delete(`/testmaker/papers/${id}`),
+};

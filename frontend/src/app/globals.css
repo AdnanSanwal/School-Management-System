@@ -325,3 +325,11 @@
   .print-table th { background: #e2e8f0 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   @page { size: A4 landscape; margin: 12mm; }
 }
+
+/* ─── Test maker: the paper is shown on screen and is the only thing printed, upright ─── */
+@media print {
+  .print-area, .print-area * { visibility: visible; }
+  .print-area { position: absolute; inset: 0 auto auto 0; width: 100%; padding: 0; page: paper; }
+  .print-area .no-print { display: none !important; }
+  @page paper { size: A4 portrait; margin: 12mm; }
+}

@@ -1290,6 +1290,105 @@ enum BroadcastStatus {
   CANCELLED
 }
 
+// ─── Test maker: question bank and papers (modules/testmaker) ───
+
+/// A chapter of a subject as taught in one class.
+model Chapter {
+  id        String   @id @default(uuid())
+  schoolId  String
+  classId   String
+  subjectId String
+  number    Int
+  name      String   @db.VarChar(150)
+  nameUr    String?  @db.VarChar(150)
+  createdAt DateTime @default(now())
+
+  topics    Topic[]
+  questions Question[]
+
+  @@unique([classId, subjectId, number])
+  @@index([schoolId])
+  @@map("chapters")
+}
+
+model Topic {
+  id        String  @id @default(uuid())
+  schoolId  String
+  chapterId String
+  name      String  @db.VarChar(150)
+  nameUr    String? @db.VarChar(150)
+
+  chapter   Chapter    @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  questions Question[]
+
+  @@index([schoolId])
+  @@index([chapterId])
+  @@map("topics")
+}
+
+/// One question in the school's bank. Text is in English, Urdu, or both.
+model Question {
+  id          String       @id @default(uuid())
+  schoolId    String
+  classId     String
+  subjectId   String
+  chapterId   String
+  topicId     String?
+  type        QuestionType
+  textEn      String?      @db.Text
+  textUr      String?      @db.Text
+  /// MCQ: [{ en?, ur? }] choices. MATCH: [{ left: { en?, ur? }, right: { en?, ur? } }] pairs.
+  options     Json?
+  /// MCQ: { index }. TRUE_FALSE: { value }. Others: { en?, ur? } model answer.
+  answer      Json?
+  marks       Decimal      @default(1) @db.Decimal(5, 2)
+  source      String?      @db.VarChar(20) // EXERCISE, CONCEPTUAL, PAST_PAPER, OTHER
+  imageKey    String?      @db.VarChar(255)
+  createdById String
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  chapter Chapter @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  topic   Topic?  @relation(fields: [topicId], references: [id], onDelete: SetNull)
+
+  @@index([schoolId])
+  @@index([classId, subjectId, type])
+  @@index([chapterId, type])
+  @@map("questions")
+}
+
+enum QuestionType {
+  MCQ
+  TRUE_FALSE
+  BLANK
+  SHORT
+  LONG
+  MATCH
+}
+
+/// A finished paper. `sections` holds its own copy of every question, so later changes to
+/// the bank never alter a paper that was already set.
+model Paper {
+  id              String   @id @default(uuid())
+  schoolId        String
+  classId         String
+  subjectId       String
+  title           String   @db.VarChar(150)
+  medium          String   @db.VarChar(4) // EN, UR, DUAL
+  durationMinutes Int?
+  totalMarks      Decimal  @db.Decimal(6, 2)
+  instructions    String?  @db.Text
+  /// [{ title, titleUr?, type, attempt?, items: [{ questionId?, textEn?, textUr?, options?, answer?, marks, imageKey? }] }]
+  sections        Json
+  createdById     String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([schoolId, createdAt])
+  @@index([classId, subjectId])
+  @@map("papers")
+}
+
 // Web push (browser)
 model PushSubscription {
   id        String   @id @default(uuid())
