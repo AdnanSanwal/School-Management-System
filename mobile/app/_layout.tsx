@@ -6,6 +6,7 @@ import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import * as Notifications from 'expo-notifications';
 import { registerForPushNotifications } from '../lib/pushNotifications';
+import { useLiveNotifications } from '../lib/live';
 import { areaFor, useAuthStore, useHydrated } from '../store/authStore';
 import { useChildStore } from '../store/childStore';
 import { colors } from '../lib/theme';
@@ -63,6 +64,8 @@ export default function RootLayout() {
     }
   }, [user, hydrated, segments]);
 
+  useLiveNotifications(queryClient);
+
   useEffect(() => {
     if (user) registerForPushNotifications();
   }, [user?.id, user?.school?.id]);
@@ -85,6 +88,7 @@ export default function RootLayout() {
           <Stack.Screen name="(office)" options={{ headerShown: false }} />
           <Stack.Screen name="notices" options={{ title: 'Notices' }} />
           <Stack.Screen name="notifications" options={{ title: 'Notifications' }} />
+          <Stack.Screen name="notification-settings" options={{ title: 'Notification settings' }} />
           <Stack.Screen name="post-diary" options={{ title: 'Post diary', presentation: 'modal' }} />
           <Stack.Screen name="receipt/[id]" options={{ title: 'Receipt' }} />
           <Stack.Screen name="exams" options={{ title: 'Exams & results' }} />

@@ -9,6 +9,7 @@ import { AppError } from '../../middleware/errorHandler';
 import { sendSuccess } from '../../utils/apiResponse';
 import { handler, parseBody } from '../../utils/http';
 import { activeDriver, deliver, MESSAGE_TYPES, toE164 } from '../../utils/messaging';
+import { URGENT_TYPES } from '../../utils/notificationDelivery';
 
 // School settings for WhatsApp/SMS alerts, a delivery log, and a test send.
 
@@ -17,7 +18,7 @@ router.use(authenticate, can('school.manage'));
 
 router.get('/', handler(async (_req, res) => {
   const [school, recent, counts] = await Promise.all([
-    prisma.school.findUniqueOrThrow({ where: { id: currentSchoolId() }, select: { messagingEnabled: true, messagingChannel: true, messagingTypes: true } }),
+    prisma.school.findUniqueOrThrow({ where: { id: currentSchoolId() }, select: { messagingEnabled: true, messagingChannel: true, messagingTypes: true, messagingFallback: true } }),
     prisma.outboundMessage.findMany({ orderBy: { createdAt: 'desc' }, take: 50 }),
     prisma.outboundMessage.groupBy({ by: ['status'], _count: true, where: { createdAt: { gte: new Date(Date.now() - 30 * 86_400_000) } } }),
   ]);
@@ -26,6 +27,7 @@ router.get('/', handler(async (_req, res) => {
     ...school,
     messagingTypes: Array.isArray(school.messagingTypes) ? school.messagingTypes : [],
     availableTypes: MESSAGE_TYPES,
+    fallbackTypes: URGENT_TYPES,
     provider: driver?.name ?? null,
     last30Days: Object.fromEntries(counts.map((c) => [c.status, c._count])),
     recent,
@@ -37,6 +39,7 @@ router.put('/', handler(async (req, res) => {
     messagingEnabled: z.boolean(),
     messagingChannel: z.nativeEnum(MessagingChannel),
     messagingTypes: z.array(z.enum(MESSAGE_TYPES as [string, ...string[]])).max(MESSAGE_TYPES.length),
+    messagingFallback: z.boolean().optional(),
   }), req);
   await prisma.school.update({ where: { id: currentSchoolId() }, data: b });
   return sendSuccess(res, null, b.messagingEnabled ? 'WhatsApp/SMS alerts on' : 'WhatsApp/SMS alerts off');

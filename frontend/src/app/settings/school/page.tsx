@@ -6,6 +6,7 @@ import toast from 'react-hot-toast';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Field, Spinner } from '@/components/ui/kit';
 import { schoolAPI, paymentsAPI, messagingAPI, apiError } from '@/lib/api';
+import { QuietHours } from '@/components/notifications/Preferences';
 import { CAN, can } from '@/lib/roles';
 import { useAuthStore } from '@/store/authStore';
 import { formatDate, formatDateTime } from '@/lib/utils';
@@ -91,6 +92,7 @@ export default function SchoolSettingsPage() {
           </div>
           {can(role, 'manageFeeStructure') && <PaymentAccounts />}
           <Messaging />
+          <QuietHours />
         </div>
       )}
     </DashboardLayout>
@@ -152,14 +154,14 @@ const TYPE_LABEL: Record<string, string> = {
 function Messaging() {
   const qc = useQueryClient();
   const { data } = useQuery({ queryKey: ['messaging'], queryFn: messagingAPI.get });
-  const [f, setF] = useState<{ messagingEnabled: boolean; messagingChannel: string; messagingTypes: string[] }>({ messagingEnabled: false, messagingChannel: 'SMS', messagingTypes: [] });
+  const [f, setF] = useState<{ messagingEnabled: boolean; messagingChannel: string; messagingTypes: string[]; messagingFallback: boolean }>({ messagingEnabled: false, messagingChannel: 'SMS', messagingTypes: [], messagingFallback: false });
   const [phone, setPhone] = useState('');
   useEffect(() => {
-    if (data) setF({ messagingEnabled: data.messagingEnabled, messagingChannel: data.messagingChannel, messagingTypes: data.messagingTypes });
+    if (data) setF({ messagingEnabled: data.messagingEnabled, messagingChannel: data.messagingChannel, messagingTypes: data.messagingTypes, messagingFallback: !!data.messagingFallback });
   }, [data]);
   const save = useMutation({
     mutationFn: () => messagingAPI.save(f),
-    onSuccess: () => { toast.success(f.messagingEnabled ? 'WhatsApp/SMS alerts on' : 'WhatsApp/SMS alerts off'); qc.invalidateQueries({ queryKey: ['messaging'] }); },
+    onSuccess: () => { toast.success('Alert settings saved'); qc.invalidateQueries({ queryKey: ['messaging'] }); },
     onError: (e) => toast.error(apiError(e)),
   });
   const test = useMutation({
@@ -202,6 +204,16 @@ function Messaging() {
           <Field label="Send a test message" hint="e.g. 0300 1234567"><input className="input" required value={phone} onChange={(e) => setPhone(e.target.value)} /></Field>
           <button className="btn btn-secondary w-full" disabled={test.isPending || !data.provider}>Send test</button>
         </form>
+      </div>
+      <div className="rounded-xl border border-gray-100 bg-slate-50/60 p-3 text-sm">
+        <label className="flex items-center gap-2 font-medium">
+          <input type="checkbox" checked={f.messagingFallback} onChange={(e) => setF({ ...f, messagingFallback: e.target.checked })} />
+          Text urgent alerts to people the app could not reach
+        </label>
+        <p className="mt-1 text-gray-500">
+          For {(data.fallbackTypes ?? []).map((t: string) => TYPE_LABEL[t] ?? t).join(', ').toLowerCase() || 'urgent alerts'}: if someone has no phone signed in to the app, or the push could not be delivered,
+          they get a text on the phone number of their login instead. Uses the channel above. Types ticked under “Send for” already go to every family and are not sent twice.
+        </p>
       </div>
       <button className="btn btn-primary" disabled={save.isPending} onClick={() => save.mutate()}>Save alert settings</button>
       {data.recent.length > 0 && (

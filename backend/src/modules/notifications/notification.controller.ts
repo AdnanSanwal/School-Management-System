@@ -1,24 +1,42 @@
 import { Response, NextFunction } from 'express';
 import { Role } from '@prisma/client';
+import { z } from 'zod';
 import { AuthRequest } from '../../middleware/auth';
 import prisma from '../../config/database';
 import { sendSuccess } from '../../utils/apiResponse';
-import { getIO } from '../../config/socket';
 import { sendEmail, sendSMS } from '../../utils/email';
-import { schoolRoom } from '../../config/socket';
-import { currentSchoolId } from '../../config/tenancy';
-import { z } from 'zod';
 import { parseBody } from '../../utils/http';
 import { hasPermission } from '../../middleware/rbac';
+import { notify } from '../../utils/notify';
+import { emitToUsers } from '../../utils/live';
+import { mutedList, typesFor } from '../../utils/notificationRules';
 
+/**
+ * The signed-in user's notifications, newest first. `?before=<createdAt of the last row>`
+ * loads the next page; `?limit=` up to 100 (default 50).
+ */
 export async function list(req: AuthRequest, res: Response, next: NextFunction) {
   try {
+    const q = z.object({
+      before: z.string().datetime().optional(),
+      limit: z.coerce.number().int().min(1).max(100).default(50),
+    }).safeParse(req.query);
+    const { before, limit } = q.success ? q.data : { before: undefined, limit: 50 };
     const notifications = await prisma.notification.findMany({
-      where: { userId: req.user!.id },
-      orderBy: { createdAt: 'desc' },
-      take: 50,
+      where: { userId: req.user!.id, ...(before ? { createdAt: { lt: new Date(before) } } : {}) },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: limit,
+      select: { id: true, schoolId: true, userId: true, type: true, title: true, body: true, data: true, readAt: true, createdAt: true },
     });
     return sendSuccess(res, notifications);
+  } catch (err) { next(err); }
+}
+
+/** The number on the bell. */
+export async function unreadCount(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const count = await prisma.notification.count({ where: { userId: req.user!.id, readAt: null } });
+    return sendSuccess(res, { count });
   } catch (err) { next(err); }
 }
 
@@ -43,16 +61,9 @@ export async function broadcast(req: AuthRequest, res: Response, next: NextFunct
       select: { id: true, email: true, phone: true },
     });
 
-    await prisma.notification.createMany({
-      data: users.map((u) => ({ schoolId: currentSchoolId(), userId: u.id, type: 'BROADCAST', title, body: message })),
-    });
+    // In the app, live on open screens, and pushed to phones and browsers.
+    await notify(users.map((u) => u.id), { type: 'BROADCAST', title, body: message });
 
-    if (channels?.includes('socket')) {
-      const io = getIO();
-      const schoolId = req.user!.schoolId!;
-      if (targetRoles.length) targetRoles.forEach((r) => io.to(schoolRoom(schoolId, r)).emit('notification', { title, message }));
-      else io.to(schoolRoom(schoolId)).emit('notification', { title, message });
-    }
     if (channels?.includes('email')) {
       // Escape: the message is typed by school staff and must not become HTML in the email.
       const esc = (t: string) => t.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
@@ -66,23 +77,50 @@ export async function broadcast(req: AuthRequest, res: Response, next: NextFunct
   } catch (err) { next(err); }
 }
 
+/** The user's other open screens drop their badge too. */
+function tellOtherScreens(req: AuthRequest) {
+  const schoolId = req.user!.schoolId;
+  return schoolId ? emitToUsers(schoolId, 'notifications:read', [{ userId: req.user!.id, payload: {} }]) : Promise.resolve();
+}
+
 export async function markRead(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     // updateMany + userId filter: a user can only mark their own notifications.
-    await prisma.notification.updateMany({
-      where: { id: req.params.id, userId: req.user!.id },
+    const done = await prisma.notification.updateMany({
+      where: { id: req.params.id, userId: req.user!.id, readAt: null },
       data: { readAt: new Date() },
     });
+    if (done.count) await tellOtherScreens(req);
     return sendSuccess(res, null, 'Marked as read');
   } catch (err) { next(err); }
 }
 
 export async function markAllRead(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    await prisma.notification.updateMany({
+    const done = await prisma.notification.updateMany({
       where: { userId: req.user!.id, readAt: null },
       data: { readAt: new Date() },
     });
+    if (done.count) await tellOtherScreens(req);
     return sendSuccess(res, null, 'All notifications marked as read');
+  } catch (err) { next(err); }
+}
+
+/** What this person can be told about, and which types they have switched off. */
+export async function getPreferences(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const me = await prisma.user.findFirst({ where: { id: req.user!.id }, select: { mutedNotifications: true } });
+    const muted = new Set(mutedList(me?.mutedNotifications));
+    return sendSuccess(res, { types: typesFor(req.user!.role).map((t) => ({ ...t, muted: muted.has(t.type) })) });
+  } catch (err) { next(err); }
+}
+
+export async function setPreferences(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const { muted } = parseBody(z.object({ muted: z.array(z.string().max(40)).max(40) }), req);
+    // mutedList drops anything unknown or not allowed to be muted (urgent alerts, office messages).
+    const clean = mutedList(muted);
+    await prisma.user.updateMany({ where: { id: req.user!.id }, data: { mutedNotifications: clean } });
+    return sendSuccess(res, { muted: clean }, 'Notification settings saved');
   } catch (err) { next(err); }
 }

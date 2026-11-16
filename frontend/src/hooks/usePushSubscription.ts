@@ -38,6 +38,10 @@ export function usePushSubscription() {
       const vapidKey = data.data.publicKey;
       if (!vapidKey) throw new Error('Pop-up alerts are not set up on the server yet (VAPID keys).');
 
+      // Ask first, so a refusal gets a clear message instead of the browser's own wording.
+      const permission = await Notification.requestPermission();
+      if (permission !== 'granted') throw new Error('Notifications are blocked for this site in your browser. Allow them from the padlock icon in the address bar, then try again.');
+
       const reg = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
       await navigator.serviceWorker.ready;
 

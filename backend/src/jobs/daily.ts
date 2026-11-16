@@ -5,6 +5,7 @@ import { dayInTimezone } from '../utils/dates';
 import logger from '../utils/logger';
 import { applyLateFines, sendFeeReminders } from '../modules/fees/fees.service';
 import { sendLowAttendanceAlerts } from '../modules/attendance/lowAttendance';
+import { cleanUpNotifications } from '../utils/notificationRules';
 
 /**
  * Daily automation, per school, after RUN_HOUR in the school's own timezone:
@@ -52,7 +53,15 @@ async function tick() {
   return withJobLock(runTick);
 }
 
+let cleanedOn = '';
+
 async function runTick() {
+  // Once a day, for the whole system: drop notifications past their keep-for period.
+  const today = new Date().toISOString().slice(0, 10);
+  if (cleanedOn !== today) {
+    cleanedOn = today;
+    await cleanUpNotifications().catch((err) => logger.error('Notification clean-up failed', { message: (err as Error).message }));
+  }
   const schools = await basePrisma.school.findMany({ where: { isActive: true }, select: { id: true, code: true, timezone: true } });
   for (const s of schools) {
     const today = dayInTimezone(s.timezone);

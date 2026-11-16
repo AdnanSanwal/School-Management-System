@@ -9,6 +9,7 @@ import { useChildStore } from '../store/childStore';
 import { useAuthStore, areaFor } from '../store/authStore';
 import { Button, Card, H, Muted, Row } from './ui';
 import { colors } from '../lib/theme';
+import { useUnreadNotifications } from './NotificationBell';
 import { day } from '../lib/format';
 
 export function Item({ icon, label, badge, onPress }: { icon: keyof typeof Ionicons.glyphMap; label: string; badge?: number; onPress: () => void }) {
@@ -27,6 +28,7 @@ export function MoreMenu({ extra }: { extra?: React.ReactNode }) {
   const { user, clearAuth } = useAuthStore();
   const qc = useQueryClient();
   const notices = useQuery({ queryKey: ['notices', 1], queryFn: () => API.notices(1) });
+  const unread = useUnreadNotifications();
   const events = useQuery({ queryKey: ['events'], queryFn: API.events });
   const [switching, setSwitching] = useState(false);
   const [pw, setPw] = useState({ open: false, current: '', next: '', saving: false });
@@ -77,7 +79,7 @@ export function MoreMenu({ extra }: { extra?: React.ReactNode }) {
       </Card>
       <Card style={{ padding: 0 }}>
         <Item icon="megaphone-outline" label="Notices & circulars" badge={notices.data?.unread} onPress={() => router.push('/notices')} />
-        <Item icon="notifications-outline" label="Notifications" onPress={() => router.push('/notifications')} />
+        <Item icon="notifications-outline" label="Notifications" badge={unread} onPress={() => router.push('/notifications')} />
         {extra}
       </Card>
       <Card>

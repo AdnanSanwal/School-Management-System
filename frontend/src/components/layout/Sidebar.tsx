@@ -11,7 +11,7 @@ import { cn } from '@/lib/utils';
 import {
   LayoutDashboard, Users, GraduationCap, Bell, Settings, ChevronLeft, ChevronRight,
   UserCheck, Layers, Wallet, Receipt, AlertTriangle, BadgePercent, FileSpreadsheet, ClipboardCheck,
-  KeyRound, School, Home, Megaphone, BookOpen, CalendarDays, PenLine, Clock, Inbox, FileBarChart, Plane,
+  KeyRound, School, Home, Megaphone, Send, BookOpen, CalendarDays, PenLine, Clock, Inbox, FileBarChart, Plane,
   Building2, ArrowUpCircle, Bus, Library,
   CalendarCheck, Banknote, SlidersHorizontal, PieChart, Landmark, TrendingDown, TrendingUp, HandCoins, ReceiptText, CircleDollarSign, Scale, BookText, ListTree, ShieldCheck, BadgeCheck,
 } from 'lucide-react';
@@ -80,6 +80,7 @@ const navGroups: NavGroup[] = [
     title: 'Communication',
     items: [
       { label: 'Notices', href: '/notices', icon: Megaphone, cap: 'viewNotices' },
+      { label: 'Send a message', href: '/notifications/broadcasts', icon: Send, cap: 'sendBroadcasts' },
       { label: 'Daily diary', href: '/diary', icon: BookOpen, cap: 'viewDiary' },
       { label: 'Calendar', href: '/calendar', icon: CalendarDays, cap: 'viewCalendar' },
     ],

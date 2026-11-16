@@ -123,6 +123,11 @@ model School {
   messagingEnabled       Boolean          @default(false)
   messagingChannel       MessagingChannel @default(SMS)
   messagingTypes         Json? // notification types also sent by SMS/WhatsApp, e.g. ["ATTENDANCE_ABSENT"]
+  // Text urgent alerts only to people the app could not reach (no phone registered, or push failed).
+  messagingFallback      Boolean          @default(false)
+  // Non-urgent push alerts raised between these school-local times ("21:00", "07:00") wait until the end. Both empty = off.
+  quietHoursStart        String?          @db.VarChar(5)
+  quietHoursEnd          String?          @db.VarChar(5)
   createdAt              DateTime         @default(now())
   updatedAt              DateTime         @updatedAt
 
@@ -174,6 +179,8 @@ model User {
   // accounts that sign in with email.
   username           String?        @unique @db.VarChar(60)
   phone              String?        @db.VarChar(32)
+  /// Notification types this person switched off for push and pop-ups (they still appear in the app list).
+  mutedNotifications Json?
   password           String
   // Set when an admin chose the password; the user must pick their own at next sign-in.
   mustChangePassword Boolean        @default(false)
@@ -1231,11 +1238,56 @@ model Notification {
   readAt    DateTime?
   createdAt DateTime  @default(now())
 
+  // Push delivery queue (see utils/notificationDelivery.ts). The in-app row above is the
+  // record; these columns track getting it to the user's phone or browser.
+  deliveryState       NotificationDelivery @default(NONE)
+  deliveryAttempts    Int                  @default(0)
+  deliverAfter        DateTime?
+  deliveryLock        String?              @db.VarChar(40)
+  deliveryLockedUntil DateTime?
+  deliveredAt         DateTime?
+  deliveryError       String?              @db.VarChar(300)
+  /// The office broadcast this came from, for its delivery report.
+  broadcastId         String?
+
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([schoolId])
   @@index([userId, createdAt])
+  @@index([userId, readAt])
+  @@index([deliveryState, deliverAfter])
+  @@index([broadcastId, deliveryState])
+  @@index([createdAt])
   @@map("notifications")
+}
+
+/// A message the office sends to chosen people, now or at a set time (modules/notifications/broadcasts).
+model Broadcast {
+  id           String          @id @default(uuid())
+  schoolId     String
+  title        String          @db.VarChar(150)
+  body         String          @db.Text
+  /// Who gets it: { roles?: Role[], classIds?: string[], sectionIds?: string[], studentIds?: string[] }
+  audience     Json
+  scheduledAt  DateTime?
+  status       BroadcastStatus @default(SCHEDULED)
+  /// Set while a worker is sending it; a send that died is taken over after a few minutes.
+  sendingSince DateTime?
+  sentAt       DateTime?
+  recipients   Int             @default(0)
+  createdById  String
+  createdAt    DateTime        @default(now())
+
+  @@index([schoolId, createdAt])
+  @@index([status, scheduledAt])
+  @@map("broadcasts")
+}
+
+enum BroadcastStatus {
+  SCHEDULED
+  SENDING
+  SENT
+  CANCELLED
 }
 
 // Web push (browser)
@@ -1852,6 +1904,18 @@ enum PromotionOutcome {
   RETAINED
   GRADUATED
   LEFT
+}
+
+/// NONE: nothing to deliver (older rows). PENDING: waiting for the delivery worker.
+/// DELIVERED: accepted by a push service for at least one device. UNREACHED: the user has
+/// no phone or browser registered. FAILED: gave up after retries. EXPIRED: too old to push.
+enum NotificationDelivery {
+  NONE
+  PENDING
+  DELIVERED
+  UNREACHED
+  FAILED
+  EXPIRED
 }
 
 enum MessagingChannel {

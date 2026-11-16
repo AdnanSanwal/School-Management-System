@@ -317,12 +317,14 @@ export function Header({ title }: HeaderProps) {
   const notifsRef = useRef<HTMLDivElement>(null);
   const userRef = useRef<HTMLDivElement>(null);
 
-  const { data: notifications = [] } = useQuery({
-    queryKey: ['notifications'],
-    queryFn: () => notificationsAPI.list().then(r => r.data.data),
-    refetchInterval: 30000,
+  // The live connection (lib/live.ts) refreshes this the moment something arrives; the
+  // one-minute refresh is only the safety net for when that connection is down.
+  const { data: unreadCount = 0 } = useQuery({
+    queryKey: ['notifications', 'unread'],
+    queryFn: notificationsAPI.unreadCount,
+    refetchInterval: 60_000,
+    meta: { quiet: true },
   });
-  const unreadCount = (notifications as any[]).filter((n: any) => !n.readAt).length;
 
   // Close dropdowns on outside click
   useEffect(() => {

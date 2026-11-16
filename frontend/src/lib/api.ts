@@ -560,9 +560,22 @@ export const dashboardAPI = {
 
 export const notificationsAPI = {
   list: () => api.get('/notifications'),
+  unreadCount: () => api.get('/notifications/unread-count').then((r) => r.data.data.count as number),
   broadcast: (body: any) => api.post('/notifications/broadcast', body),
   markRead: (id: string) => api.put(`/notifications/${id}/read`),
   markAllRead: () => api.put('/notifications/read-all'),
+  preferences: () => data<{ types: { type: string; label: string; canMute: boolean; urgent: boolean; muted: boolean }[] }>(api.get('/notifications/preferences')),
+  savePreferences: (muted: string[]) => data(api.put('/notifications/preferences', { muted })),
+};
+
+/** Messages the office sends to chosen people, now or at a set time. */
+export const broadcastsAPI = {
+  list: () => data<any[]>(api.get('/notifications/broadcasts')),
+  get: (id: string) => data(api.get(`/notifications/broadcasts/${id}`)),
+  preview: (audience: object) => data<{ recipients: number }>(api.post('/notifications/broadcasts/preview', { audience }, { silent: true })),
+  create: (body: { title: string; message: string; audience: object; scheduledAt: string | null }) =>
+    api.post('/notifications/broadcasts', body).then((r) => r.data as { data: any; message: string }),
+  cancel: (id: string) => api.delete(`/notifications/broadcasts/${id}`),
 };
 
 export const brandsAPI = {

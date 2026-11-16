@@ -106,7 +106,10 @@ export const API = {
   notices: (page = 1) => api.get('/notices', { params: { page, limit: 30 } }).then((r) => r.data),
   readNotice: (id: string) => api.post(`/notices/${id}/read`),
   notifications: () => data<any[]>(api.get('/notifications')),
+  unreadCount: () => data<{ count: number }>(api.get('/notifications/unread-count')).then((d) => d.count),
   readAllNotifications: () => api.put('/notifications/read-all'),
+  notificationPreferences: () => data<{ types: { type: string; label: string; canMute: boolean; urgent: boolean; muted: boolean }[] }>(api.get('/notifications/preferences')),
+  saveNotificationPreferences: (muted: string[]) => data(api.put('/notifications/preferences', { muted })),
   events: () => data<any[]>(api.get('/calendar')),
 
   // Teacher

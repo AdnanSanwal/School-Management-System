@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { notificationsAPI } from '@/lib/api';
@@ -7,6 +8,7 @@ import { Bell, CheckCheck, BellRing, BellOff } from 'lucide-react';
 import { formatDate, formatDateTime } from '@/lib/utils';
 import { usePushSubscription } from '@/hooks/usePushSubscription';
 import toast from 'react-hot-toast';
+import { NotificationPreferences } from '@/components/notifications/Preferences';
 
 export default function NotificationsPage() {
   const queryClient = useQueryClient();
@@ -31,6 +33,8 @@ export default function NotificationsPage() {
 
   const unread = (notifications || []).filter((n: any) => !n.readAt).length;
   const push = usePushSubscription();
+  // Say why switching alerts on did not work (blocked in the browser, not set up on the server).
+  useEffect(() => { if (push.error) toast.error(push.error); }, [push.error]);
 
   return (
     <DashboardLayout title="Notifications">
@@ -63,6 +67,8 @@ export default function NotificationsPage() {
             </button>
           </div>
         )}
+
+        <NotificationPreferences />
 
         <div className="flex items-center justify-between">
           <p className="text-sm text-gray-500">{unread} unread notification{unread !== 1 ? 's' : ''}</p>

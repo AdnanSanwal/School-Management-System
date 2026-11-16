@@ -31,12 +31,19 @@ const schoolUpdate = z.object({
   lateFeeGraceDays: z.coerce.number().int().min(0).max(90).optional(),
   lowAttendanceThreshold: z.coerce.number().int().min(0).max(100).optional(),
   libraryFinePerDay: z.coerce.number().min(0).max(10_000).optional(),
+  // Quiet hours for routine push alerts, on the school's own clock. Both, or neither.
+  quietHoursStart: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Use a time like 21:00').nullable().optional(),
+  quietHoursEnd: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Use a time like 07:00').nullable().optional(),
 }).strict();
 
 router.patch('/', can('school.manage'), handler(async (req, res) => {
   const data = parseBody(schoolUpdate, req);
   if (data.timezone) {
     try { new Intl.DateTimeFormat('en', { timeZone: data.timezone }); } catch { throw new AppError('Unknown timezone', 422); }
+  }
+  if ('quietHoursStart' in data || 'quietHoursEnd' in data) {
+    if (!!data.quietHoursStart !== !!data.quietHoursEnd) throw new AppError('Give both a start and an end time for quiet hours, or clear both', 422);
+    if (data.quietHoursStart && data.quietHoursStart === data.quietHoursEnd) throw new AppError('Quiet hours cannot start and end at the same time', 422);
   }
   // School is not a tenant model (it *is* the tenant), so update it by the context's id.
   const school = await prisma.school.update({ where: { id: currentSchoolId() }, data });

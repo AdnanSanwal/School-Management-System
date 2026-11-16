@@ -7,6 +7,7 @@ import { Header } from './Header';
 import { useAuthStore } from '@/store/authStore';
 import { useQuery } from '@tanstack/react-query';
 import { authAPI } from '@/lib/api';
+import { useLiveNotifications } from '@/lib/live';
 import { allowedIn } from '@/lib/roles';
 import Link from 'next/link';
 import { AlertTriangle } from 'lucide-react';
@@ -57,6 +58,7 @@ export function DashboardLayout({ children, title, allowedRoles, subtitle, actio
   const router = useRouter();
   const { isAuthenticated, user } = useAuthStore();
   useSessionRefresh();
+  useLiveNotifications();
 
   useEffect(() => {
     if (!isAuthenticated()) {

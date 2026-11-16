@@ -77,6 +77,8 @@ async function startWorker() {
   const { connectRedis, getRedis } = await import('./config/redis');
   const { initSocketIO } = await import('./config/socket');
   const { startDailyJobs, stopDailyJobs } = await import('./jobs/daily');
+  const { startDeliveryWorker, stopDeliveryWorker } = await import('./utils/notificationDelivery');
+  const { closeLive } = await import('./utils/live');
   const { lifecycle } = await import('./config/lifecycle');
 
   await connectDatabase();
@@ -93,6 +95,7 @@ async function startWorker() {
   server.on('request', (_req, res) => { if (lifecycle.draining) res.setHeader('Connection', 'close'); });
   const io = initSocketIO(server);
   startDailyJobs();
+  startDeliveryWorker();
 
   server.listen(PORT, () => {
     logger.info(`Server listening on port ${PORT} [${process.env.NODE_ENV ?? 'development'}]${cluster.isWorker ? ` worker ${cluster.worker?.id}` : ''}`);
@@ -111,6 +114,9 @@ async function startWorker() {
     force.unref();
 
     stopDailyJobs();
+    // Finish the push batch in hand; anything not settled is picked up by another worker.
+    await Promise.race([stopDeliveryWorker(), new Promise((r) => setTimeout(r, 5000))]);
+    await closeLive();
     io.close();
     await new Promise<void>((resolve) => {
       server.close(() => resolve());

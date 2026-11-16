@@ -1,6 +1,7 @@
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../lib/theme';
+import { NotificationBell } from '../../components/NotificationBell';
 import { allowed, useAuthStore } from '../../store/authStore';
 
 const icon = (name: keyof typeof Ionicons.glyphMap) => function TabIcon({ color, size }: { color: unknown; size: number }) { return <Ionicons name={name} color={typeof color === 'string' ? color : undefined} size={size} />; };
@@ -9,7 +10,7 @@ const icon = (name: keyof typeof Ionicons.glyphMap) => function TabIcon({ color,
 export default function FamilyTabs() {
   const seesFees = useAuthStore((s) => allowed(s.user, 'fee.view', ['PARENT']));
   return (
-    <Tabs screenOptions={{ tabBarActiveTintColor: colors.primary, tabBarInactiveTintColor: colors.faint, headerTitleStyle: { fontWeight: '700' } }}>
+    <Tabs screenOptions={{ tabBarActiveTintColor: colors.primary, tabBarInactiveTintColor: colors.faint, headerTitleStyle: { fontWeight: '700' }, headerRight: () => <NotificationBell /> }}>
       <Tabs.Screen name="index" options={{ title: 'Home', tabBarIcon: icon('home-outline') }} />
       <Tabs.Screen name="attendance" options={{ title: 'Attendance', tabBarIcon: icon('calendar-outline') }} />
       {/* Parents see fees; students don't, unless the school switches that on (Roles & permissions). */}
