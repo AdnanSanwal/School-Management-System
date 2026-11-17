@@ -1374,7 +1374,11 @@ model Paper {
   classId         String
   subjectId       String
   title           String   @db.VarChar(150)
-  medium          String   @db.VarChar(4) // EN, UR, DUAL
+  medium          String   @db.VarChar(4) // EN, UR, AR, DUAL
+  /// ANNUAL, TERM, MONTHLY, WEEKLY, DAILY, HALF_BOOK, FULL_BOOK, CHAPTER
+  paperType       String?  @db.VarChar(20)
+  /// The board whose pattern the paper follows. A guide for drafting; not printed.
+  board           String?  @db.VarChar(60)
   durationMinutes Int?
   totalMarks      Decimal  @db.Decimal(6, 2)
   instructions    String?  @db.Text
@@ -1387,6 +1391,58 @@ model Paper {
   @@index([schoolId, createdAt])
   @@index([classId, subjectId])
   @@map("papers")
+}
+
+// AI (papers written by AI in the test maker). A school can bring its own key, and the
+// platform admin can provide AI to a school with limits. See docs/AI.md.
+model AiSetting {
+  id           String   @id @default(uuid())
+  schoolId     String   @unique
+  // The school's own account with a provider. The key is stored encrypted.
+  ownProvider  String?  @db.VarChar(20) // ANTHROPIC, OPENAI, GEMINI, GROK
+  ownModel     String?  @db.VarChar(80)
+  ownKey       String?  @db.Text
+  // Set by the platform admin.
+  ownAllowed   Boolean  @default(true) // may the school use a key of its own?
+  grantEnabled Boolean  @default(false) // AI provided by the platform
+  grantProvider String? @db.VarChar(20)
+  grantModel   String?  @db.VarChar(80)
+  grantKey     String?  @db.Text // a key just for this school; empty = the platform's key for that provider
+  // Most AI papers the school may draft on the platform's account (null = no limit).
+  dailyLimit   Int?
+  monthlyLimit Int?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("ai_settings")
+}
+
+/// The platform's own key for each provider, used for schools it provides AI to.
+model PlatformAiKey {
+  provider  String   @id @db.VarChar(20)
+  apiKey    String   @db.Text
+  model     String?  @db.VarChar(80)
+  updatedAt DateTime @updatedAt
+
+  @@map("platform_ai_keys")
+}
+
+/// One row per AI draft that succeeded: what limits are counted from.
+model AiUsage {
+  id           String   @id @default(uuid())
+  schoolId     String
+  userId       String
+  source       String   @db.VarChar(10) // OWN or PLATFORM
+  provider     String   @db.VarChar(20)
+  model        String   @db.VarChar(80)
+  feature      String   @db.VarChar(30) // PAPER
+  questions    Int      @default(0)
+  inputTokens  Int      @default(0)
+  outputTokens Int      @default(0)
+  createdAt    DateTime @default(now())
+
+  @@index([schoolId, createdAt])
+  @@map("ai_usage")
 }
 
 // Web push (browser)

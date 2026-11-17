@@ -1,11 +1,13 @@
 'use client';
 
-import { AnswerText, Bilingual, QuestionBody, Urdu, type Medium, type PaperSection } from './shared';
+import { AnswerText, Bilingual, QuestionBody, Urdu, paperTypeLabel, type Medium, type PaperSection, type QuestionType } from './shared';
 
 export interface SheetPaper {
   id: string;
   title: string;
   medium: Medium;
+  paperType?: string | null;
+  board?: string | null;
   durationMinutes?: number | null;
   totalMarks: number | string;
   instructions?: string | null;
@@ -14,6 +16,12 @@ export interface SheetPaper {
   school?: { name: string; logoUrl?: string | null } | null;
   sections: PaperSection[];
 }
+
+/** Arabic headings for a paper drawn from the bank, whose stored headings are English and Urdu. */
+const ARABIC_TITLES: Record<QuestionType, string> = {
+  MCQ: 'أسئلة الاختيار من متعدد', TRUE_FALSE: 'صح أم خطأ', BLANK: 'املأ الفراغات', SHORT: 'أسئلة قصيرة', LONG: 'أسئلة مقالية', MATCH: 'صِل بين العمودين',
+};
+const URDU_TITLES = ['کثیر الانتخابی سوالات', 'درست یا غلط', 'خالی جگہ پُر کریں', 'مختصر سوالات', 'تفصیلی سوالات', 'کالم ملائیں'];
 
 const fmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
 
@@ -24,6 +32,20 @@ function marksNote(s: PaperSection) {
   const total = counted.reduce((t, m) => t + m, 0);
   const same = marks.every((m) => m === marks[0]);
   return same ? `${counted.length} × ${fmt(marks[0])} = ${fmt(total)}` : `${fmt(total)} marks`;
+}
+
+const box = 'rounded-sm border border-gray-500 px-1.5 py-1';
+const duration = (minutes: number) => (minutes % 60 === 0 ? `${minutes / 60} hour${minutes === 60 ? '' : 's'}` : minutes > 60 ? `${Math.floor(minutes / 60)} h ${minutes % 60} min` : `${minutes} minutes`);
+
+/** The heading of a section in the paper's language. */
+function SectionTitle({ s, medium }: { s: PaperSection; medium: Medium }) {
+  if (medium === 'AR') {
+    // A heading the AI wrote in Arabic is kept; a stock Urdu heading is swapped for the Arabic one.
+    const own = s.titleUr && !URDU_TITLES.includes(s.titleUr) ? s.titleUr : ARABIC_TITLES[s.type];
+    return <Urdu arabic>{own}</Urdu>;
+  }
+  if (medium === 'UR' && s.titleUr) return <Urdu>{s.titleUr}</Urdu>;
+  return <>{s.title}{medium === 'DUAL' && s.titleUr ? <Urdu className="ml-3 font-normal">{s.titleUr}</Urdu> : null}</>;
 }
 
 /** The paper as it is printed. `answers` prints the answer key instead. */
@@ -41,17 +63,18 @@ export function PaperSheet({ paper, answers }: { paper: SheetPaper; answers?: bo
           <h1 className="text-xl font-bold">{paper.school?.name}</h1>
         </div>
         <h2 className="mt-1 text-base font-semibold">{paper.title}{answers ? ': Answer key' : ''}</h2>
-        <div className="mt-1 flex flex-wrap justify-between gap-x-6 text-sm">
-          <span>Class: <b>{paper.className}</b></span>
-          <span>Subject: <b>{paper.subjectName}</b></span>
-          {paper.durationMinutes ? <span>Time: <b>{paper.durationMinutes} minutes</b></span> : null}
-          <span>Total marks: <b>{fmt(Number(paper.totalMarks))}</b></span>
+        {/* Boxed details, the way board papers are headed. */}
+        <div className="mt-2 grid grid-cols-4 gap-1 text-left text-xs">
+          <span className={box}>Subject: <b>{paper.subjectName}</b></span>
+          <span className={box}>Class: <b>{paper.className}</b></span>
+          <span className={box}>Time: <b>{paper.durationMinutes ? duration(paper.durationMinutes) : ''}</b></span>
+          <span className={box}>Total marks: <b>{fmt(Number(paper.totalMarks))}</b></span>
         </div>
         {!answers && (
-          <div className="mt-2 flex justify-between gap-6 text-sm">
-            <span className="flex-1 text-left">Name: ______________________________</span>
-            <span>Roll no.: __________</span>
-            <span>Date: ______________</span>
+          <div className="mt-1 grid grid-cols-[2fr_1fr_1.4fr] gap-1 text-left text-xs">
+            <span className={box}>Name:</span>
+            <span className={box}>Roll no.:</span>
+            <span className={box}>{paper.paperType ? <>Paper: <b>{paperTypeLabel(paper.paperType)}</b></> : 'Date:'}</span>
           </div>
         )}
       </header>
@@ -62,8 +85,7 @@ export function PaperSheet({ paper, answers }: { paper: SheetPaper; answers?: bo
         <section key={si} className="mt-4">
           <div className="flex items-baseline justify-between gap-4 border-b border-gray-400 pb-0.5 font-semibold">
             <span className="flex-1">
-              {paper.medium === 'UR' && s.titleUr ? <Urdu>{s.titleUr}</Urdu> : s.title}
-              {paper.medium === 'DUAL' && s.titleUr ? <Urdu className="ml-3 font-normal">{s.titleUr}</Urdu> : null}
+              <SectionTitle s={s} medium={paper.medium} />
               {s.attempt && s.attempt < s.items.length ? <span className="ml-2 font-normal">(Attempt any {s.attempt})</span> : null}
             </span>
             <span className="whitespace-nowrap text-sm">({marksNote(s)})</span>

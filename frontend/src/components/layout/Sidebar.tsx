@@ -11,7 +11,7 @@ import { cn } from '@/lib/utils';
 import {
   LayoutDashboard, Users, GraduationCap, Bell, Settings, ChevronLeft, ChevronRight,
   UserCheck, Layers, Wallet, Receipt, AlertTriangle, BadgePercent, FileSpreadsheet, ClipboardCheck,
-  KeyRound, School, Home, Megaphone, Send, FileQuestion, BookOpen, CalendarDays, PenLine, Clock, Inbox, FileBarChart, Plane,
+  KeyRound, School, Home, Megaphone, Send, FileQuestion, Sparkles, BookOpen, CalendarDays, PenLine, Clock, Inbox, FileBarChart, Plane,
   Building2, ArrowUpCircle, Bus, Library,
   CalendarCheck, Banknote, SlidersHorizontal, PieChart, Landmark, TrendingDown, TrendingUp, HandCoins, ReceiptText, CircleDollarSign, Scale, BookText, ListTree, ShieldCheck, BadgeCheck,
 } from 'lucide-react';
@@ -40,6 +40,7 @@ const navGroups: NavGroup[] = [
       { label: 'My children', href: '/family', icon: Home, roles: ['PARENT'] },
       { label: 'My school record', href: '/family', icon: Home, roles: ['STUDENT'] },
       { label: 'Brands & branches', href: '/platform', icon: Building2, cap: 'platform' },
+      { label: 'AI for schools', href: '/platform/ai', icon: Sparkles, cap: 'platform' },
       { label: 'Approvals', href: '/approvals', icon: Inbox, cap: 'approvals' },
       { label: 'Reports', href: '/reports', icon: FileBarChart, cap: 'reports' },
     ],
@@ -122,6 +123,7 @@ const navGroups: NavGroup[] = [
       { label: 'Notifications', href: '/notifications', icon: Bell, roles: ['OWNER', 'PRINCIPAL', 'ADMIN', 'ACCOUNTANT', 'TEACHER', 'PARENT', 'STUDENT'] },
       { label: 'Users & logins', href: '/users', icon: KeyRound, cap: 'manageUsers' },
       { label: 'School settings', href: '/settings/school', icon: School, cap: 'manageSchool' },
+      { label: 'AI', href: '/settings/ai', icon: Sparkles, cap: 'manageSchool' },
       { label: 'Roles & permissions', href: '/settings/roles', icon: ShieldCheck, cap: 'manageRoles' },
       { label: 'Audit log', href: '/audit', icon: ClipboardCheck, cap: 'viewAudit' },
       { label: 'Subscription', href: '/licence', icon: BadgeCheck, roles: ['OWNER', 'ADMIN'] },

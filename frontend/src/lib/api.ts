@@ -518,6 +518,29 @@ export const platformAPI = {
   setActive: (id: string, isActive: boolean) => data(api.patch(`/platform/schools/${id}/status`, { isActive })),
 };
 
+interface AiProvider { id: string; label: string; defaultModel: string; keysUrl: string }
+interface AiStatus {
+  active: { source: 'OWN' | 'PLATFORM'; provider: string; model: string } | null;
+  own: { allowed: boolean; provider: string | null; model: string | null; keyHint: string | null };
+  platform: { enabled: boolean; provider: string | null; dailyLimit: number | null; monthlyLimit: number | null; leftToday: number | null; leftThisMonth: number | null };
+  usage: { platform: { today: number; month: number }; own: { today: number; month: number }; tokensThisMonth: number };
+}
+/** A school's own AI account. */
+export const aiAPI = {
+  settings: () => data<AiStatus & { providers: AiProvider[] }>(api.get('/ai/settings')),
+  save: (body: { provider: string; model: string | null; apiKey?: string }) => data<AiStatus>(api.put('/ai/settings', body, { silent: true })),
+  remove: () => data<AiStatus>(api.delete('/ai/settings', { silent: true })),
+  test: () => api.post('/ai/test', {}, { silent: true, timeout: 5 * 60 * 1000 }).then((r) => r.data as { message: string }),
+};
+/** Platform admin: the platform's AI keys, and what each school is provided and allowed. */
+export const platformAiAPI = {
+  view: () => data<any>(api.get('/platform/ai')),
+  saveKey: (provider: string, body: any) => data<any>(api.put(`/platform/ai/keys/${provider}`, body, { silent: true })),
+  removeKey: (provider: string) => data<any>(api.delete(`/platform/ai/keys/${provider}`, { silent: true })),
+  testKey: (provider: string) => api.post(`/platform/ai/keys/${provider}/test`, {}, { silent: true, timeout: 5 * 60 * 1000 }).then((r) => r.data as { message: string }),
+  saveSchool: (id: string, body: any) => data<any>(api.put(`/platform/ai/schools/${id}`, body, { silent: true })),
+};
+
 export const promotionsAPI = {
   preview: (params: { toAcademicYearId: string; fromAcademicYearId?: string; examId?: string; mapping?: string }) => data<any>(api.get('/promotions/preview', { params })),
   run: (body: any) => data(api.post('/promotions/run', body)),
@@ -606,7 +629,7 @@ export async function reportDownloadError(err: any) {
 
 /** Test maker: the school's question bank and the papers built from it. */
 export const testmakerAPI = {
-  scope: () => data<{ classes: { id: string; name: string }[]; subjects: { id: string; name: string }[]; pairs: { classId: string; subjectId: string }[] | null }>(api.get('/testmaker/scope')),
+  scope: () => data<{ classes: { id: string; name: string }[]; subjects: { id: string; name: string }[]; pairs: { classId: string; subjectId: string }[] | null; ai: boolean }>(api.get('/testmaker/scope')),
   chapters: (classId: string, subjectId: string) => data<any[]>(api.get('/testmaker/chapters', { params: { classId, subjectId } })),
   addChapter: (body: any) => data(api.post('/testmaker/chapters', body)),
   deleteChapter: (id: string) => api.delete(`/testmaker/chapters/${id}`),
@@ -621,6 +644,10 @@ export const testmakerAPI = {
   uploadImage: (id: string, file: File) => { const f = new FormData(); f.append('file', file); return data(api.post(`/testmaker/questions/${id}/image`, f, { headers: { 'Content-Type': 'multipart/form-data' } })); },
   removeImage: (id: string) => data(api.delete(`/testmaker/questions/${id}/image`)),
   draw: (body: any) => data<{ sections: any[]; short: { type: string; wanted: number; available: number }[] }>(api.post('/testmaker/papers/draw', body, { silent: true })),
+  /** Questions written by AI from a topic. Can take a minute or two. */
+  aiDraft: (body: any) => data<{ sections: any[]; short: { type: string; wanted: number; available: number }[] }>(api.post('/testmaker/papers/ai', body, { silent: true, timeout: 5 * 60 * 1000 })),
+  /** A paper pasted as plain text, split into sections of questions. */
+  parsePaper: (text: string) => data<{ sections: any[]; questions: number; short: { type: string; wanted: number; available: number }[] }>(api.post('/testmaker/papers/parse', { text }, { silent: true })),
   papers: (params?: any) => page(api.get('/testmaker/papers', { params })),
   paper: (id: string) => data(api.get(`/testmaker/papers/${id}`)),
   savePaper: (body: any) => data(api.post('/testmaker/papers', body)),

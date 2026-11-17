@@ -13,6 +13,9 @@ import { assertKind, deleteFile, saveFile, signedUrl } from '../../utils/storage
 import { audit } from '../../utils/audit';
 import { uploadOne } from '../files/files.routes';
 import type { JwtPayload } from '../../utils/jwt';
+import { assertWithinLimits, recordUsage, resolveAi } from '../ai/ai.service';
+import { AI_LANGUAGES, AI_TYPES, draftPaper, draftToSections } from './aiPaper';
+import { parsePaperText } from './paperText';
 
 /**
  * Test maker: the school's own question bank, and papers built from it.
@@ -69,16 +72,18 @@ function assertOwner(user: JwtPayload, createdById: string, what: string) {
 
 router.get('/scope', handler(async (req, res) => {
   const pairs = await allowedPairs(me(req));
+  const ai = !!(await resolveAi(currentSchoolId()));
   const [classes, subjects] = await Promise.all([
     prisma.class.findMany({ where: { archivedAt: null }, orderBy: { level: 'asc' }, select: { id: true, name: true } }),
     prisma.subject.findMany({ orderBy: { name: 'asc' }, select: { id: true, name: true } }),
   ]);
-  if (!pairs) return sendSuccess(res, { classes, subjects, pairs: null });
+  if (!pairs) return sendSuccess(res, { classes, subjects, pairs: null, ai });
   const list = [...pairs].map((p) => ({ classId: p.split('|')[0], subjectId: p.split('|')[1] }));
   return sendSuccess(res, {
     classes: classes.filter((c) => list.some((p) => p.classId === c.id)),
     subjects: subjects.filter((s) => list.some((p) => p.subjectId === s.id)),
     pairs: list,
+    ai,
   });
 }));
 
@@ -167,8 +172,11 @@ type QuestionInput = z.infer<typeof questionFields>;
 /**
  * Checks the parts that depend on the type and returns them in their stored shape.
  * Throws a plain Error with a message a teacher can act on.
+ *
+ * On a paper (not in the bank) the answer to an objective question may be left unmarked:
+ * a paper pasted in as text has no answers until the teacher marks them.
  */
-export function shapeQuestion(q: QuestionInput): { options: Prisma.InputJsonValue | typeof Prisma.DbNull; answer: Prisma.InputJsonValue | typeof Prisma.DbNull } {
+export function shapeQuestion(q: QuestionInput, answerOptional = false): { options: Prisma.InputJsonValue | typeof Prisma.DbNull; answer: Prisma.InputJsonValue | typeof Prisma.DbNull } {
   const parse = <S extends z.ZodTypeAny>(schema: S, value: unknown, message: string): z.infer<S> => {
     const r = schema.safeParse(value);
     if (!r.success) throw new Error(message);
@@ -178,11 +186,13 @@ export function shapeQuestion(q: QuestionInput): { options: Prisma.InputJsonValu
   switch (q.type) {
     case 'MCQ': {
       const options = parse(z.array(words).min(2).max(6), q.options, 'A multiple-choice question needs 2 to 6 choices');
+      if (answerOptional && (q.answer === undefined || q.answer === null)) return { options, answer: Prisma.DbNull };
       const answer = parse(z.object({ index: z.number().int().min(0) }), q.answer, 'Mark which choice is correct');
       if (answer.index >= options.length) throw new Error('The correct choice is not one of the choices');
       return { options, answer };
     }
     case 'TRUE_FALSE':
+      if (answerOptional && (q.answer === undefined || q.answer === null)) return { options: Prisma.DbNull, answer: Prisma.DbNull };
       return { options: Prisma.DbNull, answer: parse(z.object({ value: z.boolean() }), q.answer, 'Say whether the statement is true or false') };
     case 'MATCH': {
       const pairs = parse(z.array(z.object({ left: words, right: words }).strict()).min(2).max(10), q.options, 'Matching needs 2 to 10 pairs, each with both sides filled in');
@@ -392,6 +402,65 @@ router.post('/papers/draw', handler(async (req, res) => {
   return sendSuccess(res, { sections, short });
 }));
 
+/** EN, UR and AR are one language; DUAL is English beside Urdu. Arabic is stored in the right-to-left field. */
+const MEDIUMS = ['EN', 'UR', 'AR', 'DUAL'] as const;
+export const PAPER_TYPES = ['ANNUAL', 'TERM', 'MONTHLY', 'WEEKLY', 'DAILY', 'HALF_BOOK', 'FULL_BOOK', 'CHAPTER'] as const;
+const PAPER_TYPE_NAME: Record<(typeof PAPER_TYPES)[number], string> = {
+  ANNUAL: 'Annual examination', TERM: 'Term examination', MONTHLY: 'Monthly test', WEEKLY: 'Weekly test', DAILY: 'Daily test',
+  HALF_BOOK: 'Half book test', FULL_BOOK: 'Full book test', CHAPTER: 'Chapter or unit test',
+};
+
+/**
+ * Writes the questions with AI from a topic. Nothing is saved: the draft comes back in the
+ * same shape as a draw from the bank and the teacher edits it before printing.
+ */
+router.post('/papers/ai', handler(async (req, res) => {
+  const b = parseBody(classSubject.extend({
+    language: z.enum(AI_LANGUAGES),
+    paperType: z.enum(PAPER_TYPES).nullable().optional(),
+    board: z.string().trim().max(60).nullable().optional(),
+    topic: z.string().trim().min(2).max(500),
+    instructions: z.string().trim().max(2000).nullable().optional(),
+    mix: z.array(z.object({ type: z.enum(AI_TYPES), count: z.coerce.number().int().min(1).max(40), marksEach: z.coerce.number().min(0.5).max(100).multipleOf(0.5) })).min(1).max(6),
+  }), req);
+  const ai = await resolveAi(currentSchoolId());
+  if (!ai) throw new AppError('AI is not set up for this school. A school admin can connect an AI account under Settings, AI.', 503);
+  await assertPair(me(req), b.classId, b.subjectId);
+  if (b.mix.reduce((n, m) => n + m.count, 0) > 80) throw new AppError('Ask for at most 80 questions in one draft.', 422);
+  const [cls, subject] = await Promise.all([
+    prisma.class.findFirst({ where: { id: b.classId }, select: { name: true } }),
+    prisma.subject.findFirst({ where: { id: b.subjectId }, select: { name: true } }),
+  ]);
+  if (!cls || !subject) throw new AppError('Class or subject not found', 422);
+  await assertWithinLimits(currentSchoolId(), ai);
+  const { draft, inputTokens, outputTokens } = await draftPaper(ai, {
+    className: cls.name, subjectName: subject.name, language: b.language, paperType: b.paperType ? PAPER_TYPE_NAME[b.paperType] : null,
+    board: b.board || null, topic: b.topic, instructions: b.instructions || null, mix: b.mix,
+  });
+  const marksOf = (type: QuestionType) => b.mix.find((m) => m.type === type)?.marksEach ?? 1;
+  const sections = draftToSections(draft, b.language, marksOf).map((s) => ({
+    ...s,
+    // A heading written in Urdu or Arabic goes in the right-to-left heading.
+    title: b.language === 'EN' ? s.title : SECTION_TITLES[s.type].en,
+    titleUr: b.language === 'EN' ? SECTION_TITLES[s.type].ur : s.title,
+  }));
+  if (!sections.length) throw new AppError('The AI did not return any usable questions. Please try again.', 502);
+  const short = b.mix.map((m) => ({ type: m.type, wanted: m.count, available: sections.filter((s) => s.type === m.type).reduce((n, s) => n + s.items.length, 0) })).filter((m) => m.available < m.wanted);
+  const questions = sections.reduce((n, s) => n + s.items.length, 0);
+  await recordUsage({ schoolId: currentSchoolId(), userId: me(req).id, ai, feature: 'PAPER', questions, inputTokens, outputTokens });
+  await audit(req, { action: 'PAPER_AI_DRAFTED', entity: 'Paper', meta: { classId: b.classId, subjectId: b.subjectId, questions, provider: ai.provider, source: ai.source } });
+  return sendSuccess(res, { sections, short });
+}));
+
+/** Lays out a paper pasted as plain text. The words are kept as typed; nothing is saved. */
+router.post('/papers/parse', handler(async (req, res) => {
+  const b = parseBody(z.object({ text: z.string().min(10).max(60000) }), req);
+  const parsed = parsePaperText(b.text);
+  if (!parsed.questions) throw new AppError('No questions were found. Number each question (1. 2. 3.) and put each on its own line.', 422);
+  if (parsed.sections.length > 12) throw new AppError('This paper changes question type too many times. Group the questions under headings such as "Short questions" and paste again.', 422);
+  return sendSuccess(res, { ...parsed, short: [] });
+}));
+
 const paperItem = z.object({
   questionId: id.nullable().optional(),
   textEn: text.nullable().optional(),
@@ -411,7 +480,9 @@ const paperSection = z.object({
 });
 const paperBody = classSubject.extend({
   title: z.string().trim().min(1).max(150),
-  medium: z.enum(['EN', 'UR', 'DUAL']),
+  medium: z.enum(MEDIUMS),
+  paperType: z.enum(PAPER_TYPES).nullable().optional(),
+  board: z.string().trim().max(60).nullable().optional(),
   durationMinutes: z.coerce.number().int().min(5).max(600).nullable().optional(),
   instructions: z.string().trim().max(2000).nullable().optional(),
   sections: z.array(paperSection).min(1).max(12),
@@ -435,7 +506,7 @@ function cleanSections(sections: PaperSection[]) {
     attempt: s.attempt && s.attempt < s.items.length ? s.attempt : null,
     items: s.items.map((item, qi) => {
       let shaped;
-      try { shaped = shapeQuestion({ ...item, type: s.type, marks: item.marks }); } catch (e) { throw new AppError(`${s.title}, question ${qi + 1}: ${(e as Error).message}`, 422); }
+      try { shaped = shapeQuestion({ ...item, type: s.type, marks: item.marks }, true); } catch (e) { throw new AppError(`${s.title}, question ${qi + 1}: ${(e as Error).message}`, 422); }
       if (item.imageKey && !item.imageKey.startsWith(prefix)) throw new AppError(`Section ${si + 1}, question ${qi + 1}: unknown picture`, 422);
       return {
         questionId: item.questionId ?? null, textEn: item.textEn ?? null, textUr: item.textUr ?? null,
@@ -458,7 +529,7 @@ router.get('/papers', handler(async (req, res) => {
     ...(pairs ? { OR: [{ createdById: me(req).id }, ...[...pairs].map((p) => ({ classId: p.split('|')[0], subjectId: p.split('|')[1] }))] } : {}),
   };
   const [rows, total] = await Promise.all([
-    prisma.paper.findMany({ where, ...paging(q), orderBy: { createdAt: 'desc' }, select: { id: true, title: true, classId: true, subjectId: true, medium: true, totalMarks: true, durationMinutes: true, createdById: true, createdAt: true, updatedAt: true } }),
+    prisma.paper.findMany({ where, ...paging(q), orderBy: { createdAt: 'desc' }, select: { id: true, title: true, classId: true, subjectId: true, medium: true, paperType: true, totalMarks: true, durationMinutes: true, createdById: true, createdAt: true, updatedAt: true } }),
     prisma.paper.count({ where }),
   ]);
   const [classes, subjects, authors] = await Promise.all([
@@ -494,7 +565,7 @@ router.post('/papers', handler(async (req, res) => {
   const sections = cleanSections(b.sections);
   const created = await prisma.paper.create({
     data: {
-      schoolId: currentSchoolId(), classId: b.classId, subjectId: b.subjectId, title: b.title, medium: b.medium,
+      schoolId: currentSchoolId(), classId: b.classId, subjectId: b.subjectId, title: b.title, medium: b.medium, paperType: b.paperType ?? null, board: b.board || null,
       durationMinutes: b.durationMinutes ?? null, instructions: b.instructions ?? null, sections, totalMarks: totalMarks(sections), createdById: me(req).id,
     },
   });
@@ -508,7 +579,7 @@ router.put('/papers/:id', handler(async (req, res) => {
   const sections = cleanSections(b.sections);
   const updated = await prisma.paper.update({
     where: { id: paper.id },
-    data: { title: b.title, medium: b.medium, durationMinutes: b.durationMinutes ?? null, instructions: b.instructions ?? null, sections, totalMarks: totalMarks(sections) },
+    data: { title: b.title, medium: b.medium, paperType: b.paperType ?? null, board: b.board || null, durationMinutes: b.durationMinutes ?? null, instructions: b.instructions ?? null, sections, totalMarks: totalMarks(sections) },
   });
   return sendSuccess(res, { ...updated, sections: withPictures(updated.sections) }, 'Paper saved');
 }));

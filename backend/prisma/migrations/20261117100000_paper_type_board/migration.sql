@@ -1,0 +1,2 @@
+ALTER TABLE `papers` ADD COLUMN `paperType` VARCHAR(20) NULL,
+    ADD COLUMN `board` VARCHAR(60) NULL;

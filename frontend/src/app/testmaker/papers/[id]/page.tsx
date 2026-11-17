@@ -12,7 +12,7 @@ import { testmakerAPI, apiError } from '@/lib/api';
 import { CAN } from '@/lib/roles';
 import { PaperSheet, type SheetPaper } from '@/components/testmaker/PaperSheet';
 import { QuestionFields, emptyDraft, fromDraft, toDraft, type QuestionDraft } from '@/components/testmaker/QuestionFields';
-import { TYPES, typeLabel, type Medium, type PaperItem, type PaperSection, type QuestionType } from '@/components/testmaker/shared';
+import { BOARDS, MEDIUMS, PAPER_TYPES, TYPES, typeLabel, type Medium, type PaperItem, type PaperSection, type QuestionType } from '@/components/testmaker/shared';
 
 const sum = (sections: PaperSection[]) => sections.reduce((total, s) => {
   const marks = s.items.map((i) => Number(i.marks)).sort((a, b) => b - a);
@@ -49,7 +49,7 @@ export default function PaperEditorPage() {
 
   const save = useMutation({
     mutationFn: () => testmakerAPI.updatePaper(id, {
-      title: paper!.title, medium: paper!.medium, durationMinutes: paper!.durationMinutes || null, instructions: paper!.instructions || null,
+      title: paper!.title, medium: paper!.medium, paperType: paper!.paperType || null, board: paper!.board || null, durationMinutes: paper!.durationMinutes || null, instructions: paper!.instructions || null,
       sections: paper!.sections.map((s) => ({ ...s, items: s.items.map(({ imageUrl: _imageUrl, ...item }) => item) })),
     }),
     onSuccess: () => { toast.success('Paper saved'); setDirty(false); qc.invalidateQueries({ queryKey: ['tm-papers'] }); qc.invalidateQueries({ queryKey: ['tm-paper', id] }); },
@@ -108,10 +108,22 @@ export default function PaperEditorPage() {
             <div className="grid grid-cols-2 gap-3">
               <Field label="Medium">
                 <select className="select" value={paper.medium} onChange={(e) => change({ medium: e.target.value as Medium })}>
-                  <option value="EN">English</option><option value="UR">Urdu</option><option value="DUAL">English + Urdu</option>
+                  {MEDIUMS.map(([v, label]) => <option key={v} value={v}>{label}</option>)}
                 </select>
               </Field>
               <Field label="Time (minutes)"><input className="input" type="number" min={5} max={600} value={paper.durationMinutes ?? ''} onChange={(e) => change({ durationMinutes: e.target.value ? Number(e.target.value) : null })} /></Field>
+              <Field label="Kind of test">
+                <select className="select" value={paper.paperType ?? ''} onChange={(e) => change({ paperType: e.target.value || null })}>
+                  <option value="">Not stated</option>
+                  {PAPER_TYPES.map(([v, label]) => <option key={v} value={v}>{label}</option>)}
+                </select>
+              </Field>
+              <Field label="Board pattern" hint="A note for you. It is not printed.">
+                <select className="select" value={paper.board ?? ''} onChange={(e) => change({ board: e.target.value || null })}>
+                  <option value="">Not stated</option>
+                  {BOARDS.map((b) => <option key={b} value={b}>{b}</option>)}
+                </select>
+              </Field>
             </div>
             <Field label="Instructions (optional)"><textarea className="input min-h-[60px]" maxLength={2000} value={paper.instructions ?? ''} onChange={(e) => change({ instructions: e.target.value })} placeholder="Attempt all questions. Use blue or black ink." /></Field>
           </div>

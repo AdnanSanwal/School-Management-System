@@ -11,6 +11,8 @@ import app from '../../app';
 import { basePrisma } from '../../config/database';
 import { connectRedis } from '../../config/redis';
 import { spreadPick, totalMarks } from '../../modules/testmaker/testmaker.routes';
+import { draftToSections } from '../../modules/testmaker/aiPaper';
+import { parsePaperText } from '../../modules/testmaker/paperText';
 import { createTestSchool } from './helpers';
 
 const d = process.env.RUN_DB_TESTS ? describe : describe.skip;
@@ -40,6 +42,81 @@ describe('paper arithmetic', () => {
     expect(totalMarks([{ items: [{ marks: 1 }, { marks: 1 }, { marks: 1 }] }, { items: [{ marks: 5 }, { marks: 5 }] }])).toBe(13);
     expect(totalMarks([{ attempt: 2, items: [{ marks: 5 }, { marks: 5 }, { marks: 5 }] }])).toBe(10);
     expect(totalMarks([{ attempt: 5, items: [{ marks: 2 }, { marks: 2 }] }])).toBe(4); // asking for more than there are changes nothing
+  });
+});
+
+describe('a pasted paper', () => {
+  const PASTED = [
+    'City Grammar School',
+    'Monthly Test - Science - Class 8',
+    '',
+    'Section A: MCQs',
+    '1. What is the boiling point of water?',
+    '(a) 50 C  (b) 100 C  (c) 150 C  (d) 200 C',
+    '2) Which planet is nearest to the sun?',
+    'a) Venus',
+    'b) Mercury',
+    'c) Mars',
+    '',
+    'Fill in the blanks',
+    '3. The capital of Pakistan is ________.',
+    'True / False',
+    '4. The sun rises in the west.',
+    'Short Questions',
+    'Q5: Define photosynthesis. (3)',
+    'Q6. What is an atom?',
+    'It should be answered in two lines.',
+    'Long Questions',
+    '7. Describe the water cycle with a diagram. [8 marks]',
+  ].join('\r\n');
+
+  it('is split into sections by its headings, keeping the words as typed', () => {
+    const { sections, questions } = parsePaperText(PASTED);
+    expect(questions).toBe(7);
+    expect(sections.map((s) => [s.type, s.items.length])).toEqual([['MCQ', 2], ['BLANK', 1], ['TRUE_FALSE', 1], ['SHORT', 2], ['LONG', 1]]);
+    expect(sections[0].items[0]).toMatchObject({ textEn: 'What is the boiling point of water?', options: [{ en: '50 C' }, { en: '100 C' }, { en: '150 C' }, { en: '200 C' }], answer: null, marks: 1 });
+    expect(sections[0].items[1].options).toEqual([{ en: 'Venus' }, { en: 'Mercury' }, { en: 'Mars' }]);
+    // Marks written after a question are read and taken out of the words.
+    expect(sections[3].items[0]).toMatchObject({ textEn: 'Define photosynthesis.', marks: 3 });
+    expect(sections[3].items[1].textEn).toBe('What is an atom?\nIt should be answered in two lines.');
+    expect(sections[4].items[0]).toMatchObject({ textEn: 'Describe the water cycle with a diagram.', marks: 8 });
+  });
+
+  it('works without headings, and with Urdu', () => {
+    const plain = parsePaperText('1. Name the largest ocean.\n2. Water freezes at ____ degrees.\n3. Which is a mammal? (a) Shark (b) Whale (c) Trout');
+    expect(plain.sections.map((s) => s.type)).toEqual(['SHORT', 'BLANK', 'MCQ']);
+
+    const urdu = parsePaperText('مختصر سوالات\n۱۔ اسم کی تعریف کریں۔\n2. فعل کسے کہتے ہیں؟');
+    expect(urdu.sections).toHaveLength(1);
+    expect(urdu.sections[0]).toMatchObject({ type: 'SHORT', titleUr: 'مختصر سوالات' });
+    expect(urdu.sections[0].items[1]).toMatchObject({ textEn: null, textUr: 'فعل کسے کہتے ہیں؟' });
+    expect(parsePaperText('Just a paragraph with no numbered questions at all.').questions).toBe(0);
+  });
+});
+
+describe('an AI draft', () => {
+  const item = (over: object) => ({ text: 'Q', options: [], correctOption: -1, isTrue: false, answer: '', pairs: [], ...over });
+  it('is stored like any other paper, dropping questions that are incomplete', () => {
+    const draft = { sections: [
+      { type: 'MCQ' as const, title: 'MCQs', items: [
+        item({ text: 'Solve $x^2 = 4$', options: ['2', '3', '4', '5'], correctOption: 0 }),
+        item({ text: 'No choices given' }),
+        item({ text: 'Answer out of range', options: ['a', 'b'], correctOption: 7 }),
+      ] },
+      { type: 'TRUE_FALSE' as const, title: 'True or false', items: [item({ text: 'Zero is even.', isTrue: true })] },
+      { type: 'SHORT' as const, title: 'Short', items: [item({ text: 'Define a prime number.', answer: 'A number with exactly two factors.' }), item({ text: '  ' })] },
+      { type: 'MATCH' as const, title: 'Match', items: [item({ text: '', pairs: [{ left: '2 x 2', right: '4' }, { left: '3 x 3', right: '9' }] }), item({ pairs: [{ left: 'only one', right: 'pair' }] })] },
+      { type: 'LONG' as const, title: 'Empty', items: [] },
+    ] };
+    const en = draftToSections(draft, 'EN', (t) => (t === 'SHORT' ? 2 : 1));
+    expect(en.map((s) => [s.type, s.items.length])).toEqual([['MCQ', 2], ['TRUE_FALSE', 1], ['SHORT', 1], ['MATCH', 1]]);
+    expect(en[0].items[0]).toMatchObject({ textEn: 'Solve $x^2 = 4$', options: [{ en: '2' }, { en: '3' }, { en: '4' }, { en: '5' }], answer: { index: 0 }, marks: 1 });
+    expect(en[0].items[1].answer).toBeNull(); // an impossible answer is left for the teacher to mark
+    expect(en[2].items[0]).toMatchObject({ marks: 2, answer: { en: 'A number with exactly two factors.' } });
+
+    const ur = draftToSections(draft, 'UR', () => 1);
+    expect(ur[0].items[0]).toMatchObject({ textEn: null, textUr: 'Solve $x^2 = 4$', options: [{ ur: '2' }, { ur: '3' }, { ur: '4' }, { ur: '5' }] });
+    expect(ur[3].items[0].options).toEqual([{ left: { ur: '2 x 2' }, right: { ur: '4' } }, { left: { ur: '3 x 3' }, right: { ur: '9' } }]);
   });
 });
 
@@ -318,6 +395,41 @@ d('Test maker (database)', () => {
 
       expect((await api(u.otherTeacher).del(`/papers/${paperId}`)).status).toBe(403);
       expect((await api(u.ADMIN).del(`/papers/${paperId}`)).status).toBe(200);
+    });
+
+    it('a pasted paper is laid out and saved with no answers marked', async () => {
+      const text = 'MCQs\n1. Which is even? (a) 3 (b) 4 (c) 5 (d) 7\nTrue / False\n2. Ten is a prime number.\nShort Questions\n3. Define a factor. (2)';
+      expect((await api(u.PARENT).post('/papers/parse', { text })).status).toBe(403);
+      expect((await api(u.TEACHER).post('/papers/parse', { text: 'There is nothing numbered here.' })).status).toBe(422);
+      const parsed = await api(u.TEACHER).post('/papers/parse', { text });
+      expect(parsed.status).toBe(200);
+      expect(parsed.body.data.sections.map((s: any) => s.type)).toEqual(['MCQ', 'TRUE_FALSE', 'SHORT']);
+
+      const body = { classId: ids.cls, subjectId: ids.maths, title: 'Pasted test', medium: 'EN', paperType: 'WEEKLY', board: 'BISE Lahore', sections: parsed.body.data.sections };
+      const saved = await api(u.TEACHER).post('/papers', body);
+      expect(saved.status).toBe(201);
+      expect(saved.body.data).toMatchObject({ paperType: 'WEEKLY', board: 'BISE Lahore' });
+      expect(Number(saved.body.data.totalMarks)).toBe(1 + 1 + 2);
+      expect(saved.body.data.sections[0].items[0].answer).toBeNull();
+      expect(saved.body.data.sections[1].items[0].answer).toBeNull();
+      expect((await api(u.TEACHER).get('/papers')).body.data[0].paperType).toBe('WEEKLY');
+
+      // An Arabic paper is a medium of its own; an unknown kind of test is refused.
+      expect((await api(u.TEACHER).put(`/papers/${saved.body.data.id}`, { ...body, medium: 'AR', paperType: null })).body.data).toMatchObject({ medium: 'AR', paperType: null });
+      expect((await api(u.TEACHER).post('/papers', { ...body, paperType: 'POP_QUIZ' })).status).toBe(422);
+      // The bank still insists on an answer: only a paper may leave one unmarked.
+      expect((await api(u.TEACHER).post('/questions', { chapterId: ids.ch1, type: 'TRUE_FALSE', textEn: 'Ten is prime.' })).status).toBe(422);
+    });
+
+    it('AI papers are off until the server has a key', async () => {
+      const before = process.env.ANTHROPIC_API_KEY;
+      delete process.env.ANTHROPIC_API_KEY;
+      try {
+        expect((await api(u.TEACHER).get('/scope')).body.data.ai).toBe(false);
+        const res = await api(u.TEACHER).post('/papers/ai', { classId: ids.cls, subjectId: ids.maths, language: 'EN', topic: 'Quadratic equations', mix: [{ type: 'MCQ', count: 5, marksEach: 1 }] });
+        expect(res.status).toBe(503);
+        expect((await api(u.TEACHER).post('/papers/ai', { classId: ids.cls, subjectId: ids.maths, language: 'FR', topic: 'x', mix: [] })).status).toBe(422);
+      } finally { if (before !== undefined) process.env.ANTHROPIC_API_KEY = before; }
     });
   });
 });
