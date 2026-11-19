@@ -13,7 +13,7 @@ import { assertKind, deleteFile, saveFile, signedUrl } from '../../utils/storage
 import { audit } from '../../utils/audit';
 import { uploadOne } from '../files/files.routes';
 import type { JwtPayload } from '../../utils/jwt';
-import { assertWithinLimits, recordUsage, resolveAi } from '../ai/ai.service';
+import { cancelUsage, finishUsage, reserveUsage, resolveAi } from '../ai/ai.service';
 import { AI_LANGUAGES, AI_TYPES, draftPaper, draftToSections } from './aiPaper';
 import { parsePaperText } from './paperText';
 
@@ -432,11 +432,20 @@ router.post('/papers/ai', handler(async (req, res) => {
     prisma.subject.findFirst({ where: { id: b.subjectId }, select: { name: true } }),
   ]);
   if (!cls || !subject) throw new AppError('Class or subject not found', 422);
-  await assertWithinLimits(currentSchoolId(), ai);
-  const { draft, inputTokens, outputTokens } = await draftPaper(ai, {
-    className: cls.name, subjectName: subject.name, language: b.language, paperType: b.paperType ? PAPER_TYPE_NAME[b.paperType] : null,
-    board: b.board || null, topic: b.topic, instructions: b.instructions || null, mix: b.mix,
-  });
+  // The draft takes its place in the school's allowance before the AI is asked, and gives
+  // it back if nothing usable comes out.
+  const usageId = await reserveUsage({ schoolId: currentSchoolId(), userId: me(req).id, ai, feature: 'PAPER' });
+  let result: Awaited<ReturnType<typeof draftPaper>>;
+  try {
+    result = await draftPaper(ai, {
+      className: cls.name, subjectName: subject.name, language: b.language, paperType: b.paperType ? PAPER_TYPE_NAME[b.paperType] : null,
+      board: b.board || null, topic: b.topic, instructions: b.instructions || null, mix: b.mix,
+    });
+  } catch (e) {
+    await cancelUsage(usageId);
+    throw e;
+  }
+  const { draft, inputTokens, outputTokens } = result;
   const marksOf = (type: QuestionType) => b.mix.find((m) => m.type === type)?.marksEach ?? 1;
   const sections = draftToSections(draft, b.language, marksOf).map((s) => ({
     ...s,
@@ -444,10 +453,13 @@ router.post('/papers/ai', handler(async (req, res) => {
     title: b.language === 'EN' ? s.title : SECTION_TITLES[s.type].en,
     titleUr: b.language === 'EN' ? SECTION_TITLES[s.type].ur : s.title,
   }));
-  if (!sections.length) throw new AppError('The AI did not return any usable questions. Please try again.', 502);
+  if (!sections.length) {
+    await cancelUsage(usageId);
+    throw new AppError('The AI did not return any usable questions. Please try again.', 502);
+  }
   const short = b.mix.map((m) => ({ type: m.type, wanted: m.count, available: sections.filter((s) => s.type === m.type).reduce((n, s) => n + s.items.length, 0) })).filter((m) => m.available < m.wanted);
   const questions = sections.reduce((n, s) => n + s.items.length, 0);
-  await recordUsage({ schoolId: currentSchoolId(), userId: me(req).id, ai, feature: 'PAPER', questions, inputTokens, outputTokens });
+  await finishUsage(usageId, { questions, inputTokens, outputTokens });
   await audit(req, { action: 'PAPER_AI_DRAFTED', entity: 'Paper', meta: { classId: b.classId, subjectId: b.subjectId, questions, provider: ai.provider, source: ai.source } });
   return sendSuccess(res, { sections, short });
 }));

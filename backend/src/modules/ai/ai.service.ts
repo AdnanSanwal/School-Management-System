@@ -1,4 +1,4 @@
-import { basePrisma } from '../../config/database';
+import { basePrisma, retryOnDeadlock } from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
 import { decrypt, encrypt } from '../../utils/encryption';
 import { PROVIDERS, type Provider } from './providers';
@@ -64,12 +64,22 @@ export async function resolveAi(schoolId: string): Promise<ResolvedAi | null> {
 const startOfDay = (now: Date) => new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
 const startOfMonth = (now: Date) => new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
 
-/** Drafts made on the platform's account today and this month (UTC), and on the school's own. */
-export async function usageOf(schoolId: string, now = new Date()) {
-  const rows = await basePrisma.aiUsage.groupBy({
-    by: ['source'], where: { schoolId, createdAt: { gte: startOfMonth(now) } }, _count: true, _sum: { inputTokens: true, outputTokens: true },
+/**
+ * A draft in progress holds its place in the allowance from the moment it starts, so several
+ * drafts started together cannot pass a limit that only one of them fits under. A reservation
+ * left behind by a crashed server stops counting after this long.
+ */
+export const RESERVATION_MS = 10 * 60 * 1000;
+const counted = (now: Date) => ({ OR: [{ pending: false }, { createdAt: { gte: new Date(now.getTime() - RESERVATION_MS) } }] });
+
+type Db = Pick<typeof basePrisma, 'aiUsage'>;
+
+/** Drafts made (or under way) on the platform's account today and this month (UTC), and on the school's own. */
+export async function usageOf(schoolId: string, now = new Date(), db: Db = basePrisma) {
+  const rows = await db.aiUsage.groupBy({
+    by: ['source'], where: { schoolId, createdAt: { gte: startOfMonth(now) }, ...counted(now) }, _count: true, _sum: { inputTokens: true, outputTokens: true },
   });
-  const today = await basePrisma.aiUsage.groupBy({ by: ['source'], where: { schoolId, createdAt: { gte: startOfDay(now) } }, _count: true });
+  const today = await db.aiUsage.groupBy({ by: ['source'], where: { schoolId, createdAt: { gte: startOfDay(now) }, ...counted(now) }, _count: true });
   const pick = (list: { source: string; _count: number }[], source: AiSource) => list.find((r) => r.source === source)?._count ?? 0;
   const tokens = rows.reduce((n, r) => n + (r._sum.inputTokens ?? 0) + (r._sum.outputTokens ?? 0), 0);
   return {
@@ -79,23 +89,38 @@ export async function usageOf(schoolId: string, now = new Date()) {
   };
 }
 
-/** Refuses a draft on the platform's account once the school has used its allowance. */
-export async function assertWithinLimits(schoolId: string, ai: ResolvedAi): Promise<void> {
-  if (ai.source !== 'PLATFORM') return;
-  const s = await basePrisma.aiSetting.findUnique({ where: { schoolId }, select: { dailyLimit: true, monthlyLimit: true } });
-  if (s?.dailyLimit == null && s?.monthlyLimit == null) return;
-  const used = (await usageOf(schoolId)).platform;
-  if (s.monthlyLimit != null && used.month >= s.monthlyLimit) throw new AppError(`Your school has used all ${s.monthlyLimit} AI drafts for this month. The allowance starts again on the 1st. You can still build papers from the question bank or paste one.`, 429);
-  if (s.dailyLimit != null && used.today >= s.dailyLimit) throw new AppError(`Your school has used today's ${s.dailyLimit} AI drafts. Try again tomorrow, or build the paper from the question bank.`, 429);
+/**
+ * Takes one draft from the school's allowance before the AI is called, or refuses with 429.
+ * The school's settings row is locked while counting, so two drafts started at the same
+ * moment are counted one after the other. Call finishUsage or cancelUsage afterwards.
+ */
+export async function reserveUsage(entry: { schoolId: string; userId: string; ai: ResolvedAi; feature: string }): Promise<string> {
+  const data = {
+    schoolId: entry.schoolId, userId: entry.userId, source: entry.ai.source, provider: entry.ai.provider,
+    model: entry.ai.model.slice(0, 80), feature: entry.feature, pending: true,
+  };
+  if (entry.ai.source !== 'PLATFORM') return (await basePrisma.aiUsage.create({ data, select: { id: true } })).id;
+  return retryOnDeadlock(() => basePrisma.$transaction(async (tx) => {
+    const locked = await tx.$queryRaw<{ dailyLimit: number | null; monthlyLimit: number | null }[]>`
+      SELECT dailyLimit, monthlyLimit FROM ai_settings WHERE schoolId = ${entry.schoolId} FOR UPDATE`;
+    const s = locked[0];
+    if (s && (s.dailyLimit != null || s.monthlyLimit != null)) {
+      const used = (await usageOf(entry.schoolId, new Date(), tx)).platform;
+      if (s.monthlyLimit != null && used.month >= s.monthlyLimit) throw new AppError(`Your school has used all ${s.monthlyLimit} AI drafts for this month. The allowance starts again on the 1st. You can still build papers from the question bank or paste one.`, 429);
+      if (s.dailyLimit != null && used.today >= s.dailyLimit) throw new AppError(`Your school has used today's ${s.dailyLimit} AI drafts. Try again tomorrow, or build the paper from the question bank.`, 429);
+    }
+    return (await tx.aiUsage.create({ data, select: { id: true } })).id;
+  }, { isolationLevel: 'ReadCommitted', timeout: 15_000 }));
 }
 
-export async function recordUsage(entry: { schoolId: string; userId: string; ai: ResolvedAi; feature: string; questions?: number; inputTokens?: number; outputTokens?: number }): Promise<void> {
-  await basePrisma.aiUsage.create({
-    data: {
-      schoolId: entry.schoolId, userId: entry.userId, source: entry.ai.source, provider: entry.ai.provider, model: entry.ai.model.slice(0, 80),
-      feature: entry.feature, questions: entry.questions ?? 0, inputTokens: entry.inputTokens ?? 0, outputTokens: entry.outputTokens ?? 0,
-    },
-  });
+/** The draft succeeded: it stays counted, with what it used. */
+export async function finishUsage(id: string, used: { questions: number; inputTokens: number; outputTokens: number }): Promise<void> {
+  await basePrisma.aiUsage.update({ where: { id }, data: { ...used, pending: false } });
+}
+
+/** The draft failed: its place is given back. */
+export async function cancelUsage(id: string): Promise<void> {
+  await basePrisma.aiUsage.deleteMany({ where: { id, pending: true } });
 }
 
 /** What a school is shown about its AI: which account is in use and what is left. Never a key. */

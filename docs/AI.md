@@ -39,7 +39,12 @@ AI for schools (super admin only).
 - The table shows each school's use today and this month, and marks schools that have
   reached their monthly limit. The school sees what it has left on its own AI screen.
 
-A draft counts once it succeeds. A refused or failed request is not counted.
+A draft takes its place in the allowance when it starts, so several drafts started at once
+cannot pass a limit together. If the AI fails or returns nothing usable, the place is given
+back. A draft left unfinished by a server crash stops counting after 10 minutes.
+
+An AI request, retries included, is given up after 4.5 minutes, before the web app stops
+waiting at 5, so a teacher is never shown an error for a draft that was in fact made.
 
 ## Keys and privacy
 

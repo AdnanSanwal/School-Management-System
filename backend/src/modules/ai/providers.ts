@@ -36,7 +36,12 @@ export interface AiCall<S extends z.ZodType> {
 }
 export interface AiResult<T> { data: T; inputTokens: number; outputTokens: number }
 
-const TIMEOUT_MS = 4 * 60 * 1000;
+/**
+ * The whole AI call, retries included, ends within this time. The web app waits 5 minutes
+ * (frontend/src/lib/api.ts, aiDraft), so the server always answers before the browser gives
+ * up; otherwise a draft could finish, be billed and counted, and the teacher see an error.
+ */
+export const DEADLINE_MS = 4.5 * 60 * 1000;
 const name = (p: Provider) => PROVIDERS[p].label;
 
 /** What went wrong, in words a school admin can act on. Never includes the key. */
@@ -50,8 +55,11 @@ function failure(provider: Provider, status: number | undefined, detail: string)
   return new AppError(`${name(provider)} could not answer just now. Please try again.${said}`, 502);
 }
 
+const tookTooLong = (provider: Provider) => new AppError(`${name(provider)} took too long to answer. Ask for fewer questions, or try again in a few minutes.`, 504);
+
 async function anthropic<S extends z.ZodType>(call: AiCall<S>): Promise<AiResult<z.infer<S>>> {
-  const client = new Anthropic({ apiKey: call.apiKey, timeout: TIMEOUT_MS, maxRetries: 1 });
+  const client = new Anthropic({ apiKey: call.apiKey, timeout: DEADLINE_MS, maxRetries: 1 });
+  const deadline = AbortSignal.timeout(DEADLINE_MS);
   try {
     const response = await client.beta.messages.parse({
       model: call.model,
@@ -61,13 +69,14 @@ async function anthropic<S extends z.ZodType>(call: AiCall<S>): Promise<AiResult
       system: call.system,
       messages: [{ role: 'user', content: call.prompt }],
       output_config: { format: zodOutputFormat(call.schema) },
-    });
+    }, { signal: deadline });
     if (response.stop_reason === 'refusal') throw new AppError('The AI declined this request. Reword the topic or instructions and try again.', 422);
     if (response.stop_reason === 'max_tokens') throw new AppError('That is too much for one draft. Ask for fewer questions and add the rest in the editor.', 422);
     if (!response.parsed_output) throw new AppError('The AI returned an answer that could not be read. Please try again.', 502);
     return { data: response.parsed_output as z.infer<S>, inputTokens: response.usage.input_tokens, outputTokens: response.usage.output_tokens };
   } catch (e) {
     if (e instanceof AppError) throw e;
+    if (deadline.aborted) throw tookTooLong('ANTHROPIC');
     if (e instanceof Anthropic.APIConnectionError) throw failure('ANTHROPIC', undefined, '');
     if (e instanceof Anthropic.APIError) {
       logger.warn('AI request failed', { provider: 'ANTHROPIC', status: e.status });
@@ -101,9 +110,10 @@ async function chatCompletions<S extends z.ZodType>(call: AiCall<S>): Promise<Ai
         ],
         response_format: { type: 'json_object' },
       }),
-      signal: AbortSignal.timeout(TIMEOUT_MS),
+      signal: AbortSignal.timeout(DEADLINE_MS),
     });
-  } catch {
+  } catch (e) {
+    if ((e as Error)?.name === 'TimeoutError') throw tookTooLong(provider);
     throw failure(provider, undefined, '');
   }
   const body = await response.json().catch(() => null) as any;

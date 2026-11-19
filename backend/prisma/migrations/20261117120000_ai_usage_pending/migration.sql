@@ -1,0 +1,1 @@
+ALTER TABLE `ai_usage` ADD COLUMN `pending` BOOLEAN NOT NULL DEFAULT false;

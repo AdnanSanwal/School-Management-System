@@ -8,7 +8,7 @@ import request from 'supertest';
 import app from '../../app';
 import { basePrisma } from '../../config/database';
 import { connectRedis } from '../../config/redis';
-import { resolveAi } from '../../modules/ai/ai.service';
+import { RESERVATION_MS, resolveAi, usageOf } from '../../modules/ai/ai.service';
 import * as providers from '../../modules/ai/providers';
 import { createTestSchool } from './helpers';
 
@@ -180,6 +180,42 @@ d('AI settings (database)', () => {
     // Raising the limit lets the school carry on; no limit at all is allowed too.
     expect((await grant({ enabled: true, provider: 'GROK', dailyLimit: null, monthlyLimit: null })).status).toBe(200);
     expect((await draft()).status).toBe(200);
+  });
+
+  it('drafts started at the same moment cannot pass the limit together', async () => {
+    await basePrisma.aiUsage.deleteMany({ where: { schoolId: t.school.id } });
+    expect((await grant({ enabled: true, provider: 'GROK', dailyLimit: 2, monthlyLimit: null })).status).toBe(200);
+    // Each draft keeps the AI busy for a while, as a real one does.
+    generateJson.mockImplementation(() => new Promise((r) => setTimeout(() => r({ data: DRAFT, inputTokens: 10, outputTokens: 5 }), 400)));
+    const results = await Promise.all(Array.from({ length: 5 }, () => draft()));
+    expect(results.map((r) => r.status).sort()).toEqual([200, 200, 429, 429, 429]);
+    expect(generateJson).toHaveBeenCalledTimes(2);
+    const rows = await basePrisma.aiUsage.findMany({ where: { schoolId: t.school.id } });
+    expect(rows).toHaveLength(2);
+    expect(rows.every((r) => !r.pending && r.questions === 2 && r.inputTokens === 10)).toBe(true);
+  });
+
+  it('a draft that fails gives its place back; a reservation left by a crash expires', async () => {
+    await basePrisma.aiUsage.deleteMany({ where: { schoolId: t.school.id } });
+    await grant({ enabled: true, provider: 'GROK', dailyLimit: 1, monthlyLimit: null });
+    const { AppError } = jest.requireActual('../../middleware/errorHandler');
+    generateJson.mockRejectedValueOnce(new AppError('xAI (Grok) took too long to answer.', 504));
+    expect((await draft()).status).toBe(504);
+    expect(await basePrisma.aiUsage.count({ where: { schoolId: t.school.id } })).toBe(0);
+    // The AI answering with nothing usable gives the place back too.
+    generateJson.mockResolvedValueOnce({ data: { sections: [{ type: 'MCQ', title: 'x', items: [] }] }, inputTokens: 1, outputTokens: 1 });
+    expect((await draft()).status).toBe(502);
+    expect(await basePrisma.aiUsage.count({ where: { schoolId: t.school.id } })).toBe(0);
+
+    // A server that died mid-draft leaves a reservation: it holds the place for a while, then not.
+    const stale = await basePrisma.aiUsage.create({ data: { schoolId: t.school.id, userId: u.ADMIN.id, source: 'PLATFORM', provider: 'GROK', model: 'grok-test', feature: 'PAPER', pending: true } });
+    expect((await usageOf(t.school.id)).platform.today).toBe(1);
+    expect((await draft()).status).toBe(429);
+    await basePrisma.aiUsage.update({ where: { id: stale.id }, data: { createdAt: new Date(Date.now() - RESERVATION_MS - 60_000) } });
+    expect((await usageOf(t.school.id)).platform.today).toBe(0);
+    expect((await draft()).status).toBe(200);
+    expect((await draft()).status).toBe(429);
+    await grant({ enabled: true, provider: 'GROK', dailyLimit: null, monthlyLimit: null });
   });
 
   it('a key just for one school, and switching off a school\'s own key', async () => {

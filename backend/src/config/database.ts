@@ -77,6 +77,16 @@ export async function transaction<T>(fn: (tx: ScopedTx) => Promise<T>, attempts 
   }
 }
 
+/** Runs fn again when MySQL aborts it for a deadlock or lock wait (for basePrisma work outside `transaction`). */
+export async function retryOnDeadlock<T>(fn: () => Promise<T>, attempts = 5): Promise<T> {
+  for (let i = 1; ; i++) {
+    try { return await fn(); } catch (err) {
+      if (i >= attempts || !isRetryableTxError(err)) throw err;
+      await new Promise((r) => setTimeout(r, 25 * 2 ** i + Math.random() * 50));
+    }
+  }
+}
+
 /** Connects at start-up, retrying with back-off while MySQL is still starting (e.g. after a reboot). */
 export async function connectDatabase(attempts = Number(process.env.DB_CONNECT_ATTEMPTS) || 10) {
   for (let i = 1; ; i++) {

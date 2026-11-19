@@ -1439,6 +1439,8 @@ model AiUsage {
   questions    Int      @default(0)
   inputTokens  Int      @default(0)
   outputTokens Int      @default(0)
+  /// True while the AI is still working: holds the draft's place in the school's limits.
+  pending      Boolean  @default(false)
   createdAt    DateTime @default(now())
 
   @@index([schoolId, createdAt])

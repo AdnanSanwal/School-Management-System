@@ -11,8 +11,9 @@ import { Field, Modal, Spinner, Stat } from '@/components/ui/kit';
 import { SearchInput, NoMatches, matchesSearch } from '@/components/ui/SearchInput';
 import { payrollAPI, apiError, PayrollLine, PayrollRun } from '@/lib/api';
 import { CAN } from '@/lib/roles';
-import { formatDate, todayIso } from '@/lib/utils';
-import { financeError, useAccounts, useFinance } from '@/components/finance/shared';
+import { formatDate } from '@/lib/utils';
+import { financeError, useFinance } from '@/components/finance/shared';
+import { PayrollPayment } from '@/components/payroll/Payment';
 import { PayrollBadge, days, usePayrollRole } from '@/components/payroll/shared';
 
 /** One month's payroll: review each line, send for approval, approve, pay. */
@@ -150,7 +151,7 @@ export default function PayrollRunPage() {
         </>
       )}
       {editing && <LineModal line={editing} onClose={() => setEditing(null)} onSaved={refresh} />}
-      {paying && run && <PayModal run={run} onClose={() => setPaying(false)} onPaid={refresh} />}
+      {paying && run && <PayrollPayment run={run} onClose={() => setPaying(false)} onPaid={refresh} />}
     </DashboardLayout>
   );
 }
@@ -217,34 +218,6 @@ function LineModal({ line, onClose, onSaved }: { line: PayrollLine; onClose: () 
           <span>{net < 0 ? 'Deductions are more than the pay' : 'Net pay'}</span><span className="tabular-nums">{money(net)}</span>
         </div>
         <div className="flex justify-end gap-2 pt-1"><button type="button" className="btn-secondary" onClick={onClose}>Cancel</button><button className="btn-primary" disabled={save.isPending || net < 0}>Save</button></div>
-      </form>
-    </Modal>
-  );
-}
-
-function PayModal({ run, onClose, onPaid }: { run: PayrollRun; onClose: () => void; onPaid: () => void }) {
-  const { money } = useFinance();
-  const accounts = useAccounts();
-  const active = (accounts.data ?? []).filter((a) => a.isActive);
-  const [f, setF] = useState({ accountId: '', paymentDate: todayIso(),paymentReference:'',paymentRemarks:'' });
-  const account = active.find((a) => a.id === f.accountId);
-  const short = account && Number(account.balance) < Number(run.totals.net);
-  const pay = useMutation({
-    mutationFn: () => payrollAPI.pay(run.id, f),
-    onSuccess: (r) => { toast.success(r.data.message, { duration: 6000 }); onPaid(); onClose(); }, onError: financeError,
-  });
-  return (
-    <Modal open onClose={onClose} title={`Pay salaries — ${run.label}`}>
-      <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); pay.mutate(); }}>
-        <p className="text-sm text-gray-600"><b className="text-gray-900">{money(run.totals.net)}</b> for {run.totals.staff} staff leaves the account you choose and is recorded as a Salaries expense.
-          {Number(run.totals.loans) > 0 && <> {money(run.totals.loans)} of advances and loans is marked as recovered.</>} This can’t be undone.</p>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Pay from" hint={account ? `Holds ${money(account.balance)}` : undefined}><select required className="select" value={f.accountId} onChange={(e) => setF({ ...f, accountId: e.target.value })}>
-            <option value="">Choose…</option>{active.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select></Field>
-          <Field label="Payment date"><input type="date" required className="input" max={todayIso()} value={f.paymentDate} onChange={(e) => setF({ ...f, paymentDate: e.target.value })} /></Field>
-        </div>
-        {short && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{account.name} holds only {money(account.balance)}. Transfer money into it first (Finance → Accounts).</p>}
-        <Field label="Transaction reference"><input className="input w-full" maxLength={120} value={f.paymentReference} onChange={e=>setF({...f,paymentReference:e.target.value})}/></Field><Field label="Payment remarks"><textarea className="input w-full" maxLength={300} value={f.paymentRemarks} onChange={e=>setF({...f,paymentRemarks:e.target.value})}/></Field><div className="flex justify-end gap-2 pt-2"><button type="button" className="btn-secondary" onClick={onClose}>Cancel</button><button className="btn-primary" disabled={pay.isPending || !!short}>Pay {money(run.totals.net)}</button></div>
       </form>
     </Modal>
   );
