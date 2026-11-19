@@ -62,10 +62,10 @@ export function CustomRoles({ matrix }: { matrix: RoleMatrix }) {
       {matrix.custom.length > 0 && (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {matrix.custom.map((r) => (
-            <div key={r.id} className={cn('rounded-xl border p-4', draft?.id === r.id ? 'border-primary-300 ring-2 ring-primary-200' : 'border-slate-200')}>
-              <div className="flex items-start justify-between gap-2">
+            <div key={r.id} className={cn('relative isolate overflow-hidden rounded-2xl border border-violet-100 bg-violet-50 p-4 shadow-sm', draft?.id === r.id ? 'border-primary-300 ring-2 ring-primary-200' : 'border-violet-100')}>
+              <ShieldPlus aria-hidden="true" className="pointer-events-none absolute -bottom-2 -right-2 h-16 w-16 text-violet-700 opacity-10" /><div className="relative z-10 flex items-start justify-between gap-2">
                 <div>
-                  <p className="font-semibold">{r.name}</p>
+                  <p className="flex items-center gap-2 font-semibold"><ShieldPlus aria-hidden="true" className="h-5 w-5 shrink-0 text-violet-600" />{r.name}</p>
                   <p className="text-xs text-gray-500">Built on {r.baseLabel} · {r.permissions.length} permission{r.permissions.length === 1 ? '' : 's'}</p>
                 </div>
                 <div className="flex gap-1">

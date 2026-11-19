@@ -1,5 +1,7 @@
 'use client';
 
+import { ReceiptText } from 'lucide-react';
+
 import { Suspense, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useQuery, useMutation, keepPreviousData } from '@tanstack/react-query';
@@ -51,7 +53,7 @@ function Expenses() {
         <button className="btn-primary" onClick={() => setAdding(true)}><Plus className="h-4 w-4" /> Add expense</button>
       </> : undefined}>
       <div className="grid gap-4 sm:grid-cols-3">
-        <Stat tone="bad" label={f.status === 'PENDING' ? 'Waiting for approval' : f.status === 'REJECTED' ? 'Rejected' : 'Spent in these dates'} value={money(data?.totals?.amount ?? 0)} sub={`${data?.pagination?.total ?? 0} entries listed`} />
+        <Stat icon={ReceiptText} tone="bad" label={f.status === 'PENDING' ? 'Waiting for approval' : f.status === 'REJECTED' ? 'Rejected' : 'Spent in these dates'} value={money(data?.totals?.amount ?? 0)} sub={`${data?.pagination?.total ?? 0} entries listed`} />
       </div>
       <div className="card space-y-3">
         <div className="flex flex-wrap items-end gap-2">

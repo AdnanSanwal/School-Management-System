@@ -1,5 +1,7 @@
 'use client';
 
+import { TrendingUp } from 'lucide-react';
+
 import { useState } from 'react';
 import { useQuery, useMutation, keepPreviousData } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
@@ -37,7 +39,7 @@ export default function OtherIncomePage() {
         <button className="btn-primary" onClick={() => setAdding(true)}><Plus className="h-4 w-4" /> Add income</button>
       </> : undefined}>
       <div className="grid gap-4 sm:grid-cols-3">
-        <Stat tone="good" label="Received in these dates" value={money(data?.totals?.amount ?? 0)} sub={`${data?.pagination?.total ?? 0} entries`} />
+        <Stat icon={TrendingUp} tone="good" label="Received in these dates" value={money(data?.totals?.amount ?? 0)} sub={`${data?.pagination?.total ?? 0} entries`} />
       </div>
       <div className="card space-y-3">
         <div className="flex flex-wrap items-end gap-2">

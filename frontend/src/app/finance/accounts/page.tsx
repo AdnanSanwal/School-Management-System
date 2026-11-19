@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { ArrowLeftRight, Pencil, Plus, PlusCircle, Printer, Trash2 } from 'lucide-react';
+import { Banknote, Landmark, Wallet, ArrowLeftRight, Pencil, Plus, PlusCircle, Printer, Trash2 } from 'lucide-react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Empty, Field, Modal, Spinner } from '@/components/ui/kit';
 import { financeAPI, apiError, MoneyAccount } from '@/lib/api';
@@ -38,23 +38,26 @@ function Accounts() {
       {accounts.isLoading ? <Spinner /> : accounts.error ? <div className="card text-sm text-red-600">{apiError(accounts.error)}</div> : (
         <>
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 print:hidden">
-            {list.map((a) => (
-              <div key={a.id} className={`card space-y-2 ${selected === a.id ? 'ring-2 ring-primary-400' : ''} ${a.isActive ? '' : 'opacity-60'}`}>
-                <div className="flex items-start justify-between gap-2">
+            {list.map((a) => {
+              const AccountIcon = a.type === 'BANK' ? Landmark : a.type === 'WALLET' ? Wallet : Banknote;
+              const tone = a.type === 'BANK' ? 'border-blue-100 bg-blue-50 text-blue-700' : a.type === 'WALLET' ? 'border-violet-100 bg-violet-50 text-violet-700' : 'border-emerald-100 bg-emerald-50 text-emerald-700';
+              return (
+              <div key={a.id} className={`relative isolate overflow-hidden rounded-2xl border p-4 shadow-sm space-y-2 ${tone} ${selected === a.id ? 'ring-2 ring-primary-400' : ''} ${a.isActive ? '' : 'opacity-60'}`}>
+                <AccountIcon aria-hidden="true" className="pointer-events-none absolute -bottom-2 -right-2 h-20 w-20 opacity-10" /><div className="relative z-10 flex items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <p className="truncate font-semibold">{a.name}</p>
+                    <p className="flex items-center gap-2 font-semibold"><AccountIcon aria-hidden="true" className="h-6 w-6 shrink-0" /><span className="truncate text-slate-800">{a.name}</span></p>
                     <p className="text-xs text-gray-500">{ACCOUNT_TYPE_LABEL[a.type]}{a.accountNo ? ` · ${a.accountNo}` : ''}{a.isActive ? '' : ' · closed'}</p>
                   </div>
                   {canManage && <button className="btn-icon btn-ghost" aria-label={`Edit ${a.name}`} onClick={() => setEdit(a)}><Pencil className="h-4 w-4" /></button>}
                 </div>
                 <p className={`text-2xl font-bold tabular-nums ${Number(a.balance) < 0 ? 'text-red-600' : ''}`}>{money(a.balance)}</p>
                 <p className="min-h-[1rem] text-xs text-gray-500">{a.methods.length ? `Receives: ${a.methods.map((m) => METHOD_LABEL[m] ?? m).join(', ')}` : 'No fee payments land here'}</p>
-                <div className="flex gap-2 pt-1">
+                <div className="relative z-10 flex flex-wrap gap-2 pt-1">
                   <button className="btn-secondary flex-1" onClick={() => setSelected(a.id)}>Statement</button>
                   {canManage && a.isActive && <button className="btn-secondary flex-1" onClick={() => setEntry(a)}><PlusCircle className="h-4 w-4" /> Money in / out</button>}
                 </div>
               </div>
-            ))}
+            ); })}
           </div>
           {closed > 0 && <button className="text-sm text-primary-700 hover:underline print:hidden" onClick={() => setShowClosed(!showClosed)}>{showClosed ? 'Hide' : 'Show'} {closed} closed account{closed > 1 ? 's' : ''}</button>}
           <Statement accounts={accounts.data ?? []} accountId={selected} onAccount={setSelected} />

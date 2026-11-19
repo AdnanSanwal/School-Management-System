@@ -1,5 +1,7 @@
 'use client';
 
+import { Wallet, ReceiptText, Users } from 'lucide-react';
+
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
@@ -29,9 +31,9 @@ export default function SalariesPage() {
       {isLoading ? <Spinner /> : error ? <div className="card text-sm text-red-600">{apiError(error)}</div> : data && (
         <>
           <div className="grid gap-4 sm:grid-cols-3">
-            <Stat label="Monthly net payroll" value={money(t.net)} sub={`Gross ${money(t.gross)}`} tone="good" />
-            <Stat label="Fixed deductions" value={money(t.deductions)} sub="Tax, EOBI and similar" />
-            <Stat label="Staff with salary set" value={`${t.withSalary}/${t.staff}`} tone={t.withSalary < t.staff ? 'warn' : 'default'}
+            <Stat icon={Wallet} label="Monthly net payroll" value={money(t.net)} sub={`Gross ${money(t.gross)}`} tone="good" />
+            <Stat icon={ReceiptText} tone="warn" label="Fixed deductions" value={money(t.deductions)} sub="Tax, EOBI and similar" />
+            <Stat icon={Users} label="Staff with salary set" value={`${t.withSalary}/${t.staff}`} tone={t.withSalary < t.staff ? 'warn' : 'default'}
               sub={t.withSalary < t.staff ? `${t.staff - t.withSalary} still need a salary` : 'Everyone is set'} />
           </div>
           <div className="card space-y-3">

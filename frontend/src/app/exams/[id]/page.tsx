@@ -1,5 +1,7 @@
 'use client';
 
+import { ClipboardCheck, TrendingUp, BarChart3 } from 'lucide-react';
+
 import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -244,9 +246,9 @@ function Analysis({ exam }: { exam: any }) {
       </select>
       {q.isLoading ? <Spinner /> : a && <>
         <div className="grid gap-4 sm:grid-cols-3">
-          <Stat label="Results complete" value={`${a.resultsComplete}/${a.students}`} />
-          <Stat label="Pass rate" value={a.passPercent !== null ? `${a.passPercent}%` : '—'} tone={a.passPercent !== null && a.passPercent < 60 ? 'warn' : 'good'} />
-          <Stat label="Class average" value={a.average !== null ? `${a.average}%` : '—'} />
+          <Stat icon={ClipboardCheck} label="Results complete" value={`${a.resultsComplete}/${a.students}`} />
+          <Stat icon={TrendingUp} label="Pass rate" value={a.passPercent !== null ? `${a.passPercent}%` : '—'} tone={a.passPercent !== null && a.passPercent < 60 ? 'warn' : 'good'} />
+          <Stat icon={BarChart3} label="Class average" value={a.average !== null ? `${a.average}%` : '—'} />
         </div>
         <div className="grid gap-4 lg:grid-cols-2">
           <div className="card">

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { X, Loader2 } from 'lucide-react';
+import { X, Loader2, BarChart3 } from 'lucide-react';
 import { academicsAPI, studentsAPI } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { SearchInput, cleanTerm, useDebounced } from './SearchInput';
@@ -50,26 +50,29 @@ export function Stat({ label, value, sub, tone = 'default', icon: Icon, onClick 
   onClick?: () => void;
 }) {
   const tones = {
-    default: 'bg-primary-50 text-primary-600',
-    good: 'bg-emerald-50 text-emerald-600',
-    bad: 'bg-red-50 text-red-600',
-    warn: 'bg-amber-50 text-amber-600',
+    default: 'border-blue-100 bg-blue-50 text-blue-700',
+    good: 'border-emerald-100 bg-emerald-50 text-emerald-700',
+    bad: 'border-rose-100 bg-rose-50 text-rose-700',
+    warn: 'border-amber-100 bg-amber-50 text-amber-700',
   };
+  const CardIcon = Icon ?? BarChart3;
+  const frame = cn('relative isolate flex min-w-0 items-start gap-3 overflow-hidden rounded-2xl border p-4 shadow-sm', tones[tone]);
   const body = (
     <>
-      {Icon && <div className={cn('flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl', tones[tone])}><Icon className="h-5 w-5" /></div>}
-      <div className="min-w-0 flex-1">
-        <p className="text-sm text-gray-500">{label}</p>
-        <p className="mt-0.5 text-2xl font-bold tracking-tight text-gray-900">{value}</p>
-        {sub && <p className="mt-0.5 text-xs text-gray-500">{sub}</p>}
+      <CardIcon aria-hidden="true" className="mt-1 h-7 w-7 shrink-0" />
+      <div className="relative z-10 min-w-0 flex-1">
+        <p className="text-xs font-medium text-slate-600">{label}</p>
+        <p className="mt-1 break-words text-2xl font-bold tracking-tight text-slate-900">{value}</p>
+        {sub && <p className="mt-1 text-xs leading-relaxed text-slate-600">{sub}</p>}
       </div>
-      {onClick && <span className="self-center text-xs font-medium text-primary-600 opacity-0 transition-opacity group-hover:opacity-100">View →</span>}
+      <CardIcon aria-hidden="true" className="pointer-events-none absolute -bottom-2 -right-2 h-16 w-16 opacity-10" />
+      {onClick && <span aria-hidden="true" className="absolute right-3 top-2 z-10 text-[10px] font-medium opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">View →</span>}
     </>
   );
-  if (!onClick) return <div className="card flex items-start gap-4">{body}</div>;
+  if (!onClick) return <div className={frame}>{body}</div>;
   return (
     <button type="button" onClick={onClick} aria-label={`${label}: view details`}
-      className="card group flex w-full items-start gap-4 text-left transition hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400">
+      className={cn(frame, 'group w-full text-left transition hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:ring-offset-2')}>
       {body}
     </button>
   );

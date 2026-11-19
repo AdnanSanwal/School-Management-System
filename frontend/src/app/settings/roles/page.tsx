@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { Crown, Lock, RotateCcw, Save, UserPlus } from 'lucide-react';
+import { ShieldCheck, GraduationCap, BriefcaseBusiness, Calculator, BookOpen, Users, UserRound, Crown, Lock, RotateCcw, Save, UserPlus } from 'lucide-react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Spinner } from '@/components/ui/kit';
 import { rolesAPI, apiError, RoleMatrix } from '@/lib/api';
@@ -42,16 +42,19 @@ export default function RolesPage() {
       {isLoading ? <Spinner /> : error ? <div className="card text-sm text-red-600">{apiError(error)}</div> : data && current && (
         <>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {data.roles.map((r) => (
-              <button key={r.role} onClick={() => switchRole(r.role)} className={cn('card text-left transition', r.role === role ? 'ring-2 ring-primary-400' : 'hover:shadow-md')}>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="font-semibold">{r.label}</span>
+            {data.roles.map((r) => {
+              const RoleIcon = ({ OWNER: Crown, PRINCIPAL: GraduationCap, ADMIN: BriefcaseBusiness, ACCOUNTANT: Calculator, TEACHER: BookOpen, PARENT: Users, STUDENT: UserRound } as Record<string, React.ElementType>)[r.role] ?? ShieldCheck;
+              const tone = r.role === 'OWNER' ? 'border-violet-100 bg-violet-50 text-violet-700' : r.role === 'ACCOUNTANT' || r.role === 'PARENT' ? 'border-emerald-100 bg-emerald-50 text-emerald-700' : r.role === 'TEACHER' ? 'border-amber-100 bg-amber-50 text-amber-700' : 'border-blue-100 bg-blue-50 text-blue-700';
+              return (
+              <button key={r.role} onClick={() => switchRole(r.role)} aria-pressed={r.role === role} className={cn('relative isolate overflow-hidden rounded-2xl border p-4 text-left shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400', tone, r.role === role ? 'ring-2 ring-primary-400' : 'hover:shadow-md')}>
+                <RoleIcon aria-hidden="true" className="pointer-events-none absolute -bottom-2 -right-2 h-16 w-16 opacity-10" /><div className="relative z-10 flex flex-wrap items-center justify-between gap-2">
+                  <span className="flex items-center gap-2 font-semibold text-slate-900"><RoleIcon aria-hidden="true" className="h-6 w-6 shrink-0" />{r.label}</span>
                   {!r.editable ? <span className="badge badge-indigo">full access</span> : r.changed > 0 ? <span className="badge badge-yellow">{r.changed} changed</span> : <span className="badge badge-gray">standard</span>}
                 </div>
-                <p className="mt-1 text-xs text-gray-500">{r.about}</p>
-                <p className="mt-2 text-xs text-gray-400">{r.users} active login{r.users === 1 ? '' : 's'}</p>
+                <p className="relative z-10 mt-2 text-xs text-slate-600">{r.about}</p>
+                <p className="relative z-10 mt-2 text-xs text-slate-600">{r.users} active login{r.users === 1 ? '' : 's'}</p>
               </button>
-            ))}
+            ); })}
           </div>
 
           {!current.editable ? (

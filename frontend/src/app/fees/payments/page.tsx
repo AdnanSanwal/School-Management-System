@@ -1,5 +1,7 @@
 'use client';
 
+import { Banknote, Landmark, CreditCard, Smartphone, Globe, FileCheck2 } from 'lucide-react';
+
 import { useState } from 'react';
 import Link from 'next/link';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
@@ -47,7 +49,7 @@ export default function CollectionsPage() {
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Stat icon={Wallet} tone="good" label="Total collected" value={formatMoney(data.totals.amount, currency)} sub={`${data.pagination.total} receipts`} />
           {data.totals.byMethod.map((m: any) => (
-            <Stat key={m.method} label={m.method.replace('_', ' ').toLowerCase()} value={formatMoney(m.amount, currency)} sub={`${m.count} receipts`} />
+            <Stat icon={({ CASH: Banknote, BANK_TRANSFER: Landmark, CHEQUE: FileCheck2, CARD: CreditCard, JAZZCASH: Smartphone, EASYPAISA: Smartphone, ONLINE: Globe } as Record<string, React.ElementType>)[m.method] ?? Wallet} key={m.method} label={m.method.replace('_', ' ').toLowerCase()} value={formatMoney(m.amount, currency)} sub={`${m.count} receipts`} />
           ))}
         </div>
       )}
