@@ -14,7 +14,7 @@ const originOf = (url) => { try { return url && /^https?:/.test(url) ? new URL(u
 function securityHeaders() {
   // Must match the address the browser really calls: same fallback as src/lib/api.ts.
   // ("/api/v1" behind Caddy = this site, so nothing extra is allowed.)
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api/v1';
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
   const api = originOf(apiUrl);
   const sentry = process.env.NEXT_PUBLIC_SENTRY_DSN ? 'https://*.ingest.sentry.io https://*.ingest.us.sentry.io https://*.ingest.de.sentry.io' : '';
   const csp = [
@@ -31,9 +31,9 @@ function securityHeaders() {
     "base-uri 'self'",
     "form-action 'self'",
     "frame-ancestors 'none'",
-    // Only when the API is this site or https: upgrading a plain-http API (a local production
-    // run on http://localhost:5000) would break every request.
-    ...(!isDev && (!api || api.startsWith('https:')) ? ['upgrade-insecure-requests'] : []),
+    // Explicit HTTPS deployments can upgrade requests. Relative API URLs also serve
+    // local HTTP/LAN previews, which must not be upgraded to an unavailable HTTPS port.
+    ...(!isDev && api.startsWith('https:') ? ['upgrade-insecure-requests'] : []),
   ].map((d) => d.replace(/\s+/g, ' ').trim()).join('; ');
   return [
     { key: 'Content-Security-Policy', value: csp },
@@ -49,6 +49,7 @@ function securityHeaders() {
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  ...(isDev && process.env.DEV_ALLOWED_ORIGINS ? { allowedDevOrigins: process.env.DEV_ALLOWED_ORIGINS.split(',').map(host => host.trim()).filter(Boolean) } : {}),
   poweredByHeader: false,
   async headers() {
     return [{ source: '/:path*', headers: securityHeaders() }];
@@ -68,7 +69,11 @@ const nextConfig = {
   // Caddy sends /api/* straight to the backend, so this is only a fallback.
   async rewrites() {
     const target = process.env.API_PROXY_URL || 'http://localhost:5000/api';
-    return [{ source: '/api/:path*', destination: `${target.replace(/\/$/, '')}/:path*` }];
+    const socket = process.env.SOCKET_PROXY_URL || new URL(target).origin;
+    return [
+      { source: '/api/:path*', destination: `${target.replace(/\/$/, '')}/:path*` },
+      { source: '/socket.io/:path*', destination: `${socket.replace(/\/$/, '')}/socket.io/:path*` },
+    ];
   },
 };
 

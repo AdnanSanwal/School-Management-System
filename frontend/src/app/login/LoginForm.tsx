@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useSyncExternalStore } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -9,7 +9,7 @@ import { useRouter } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { useAuthStore, HOME_BY_ROLE } from '@/store/authStore';
-import { api } from '@/lib/api';
+import { api, apiError } from '@/lib/api';
 import { Eye, EyeOff, Mail, LockKeyhole, LoaderCircle } from 'lucide-react';
 import styles from './login.module.css';
 
@@ -18,8 +18,12 @@ const schema = z.object({
   password: z.string().min(1, 'Password required'),
 });
 type FormData = z.infer<typeof schema>;
+const subscribe = () => () => {};
+const clientReady = () => true;
+const serverReady = () => false;
 
 export default function LoginForm({ name, logo }: { name: string; logo: string | null }) {
+  const ready = useSyncExternalStore(subscribe, clientReady, serverReady);
   const router = useRouter();
   const { setAuth } = useAuthStore();
   const [showPass, setShowPass] = useState(false);
@@ -39,7 +43,7 @@ export default function LoginForm({ name, logo }: { name: string; logo: string |
       // Admin-chosen password: choose your own before anything else.
       router.push(user.mustChangePassword ? '/change-password' : HOME_BY_ROLE[user.role] || '/dashboard');
     } catch (err: any) {
-      const message = err.response?.data?.message || 'Login failed';
+      const message = apiError(err, 'Login failed');
       if (message === 'MFA code required') {
         setNeedsCode(true);
         toast('Enter the 6-digit code from your authenticator app', { icon: '🔐' });
@@ -69,7 +73,7 @@ export default function LoginForm({ name, logo }: { name: string; logo: string |
             <h1>{name}</h1>
             <span className={styles.rule} />
           </header>
-          <form onSubmit={handleSubmit(onSubmit)} className={styles.form} aria-busy={loading}>
+          <form method="post" onSubmit={handleSubmit(onSubmit)} className={styles.form} aria-busy={loading}>
             <div>
               <label htmlFor="login-email" className="sr-only">Email or username</label>
               <div className={styles.inputWrap}>
@@ -96,9 +100,10 @@ export default function LoginForm({ name, logo }: { name: string; logo: string |
                 <input id="mfa-code" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" required maxLength={6} placeholder="123456" autoFocus value={mfaCode} onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, ''))} />
               </div>
             </div>}
-            <button type="submit" disabled={loading} className={styles.submit}>
+            <button type="submit" disabled={!ready || loading} className={styles.submit}>
               {loading ? <><LoaderCircle className="animate-spin" size={22} /> Signing in...</> : 'Sign In'}
             </button>
+            <noscript><p className={styles.error}>Enable JavaScript to sign in securely.</p></noscript>
           </form>
         </div>
       </section>

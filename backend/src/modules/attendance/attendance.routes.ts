@@ -1,3 +1,4 @@
+import { assertAttendanceOpen, lockStaff, attendanceEvent, snapshot } from './staffSelf.service';
 import { Router } from 'express';
 import { z } from 'zod';
 import { AttendanceStatus } from '@prisma/client';
@@ -8,7 +9,7 @@ import { can, hasPermission } from '../../middleware/rbac';
 import { AppError } from '../../middleware/errorHandler';
 import { sendSuccess } from '../../utils/apiResponse';
 import { handler, parseBody, parseQuery, dateOnly, period, id, me } from '../../utils/http';
-import { toDate, toIso, schoolToday, periodRange } from '../../utils/dates';
+import { toDate, toIso, schoolToday, schoolTimezone, periodRange } from '../../utils/dates';
 import { assertSectionAccess, assertStudentAccess } from '../../utils/scope';
 import { attendanceSummary, countStatuses } from '../../utils/attendanceStats';
 import { guardiansOf, notifyEach } from '../../utils/notify';
@@ -181,7 +182,7 @@ router.get('/staff', can('attendance.staff.view', 'attendance.staff.mark'), hand
   const byStaff = new Map(marks.map((m) => [m.staffId, m]));
   const onLeave = new Set(leaves.map((l) => l.staffId));
   return sendSuccess(res, {
-    date: toIso(date),
+    date: toIso(date), timezone: await schoolTimezone(),
     staff: staff.map((s) => {
       const m = byStaff.get(s.id);
       return { ...s, status: m?.status ?? null, checkIn: m?.checkIn ?? null, checkOut: m?.checkOut ?? null, remarks: m?.remarks ?? null, approvedLeave: onLeave.has(s.id) };
@@ -210,16 +211,20 @@ router.put('/staff', can('attendance.staff.mark'), handler(async (req, res) => {
   }
   const schoolId = currentSchoolId();
   await transaction(async (tx) => {
-    for (const r of body.records) {
+    await assertAttendanceOpen(tx, date);
+    for (const r of [...body.records].sort((a,b) => a.staffId.localeCompare(b.staffId))) {
+      await lockStaff(tx, r.staffId);
+      const old = await tx.staffAttendance.findUnique({where:{staffId_date:{staffId:r.staffId,date}}});
       const data = {
-        status: r.status, remarks: r.remarks ?? null, markedById: user.id,
-        checkIn: r.checkIn ? new Date(r.checkIn) : null, checkOut: r.checkOut ? new Date(r.checkOut) : null,
+        status: r.status, remarks: r.remarks ?? old?.remarks ?? null, markedById: user.id,
+        checkIn: r.checkIn ? new Date(r.checkIn) : old?.checkIn ?? null, checkOut: r.checkOut ? new Date(r.checkOut) : old?.checkOut ?? null,
       };
-      await tx.staffAttendance.upsert({
+      const saved = await tx.staffAttendance.upsert({
         where: { staffId_date: { staffId: r.staffId, date } },
         create: { schoolId, staffId: r.staffId, date, ...data },
         update: data,
       });
+      await attendanceEvent(tx, user.id, r.staffId, toIso(date), 'Staff attendance marked by office', {before:snapshot(old),after:snapshot(saved)});
     }
   });
   return sendSuccess(res, { date: toIso(date), saved: body.records.length }, 'Staff attendance saved');

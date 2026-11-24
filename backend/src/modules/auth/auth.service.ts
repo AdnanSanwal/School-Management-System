@@ -282,7 +282,11 @@ export async function disableMFA(userId: string, password: string, keepSid?: str
 // code within its 30-second window fails.
 
 function sealMfaSecret(secret: string) {
-  return process.env.AES_SECRET_KEY ? `enc:${encrypt(secret)}` : secret;
+  const key = process.env.AES_SECRET_KEY;
+  if (key && !/^[0-9a-fA-F]{64}$/.test(key)) {
+    throw new AppError('Two-step setup is unavailable: the server AES_SECRET_KEY must contain exactly 64 hexadecimal characters. Ask the server administrator to correct the configuration and restart the backend.', 503);
+  }
+  return key ? `enc:${encrypt(secret)}` : secret;
 }
 function openMfaSecret(stored: string) {
   return stored.startsWith('enc:') ? decrypt(stored.slice(4)) : stored;

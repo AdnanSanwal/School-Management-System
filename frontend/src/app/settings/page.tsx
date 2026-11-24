@@ -131,7 +131,7 @@ function TwoStep({ enabled }: { enabled: boolean }) {
   const [code, setCode] = useState('');
   const [password, setPassword] = useState('');
   const done = (msg: string) => { toast.success(msg); setSetup(null); setCode(''); setPassword(''); qc.invalidateQueries({ queryKey: ['me'] }); };
-  const start = useMutation({ mutationFn: authAPI.mfaSetup, onSuccess: setSetup, onError: (e) => toast.error(apiError(e)) });
+  const start = useMutation({ mutationFn: () => authAPI.mfaSetup(password), onSuccess: (result) => { setSetup(result); setPassword(''); }, onError: (e) => toast.error(apiError(e)) });
   const verify = useMutation({ mutationFn: () => authAPI.mfaVerify(code), onSuccess: () => done('Two-step login is on'), onError: (e) => toast.error(apiError(e)) });
   const disable = useMutation({ mutationFn: () => authAPI.mfaDisable(password), onSuccess: () => done('Two-step login is off'), onError: (e) => toast.error(apiError(e)) });
 
@@ -153,15 +153,18 @@ function TwoStep({ enabled }: { enabled: boolean }) {
             <input className="input w-40 tracking-[0.3em]" inputMode="numeric" pattern="\d{6}" maxLength={6} required autoComplete="one-time-code" value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))} />
           </Field>
           <div className="flex gap-2">
-            <button type="button" className="btn btn-ghost" onClick={() => { setSetup(null); setCode(''); }}>Cancel</button>
+            <button type="button" className="btn btn-ghost" disabled={verify.isPending} onClick={() => { setSetup(null); setCode(''); setPassword(''); }}>Cancel</button>
             <button className="btn btn-primary" disabled={verify.isPending || code.length !== 6}>Turn on</button>
           </div>
         </form>
       ) : (
-        <>
+        <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); if (password && !start.isPending) start.mutate(); }}>
           <p className="text-sm text-gray-600"><span className="badge badge-gray">off</span> Recommended for owners, principals and accountants.</p>
-          <button className="btn btn-primary" disabled={start.isPending} onClick={() => start.mutate()}>Set up two-step login</button>
-        </>
+          <Field label="Current password, to set up two-step login" hint="Confirm your password before generating your authenticator key.">
+            <input type="password" className="input" required autoComplete="current-password" value={password} disabled={start.isPending} onChange={(e) => setPassword(e.target.value)} />
+          </Field>
+          <button className="btn btn-primary" disabled={start.isPending || !password}>{start.isPending ? 'Preparing setup…' : 'Set up two-step login'}</button>
+        </form>
       )}
     </div>
   );

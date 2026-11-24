@@ -53,6 +53,7 @@ export default function StaffAttendancePage() {
                 <div>
                   <p className="text-sm font-medium">{s.name} {s.approvedLeave && <span className="badge badge-blue ml-1">approved leave</span>}</p>
                   <p className="text-xs text-gray-400">{s.employeeNo} · {s.designation ?? (s.isTeacher ? 'Teacher' : 'Staff')}</p>
+                  {(s.checkIn || s.checkOut) && <p className="mt-1 text-xs text-slate-500">In: {s.checkIn ? new Intl.DateTimeFormat('en', { timeZone: data.timezone, hour: '2-digit', minute: '2-digit' }).format(new Date(s.checkIn)) : '—'} · Out: {s.checkOut ? new Intl.DateTimeFormat('en', { timeZone: data.timezone, hour: '2-digit', minute: '2-digit' }).format(new Date(s.checkOut)) : '—'}</p> }
                 </div>
                 {editable ? (
                   <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label={`Attendance for ${s.name}`}>

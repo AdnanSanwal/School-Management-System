@@ -9,7 +9,7 @@ declare module 'axios' {
   }
 }
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api/v1';
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
 
 // A request that hangs (lost Wi-Fi, server overloaded) fails after 30 s instead of spinning forever.
 export const api = axios.create({ baseURL: BASE_URL, withCredentials: true, timeout: 30_000 });
@@ -112,7 +112,7 @@ export const authAPI = {
   updateProfile: (body: { name: string; phone?: string | null; email?: string | null; username?: string | null; currentPassword?: string }) => data(api.patch('/auth/profile', body)),
   forgotPassword: (email: string) => api.post('/auth/forgot-password', { email }),
   resetPassword: (token: string, newPassword: string) => api.post('/auth/reset-password', { token, newPassword }),
-  mfaSetup: () => data<{ secret: string; qrCodeUrl: string }>(api.post('/auth/mfa/enable')),
+  mfaSetup: (password: string) => data<{ secret: string; qrCodeUrl: string }>(api.post('/auth/mfa/enable', { password })),
   mfaVerify: (code: string) => api.post('/auth/mfa/verify', { code }),
   mfaDisable: (password: string) => api.post('/auth/mfa/disable', { password }),
 };
@@ -653,4 +653,20 @@ export const testmakerAPI = {
   savePaper: (body: any) => data(api.post('/testmaker/papers', body)),
   updatePaper: (id: string, body: any) => data(api.put(`/testmaker/papers/${id}`, body)),
   deletePaper: (id: string) => api.delete(`/testmaker/papers/${id}`),
+};
+
+
+export interface StaffAttendancePolicy {
+  enabled: boolean; weekdays: number[]; startTime: string; endTime: string; graceMinutes: number;
+  earlyMinutes: number; minimumMinutes: number; gpsRequired: boolean; latitude: number | null;
+  longitude: number | null; radiusMeters: number; maxAccuracyMeters: number; correctionDays: number;
+}
+export const staffSelfAPI = {
+  policy: () => data<{ policy: StaffAttendancePolicy; timezone: string }>(api.get('/staff-attendance/policy')),
+  savePolicy: (body: StaffAttendancePolicy) => api.put('/staff-attendance/policy', body),
+  mine: (period?: string) => data<any>(api.get('/staff-attendance/mine', { params: { period } })),
+  punch: (action: 'check-in' | 'check-out', body: Record<string, unknown>) => api.post(`/staff-attendance/${action}`, body),
+  request: (body: Record<string, unknown>) => api.post('/staff-attendance/corrections', body),
+  corrections: (status: string) => data<any>(api.get('/staff-attendance/corrections', { params: { status } })),
+  decide: (id: string, approve: boolean, note: string) => api.post(`/staff-attendance/corrections/${id}/decision`, { approve, note }),
 };

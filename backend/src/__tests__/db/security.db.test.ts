@@ -140,6 +140,24 @@ d('Security regressions (database)', () => {
     await basePrisma.user.update({ where: { id: accountant.id }, data: { mfaEnabled: false, mfaSecret: null } });
   });
 
+  it('reports invalid two-step encryption configuration without changing the account', async () => {
+    const before = await basePrisma.user.findUniqueOrThrow({ where: { id: accountant.id } });
+    const key = process.env.AES_SECRET_KEY;
+    try {
+      process.env.AES_SECRET_KEY = 'invalid-configuration';
+      const response = await api(accountant.token).post('/auth/mfa/enable', { password: 'Test@12345' });
+      expect(response.status).toBe(503);
+      expect(response.body.message).toMatch(/AES_SECRET_KEY.*64 hexadecimal/);
+      expect(JSON.stringify(response.body)).not.toContain('invalid-configuration');
+      const after = await basePrisma.user.findUniqueOrThrow({ where: { id: accountant.id } });
+      expect(after.mfaSecret).toBe(before.mfaSecret);
+      expect(after.mfaEnabled).toBe(before.mfaEnabled);
+    } finally {
+      if (key === undefined) delete process.env.AES_SECRET_KEY;
+      else process.env.AES_SECRET_KEY = key;
+    }
+  });
+
   // ── AUTH-15: password policy ───────────────────────────────────────────────
   it('refuses common and over-long passwords (AUTH-15)', async () => {
     const A = api(owner.token);

@@ -33,7 +33,9 @@ const prodSchema = z.object({
 export function validateEnv(env: NodeJS.ProcessEnv = process.env): { ok: true } | { ok: false; problems: string[] } {
   if (env.NODE_ENV !== 'production') {
     const missing = ['DATABASE_URL', 'JWT_SECRET', 'REFRESH_TOKEN_SECRET'].filter((k) => !env[k]);
-    return missing.length ? { ok: false, problems: missing.map((k) => `${k} is required`) } : { ok: true };
+    const problems = missing.map((k) => `${k} is required`);
+    if (env.AES_SECRET_KEY && !/^[0-9a-fA-F]{64}$/.test(env.AES_SECRET_KEY)) problems.push('AES_SECRET_KEY must be exactly 64 hex characters');
+    return problems.length ? { ok: false, problems } : { ok: true };
   }
   const r = prodSchema.safeParse(env);
   return r.success ? { ok: true } : { ok: false, problems: r.error.issues.map((e) => e.message) };

@@ -268,7 +268,7 @@ Backend settings live in `backend/.env` (template: `.env.example`).
 | `GOOGLE_CLIENT_*`, `MS_CLIENT_*` | | "Sign in with Google/Microsoft" for accounts the school already created |
 | `SENTRY_DSN` | | Error tracking |
 
-Web panel (`frontend/.env.local`, optional): `NEXT_PUBLIC_API_URL`, default `http://localhost:5000/api/v1`.
+Web panel (`frontend/.env.local`, optional): `NEXT_PUBLIC_API_URL` defaults to `/api/v1`, so browser requests use the web panel’s own address on localhost or a LAN device. Next.js forwards these requests to `API_PROXY_URL` (default `http://localhost:5000/api`). Set an absolute `NEXT_PUBLIC_API_URL` only for a separate API host, and list the web address in the backend’s `FRONTEND_URL`. For LAN access with `next dev`, set `DEV_ALLOWED_ORIGINS` to the exact hostname or IP (for example `172.31.75.128`) in `frontend/.env.local`. Restart the frontend after environment changes; production builds must be rebuilt.
 Mobile (`mobile/.env`): `EXPO_PUBLIC_API_URL`, `EXPO_PUBLIC_PROJECT_ID`.
 
 **School-level settings** (late fee amount and grace days, low-attendance threshold, library fine, payment accounts,
@@ -521,3 +521,14 @@ Run setup commands from `backend/`: `npx prisma migrate deploy`, `npx prisma gen
 New APIs: `/api/v1/brands` (brand management, branches, access, summary, licensing) and `POST /api/v1/auth/switch-branch`. Legacy branch licence writes are refused for brand-linked branches. Separate deployment login branding (`PORTAL_*`) continues to apply before sign-in; the signed-in interface shows the brand and selected branch.
 
 Superadmin can manage additional brand owners from **Brands & branches → select brand → Manage owners**. Creating an owner requires a home branch in that brand and generates a temporary password. Resetting an existing owner generates a new temporary password, ends all their sessions, clears old password-reset links, and requires a password change at next login; MFA stays enabled. Passwords are shown only in the current dialog, never in audit metadata.
+
+
+### Staff self-service attendance
+
+Staff with a linked active branch HR record open **HR → My attendance** to check in/out, view history, and request corrections. The server records punch times; staff cannot select another employee or backdate a punch.
+
+Owner/Principal enable **HR → Attendance rules** for each branch, then set working days, a daytime shift, grace/early-arrival windows and minimum full-day minutes. Self-service is disabled by default. Holidays and approved leave block punches. GPS can require a fresh, sufficiently accurate position inside the branch radius; phones require HTTPS and location permission. Browser GPS cannot prevent deliberate spoofing. Audit records retain distance/accuracy rather than staff coordinates.
+
+**Attendance corrections** are reviewed by Owner/Principal, or an office role delegated `attendance.staff.review` in Roles & permissions. A reviewer cannot approve their own attendance. Requests need a reason and reviewer note; changes since submission cause a conflict rather than an overwrite. Submitted/approved/paid payroll and closed accounting months block historical corrections and manual attendance overwrites. Live check-in/out continues for today even after payroll is finalized; finalized payslips remain snapshots. Approved corrections affect draft payroll after recalculation. Half-day records use the existing half-day deduction; no new automatic late penalty or automatic absence marking is introduced.
+
+Check-ins, check-outs, manual office marks, rule changes and correction decisions are recorded in **Audit log**. The additive migration is `20261124190000_staff_self_attendance`; run `npm run db:migrate` and regenerate Prisma before starting an updated backend. QR codes, overnight/multiple shifts, biometric devices and offline punches are outside this first version.

@@ -32,6 +32,13 @@ describe('production configuration (SEC-3, HOOK-5, SEC-1)', () => {
   });
 });
 
+describe('development encryption configuration', () => {
+  it('flags a malformed key before two-step setup is attempted', () => {
+    const result = validateEnv({ ...good, NODE_ENV: 'development', AES_SECRET_KEY: 'invalid-configuration' });
+    expect(result).toEqual({ ok: false, problems: ['AES_SECRET_KEY must be exactly 64 hex characters'] });
+  });
+});
+
 describe('password policy (AUTH-15)', () => {
   it('refuses common, repeated, personal and over-long passwords', () => {
     expect(passwordProblem('password123')).toMatch(/common/);

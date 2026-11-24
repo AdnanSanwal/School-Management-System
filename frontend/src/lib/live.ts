@@ -17,7 +17,7 @@ import { authAPI } from '@/lib/api';
 /** The server's address: the API's own host, or this site when the API is called by a relative path. */
 function serverUrl() {
   if (process.env.NEXT_PUBLIC_SOCKET_URL) return process.env.NEXT_PUBLIC_SOCKET_URL;
-  const api = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api/v1';
+  const api = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
   try { return new URL(api).origin; } catch { return window.location.origin; }
 }
 

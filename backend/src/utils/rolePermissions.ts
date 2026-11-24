@@ -35,6 +35,9 @@ export const PERMISSION_INFO: Partial<Record<Permission, Info>> = {
   'attendance.student.view': { module: 'Attendance', label: 'See student attendance' },
   'attendance.student.mark': { module: 'Attendance', label: 'Mark student attendance' },
   'attendance.student.correct': { module: 'Attendance', label: 'Correct past student attendance' },
+  'attendance.staff.self': { module: 'Attendance', label: 'Check in/out and request corrections for own attendance' },
+  'attendance.staff.configure': { module: 'Attendance', label: 'Configure branch staff schedules and GPS rules' },
+  'attendance.staff.review': { module: 'Attendance', label: 'Review staff attendance corrections (except own)' },
   'attendance.staff.view': { module: 'Attendance', label: 'See staff attendance' },
   'attendance.staff.mark': { module: 'Attendance', label: 'Mark staff attendance' },
 
@@ -108,7 +111,7 @@ const FAMILY_SWITCHES: Record<string, Permission[]> = {
 };
 
 /** Approvals exist so a second person checks the work; they can be handed only to the principal. */
-const SENIOR_ONLY: Permission[] = ['expense.approve', 'payroll.approve', 'books.reopen', 'student.status.approve', 'fee.concession.approve', 'exam.approve', 'timetable.approve'];
+const SENIOR_ONLY: Permission[] = ['attendance.staff.configure', 'expense.approve', 'payroll.approve', 'books.reopen', 'student.status.approve', 'fee.concession.approve', 'exam.approve', 'timetable.approve'];
 /** Teachers work inside their own classes, so only a few school-wide jobs can be added to them. */
 const TEACHER_EXTRAS: Permission[] = ['notice.publish', 'calendar.manage', 'library.view', 'library.manage'];
 

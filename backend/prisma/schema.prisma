@@ -252,6 +252,7 @@ model Staff {
   subjectsTaught   SubjectAssignment[]
   timetable        TimetableSlot[]
   attendance       StaffAttendance[]
+  attendanceCorrections StaffAttendanceCorrection[]
   leaveRequests    LeaveRequest[]
   payrollLines     PayrollLine[]
   loans            StaffLoan[]
@@ -599,6 +600,51 @@ model StaffAttendance {
   @@unique([staffId, date])
   @@index([schoolId, date])
   @@map("staff_attendance")
+}
+
+// One daytime schedule and optional geofence per branch. Attendance remains manual until enabled.
+model StaffAttendancePolicy {
+  schoolId String @id
+  enabled Boolean @default(false)
+  weekdays Json
+  startTime String @db.VarChar(5)
+  endTime String @db.VarChar(5)
+  graceMinutes Int @default(15)
+  earlyMinutes Int @default(60)
+  minimumMinutes Int @default(240)
+  gpsRequired Boolean @default(false)
+  latitude Float?
+  longitude Float?
+  radiusMeters Int @default(150)
+  maxAccuracyMeters Int @default(100)
+  correctionDays Int @default(31)
+  updatedAt DateTime @updatedAt
+
+  @@map("staff_attendance_policies")
+}
+
+model StaffAttendanceCorrection {
+  id String @id @default(uuid())
+  schoolId String
+  staffId String
+  date DateTime @db.Date
+  requestedById String
+  requestedStatus AttendanceStatus
+  requestedCheckIn DateTime?
+  requestedCheckOut DateTime?
+  reason String @db.VarChar(500)
+  baseline Json
+  pendingKey String? @unique @db.VarChar(120)
+  status ApprovalStatus @default(PENDING)
+  decidedById String?
+  decisionNote String? @db.VarChar(500)
+  decidedAt DateTime?
+  createdAt DateTime @default(now())
+  staff Staff @relation(fields: [staffId], references: [id], onDelete: Cascade)
+
+  @@index([schoolId, status, createdAt])
+  @@index([schoolId, staffId, date])
+  @@map("staff_attendance_corrections")
 }
 
 model LeaveRequest {

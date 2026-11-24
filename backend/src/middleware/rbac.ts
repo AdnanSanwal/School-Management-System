@@ -27,6 +27,7 @@ export const PERMISSIONS = [
   'class.view', 'class.manage',
   'attendance.student.mark', 'attendance.student.view', 'attendance.student.correct',
   'attendance.staff.mark', 'attendance.staff.view',
+  'attendance.staff.self', 'attendance.staff.configure', 'attendance.staff.review',
   'leave.apply', 'leave.view', 'leave.approve',
   'fee.view', 'fee.structure.view', 'fee.structure.manage', 'fee.invoice.generate', 'fee.collect',
   'fee.concession.request', 'fee.concession.approve', 'fee.pay',
@@ -70,7 +71,7 @@ export const ROLE_PERMISSIONS: Record<Role, ReadonlySet<Permission>> = {
     'users.manage', 'dashboard.principal', 'diary.configure',
     'student.manage', 'student.admit', 'student.status.request', 'student.status.approve',
     'staff.manage', 'class.manage',
-    'attendance.student.correct', 'attendance.staff.mark',
+    'attendance.student.correct', 'attendance.staff.mark', 'attendance.staff.self', 'attendance.staff.configure', 'attendance.staff.review',
     'leave.apply', 'leave.approve',
     'fee.concession.approve',
     'exam.manage', 'exam.approve', 'reportcard.generate',
@@ -88,7 +89,7 @@ export const ROLE_PERMISSIONS: Record<Role, ReadonlySet<Permission>> = {
     'staff.view', 'staff.manage', 'class.view', 'class.manage',
     'hr.manage', 'salary.view', 'salary.manage', 'leave.view',
     'attendance.student.view', 'attendance.student.correct',
-    'attendance.staff.mark', 'attendance.staff.view',
+    'attendance.staff.mark', 'attendance.staff.view', 'attendance.staff.self',
     'fee.view', 'fee.structure.view', 'fee.structure.manage', 'fee.invoice.generate', 'fee.collect',
     'fee.concession.request',
     'exam.manage', 'timetable.manage', 'calendar.manage', 'notice.publish',
@@ -98,6 +99,7 @@ export const ROLE_PERMISSIONS: Record<Role, ReadonlySet<Permission>> = {
 
   // Finance only.
   ACCOUNTANT: new Set<Permission>([
+    'attendance.staff.self',
     ...EVERYONE_IN_SCHOOL,
     'school.view', 'dashboard.accountant', 'student.view', 'class.view',
     // CR-04: accountants may admit students (and set their monthly fee), not edit them.
@@ -113,6 +115,7 @@ export const ROLE_PERMISSIONS: Record<Role, ReadonlySet<Permission>> = {
 
   // Class-level; scoped to own sections.
   TEACHER: new Set<Permission>([
+    'attendance.staff.self',
     ...EVERYONE_IN_SCHOOL,
     'school.view', 'student.view', 'class.view',
     'attendance.student.mark', 'attendance.student.view',

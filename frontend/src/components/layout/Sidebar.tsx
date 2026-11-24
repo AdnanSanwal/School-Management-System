@@ -55,6 +55,9 @@ const navGroups: NavGroup[] = [
     title: 'HR',
     items: [
       { label: 'Staff', href: '/staff', icon: Users, cap: 'viewStaff' },
+      { label: 'My attendance', href: '/attendance/mine', icon: CalendarCheck, cap: 'myAttendance' },
+      { label: 'Attendance corrections', href: '/attendance/staff/corrections', icon: ClipboardCheck, cap: 'attendanceCorrections' },
+      { label: 'Attendance rules', href: '/attendance/staff/settings', icon: SlidersHorizontal, cap: 'attendanceRules' },
       { label: 'Staff attendance', href: '/attendance/staff', icon: UserCheck, cap: 'staffAttendance' },
       { label: 'Leave', href: '/leave', icon: Plane, cap: 'applyLeave' },
       { label: 'Leave balances', href: '/hr/leave', icon: CalendarCheck, cap: 'viewLeaveBalances' },

@@ -1,3 +1,4 @@
+import staffSelfRoutes from './modules/attendance/staffSelf.routes';
 import brandRoutes from './modules/brands/brands.routes';
 import express from 'express';
 import cors from 'cors';
@@ -149,6 +150,7 @@ app.use(`${api}/users`, userRoutes);
 app.use(`${api}/academics`, classRoutes);
 app.use(`${api}/staff`, staffRoutes);
 app.use(`${api}/students`, studentRoutes);
+app.use(`${api}/staff-attendance`, staffSelfRoutes);
 app.use(`${api}/attendance`, attendanceRoutes);
 app.use(`${api}/fees`, feeRoutes);
 app.use(`${api}/dashboard/details`, dashboardDetailRoutes);
