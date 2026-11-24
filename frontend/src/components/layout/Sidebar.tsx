@@ -134,7 +134,7 @@ const navGroups: NavGroup[] = [
 
 // Every page renders its own DashboardLayout, so the sidebar mounts afresh on each
 // navigation. Keep its scroll position and collapsed state here so they survive that.
-const kept = { scrollTop: 0, collapsed: false };
+const kept = { scrollTop: 0, collapsed: false, groups: {} as Record<string, boolean> };
 
 export function Sidebar({ mobileOpen = false, onMobileClose }: { mobileOpen?: boolean; onMobileClose?: () => void }) {
   const pathname = usePathname();
@@ -143,6 +143,8 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: { mobileOpen?: bo
   const qc = useQueryClient();
   const [collapsed, setCollapsedState] = useState(kept.collapsed);
   const setCollapsed = (f: (c: boolean) => boolean) => setCollapsedState((c) => (kept.collapsed = f(c)));
+  const [expandedGroups, setExpandedGroups] = useState(kept.groups);
+  useEffect(() => { kept.groups = expandedGroups; }, [expandedGroups]);
   const navRef = useRef<HTMLElement>(null);
 
   const drawerRef = useRef<HTMLElement>(null);
@@ -192,6 +194,14 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: { mobileOpen?: bo
   })).filter(g => g.items.length > 0);
 
   const allHrefs = dedupedGroups.flatMap((g) => g.items.map((i) => i.href));
+
+  const isActive = (href: string) => pathname === href || (pathname.startsWith(href + '/') && !allHrefs.some(h => h !== href && h.startsWith(href + '/') && pathname.startsWith(h)));
+  const toggleGroup = (title: string, expanded: boolean) => {
+    setExpandedGroups(previous => {
+      const next = { ...previous, [title]: !expanded };
+      return next;
+    });
+  };
 
   // Put the menu back where the user left it, before the browser paints.
   useLayoutEffect(() => {
@@ -247,19 +257,26 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: { mobileOpen?: bo
 
       {/* Nav */}
       <nav ref={navRef} onScroll={(e) => { kept.scrollTop = e.currentTarget.scrollTop; }} onClickCapture={(e) => { kept.scrollTop = e.currentTarget.scrollTop; }} className="flex-1 overflow-y-auto scrollbar-hide py-3 px-2">
-        {dedupedGroups.map((group) => (
+        {dedupedGroups.map((group) => {
+          const current = group.items.some(item => isActive(item.href));
+          const expanded = expandedGroups[group.title] ?? (group.title === 'Overview' || current);
+          const panelId = `nav-group-${group.title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+          return (
           <div key={group.title} className="mb-1">
             {!compact && (
-              <p className="px-3 py-1.5 text-2xs font-semibold text-slate-400 uppercase tracking-widest">
-                {group.title}
-              </p>
+              <button type="button" aria-label={`${group.title} sections`} aria-expanded={expanded} aria-controls={panelId}
+                onClick={() => toggleGroup(group.title, expanded)}
+                className={cn('flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2.5 text-left text-2xs font-semibold uppercase tracking-widest transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400', current ? 'text-primary-700' : 'text-slate-500')}>
+                <span>{group.title}</span>
+                <ChevronRight aria-hidden="true" className={cn('h-4 w-4 shrink-0 transition-transform duration-200 motion-reduce:transition-none', expanded && 'rotate-90')} />
+              </button>
             )}
             {compact && group.title !== dedupedGroups[0].title && (
               <div className="mx-3 my-1 border-t border-slate-100" />
             )}
-            <div className="space-y-0.5">
+            <div id={panelId} hidden={!compact && !expanded} className="space-y-0.5">
               {group.items.map((item) => {
-                const active = pathname === item.href || (pathname.startsWith(item.href + '/') && !allHrefs.some((h) => h !== item.href && h.startsWith(item.href + '/') && pathname.startsWith(h)));
+                const active = isActive(item.href);
                 const Icon = item.icon;
                 return (
                   <Link
@@ -298,7 +315,8 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: { mobileOpen?: bo
               })}
             </div>
           </div>
-        ))}
+          );
+        })}
       </nav>
 
     </aside>
