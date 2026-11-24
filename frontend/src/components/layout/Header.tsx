@@ -4,7 +4,7 @@ import { BranchSwitcher } from '@/components/brands/BranchSwitcher';
 import { useState, useRef, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Bell, Settings, LogOut, ChevronRight, Check, X, Loader2, CornerDownLeft } from 'lucide-react';
+import { Menu, Bell, Settings, LogOut, ChevronRight, Check, X, Loader2, CornerDownLeft } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { authAPI, notificationsAPI, apiError } from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
@@ -15,6 +15,8 @@ import { searchAPI, matchingPages, type SearchGroup, type SearchItem } from '@/l
 
 interface HeaderProps {
   title: string;
+  onMenu?: () => void;
+  menuOpen?: boolean;
 }
 
 // Breadcrumb auto-generator from pathname
@@ -61,7 +63,7 @@ function NotificationPanel({ onClose }: { onClose: () => void }) {
   const unread = (notifications as any[]).filter((n: any) => !n.readAt).length;
 
   return (
-    <div className="absolute right-0 top-full mt-2 w-96 bg-white rounded-2xl shadow-card-lg border border-gray-100 overflow-hidden animate-slide-down z-50">
+    <div className="fixed left-3 right-3 top-16 sm:absolute sm:left-auto sm:right-0 sm:top-full mt-2 sm:w-96 bg-white rounded-2xl shadow-card-lg border border-gray-100 overflow-hidden animate-slide-down z-50">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
         <div className="flex items-center gap-2">
@@ -310,7 +312,7 @@ function GlobalSearch() {
   );
 }
 
-export function Header({ title }: HeaderProps) {
+export function Header({ title, onMenu, menuOpen }: HeaderProps) {
   const { user } = useAuthStore();
   const [showNotifs, setShowNotifs] = useState(false);
   const [showUser, setShowUser] = useState(false);
@@ -337,12 +339,12 @@ export function Header({ title }: HeaderProps) {
   }, []);
 
   return (
-    <header className="h-16 flex items-center justify-between px-6 flex-shrink-0 z-10 border-b border-white/70 bg-white/70 backdrop-blur-md">
+    <header className="min-w-0 h-16 flex items-center justify-between gap-2 px-3 sm:px-6 flex-shrink-0 z-10 border-b border-white/70 bg-white/70 backdrop-blur-md">
       {/* Left: breadcrumb */}
-      <Breadcrumbs title={title} />
+      <div className="flex min-w-0 items-center gap-2"><button type="button" aria-label="Open navigation" aria-controls="erp-navigation" aria-expanded={!!menuOpen} onClick={onMenu} className="shrink-0 rounded-lg p-2 hover:bg-slate-100 lg:hidden"><Menu className="h-5 w-5" /></button><div className="min-w-0 truncate"><span className="text-sm font-semibold lg:hidden">{title}</span><div className="hidden lg:block"><Breadcrumbs title={title} /></div></div></div>
 
       {/* Right: actions */}
-      <div className="flex items-center gap-2">
+      <div className="flex shrink-0 items-center gap-1 sm:gap-2">
         <BranchSwitcher />
         {/* Search */}
         <GlobalSearch />
@@ -350,6 +352,7 @@ export function Header({ title }: HeaderProps) {
         {/* Notification bell */}
         <div ref={notifsRef} className="relative">
           <button
+            aria-label="Notifications" aria-expanded={showNotifs}
             onClick={() => { setShowNotifs(v => !v); setShowUser(false); }}
             className={cn(
               'relative p-2.5 rounded-xl transition-colors',
@@ -372,6 +375,7 @@ export function Header({ title }: HeaderProps) {
         {/* User avatar */}
         <div ref={userRef} className="relative">
           <button
+            aria-label="Account menu" aria-expanded={showUser}
             onClick={() => { setShowUser(v => !v); setShowNotifs(false); }}
             className={cn(
               'flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl transition-colors',
@@ -381,11 +385,11 @@ export function Header({ title }: HeaderProps) {
             <div className="w-8 h-8 rounded-xl bg-primary-100 flex items-center justify-center text-sm font-bold text-primary-700 flex-shrink-0">
               {user?.name?.[0]?.toUpperCase()}
             </div>
-            <div className="hidden md:block text-left">
+            <div className="hidden lg:block text-left">
               <p className="text-xs font-semibold text-gray-900 leading-tight">{user?.name?.split(' ')[0]}</p>
               <p className="text-2xs text-gray-400 leading-tight capitalize">{user?.role?.toLowerCase()}</p>
             </div>
-            <ChevronRight className={cn('w-3.5 h-3.5 text-gray-400 transition-transform hidden md:block', showUser && 'rotate-90')} />
+            <ChevronRight className={cn('w-3.5 h-3.5 text-gray-400 transition-transform hidden lg:block', showUser && 'rotate-90')} />
           </button>
           {showUser && <UserMenu onClose={() => setShowUser(false)} />}
         </div>

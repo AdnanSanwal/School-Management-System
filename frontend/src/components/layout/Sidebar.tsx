@@ -1,6 +1,6 @@
 'use client';
 
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useQueryClient } from '@tanstack/react-query';
 import { prefetchPage } from '@/lib/prefetch';
@@ -9,7 +9,7 @@ import { useAuthStore } from '@/store/authStore';
 import { useBranding } from '@/components/BrandingProvider';
 import { cn } from '@/lib/utils';
 import {
-  LayoutDashboard, Users, GraduationCap, Bell, Settings, ChevronLeft, ChevronRight,
+  X, LayoutDashboard, Users, GraduationCap, Bell, Settings, ChevronLeft, ChevronRight,
   UserCheck, Layers, Wallet, Receipt, AlertTriangle, BadgePercent, FileSpreadsheet, ClipboardCheck,
   KeyRound, School, Home, Megaphone, Send, FileQuestion, Sparkles, BookOpen, CalendarDays, PenLine, Clock, Inbox, FileBarChart, Plane,
   Building2, ArrowUpCircle, Bus, Library,
@@ -136,7 +136,7 @@ const navGroups: NavGroup[] = [
 // navigation. Keep its scroll position and collapsed state here so they survive that.
 const kept = { scrollTop: 0, collapsed: false };
 
-export function Sidebar() {
+export function Sidebar({ mobileOpen = false, onMobileClose }: { mobileOpen?: boolean; onMobileClose?: () => void }) {
   const pathname = usePathname();
   const brand = useBranding();
   const { user } = useAuthStore();
@@ -144,6 +144,28 @@ export function Sidebar() {
   const [collapsed, setCollapsedState] = useState(kept.collapsed);
   const setCollapsed = (f: (c: boolean) => boolean) => setCollapsedState((c) => (kept.collapsed = f(c)));
   const navRef = useRef<HTMLElement>(null);
+
+  const drawerRef = useRef<HTMLElement>(null);
+  const compact = collapsed && !mobileOpen;
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const previous = document.activeElement as HTMLElement | null;
+    const drawer = drawerRef.current;
+    const controls = () => Array.from(drawer?.querySelectorAll<HTMLElement>('a[href], button:not([disabled])') ?? []).filter(el => el.getClientRects().length > 0);
+    controls()[0]?.focus();
+    const key = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { e.preventDefault(); onMobileClose?.(); }
+      if (e.key === 'Tab') {
+        const items = controls(); const first = items[0], last = items[items.length - 1];
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last?.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first?.focus(); }
+      }
+    };
+    const desktop = window.matchMedia('(min-width: 1024px)');
+    const resized = () => { if (desktop.matches) onMobileClose?.(); };
+    document.addEventListener('keydown', key); desktop.addEventListener('change', resized);
+    return () => { document.removeEventListener('keydown', key); desktop.removeEventListener('change', resized); previous?.focus(); };
+  }, [mobileOpen, onMobileClose]);
 
   const role = user?.role || '';
 
@@ -186,20 +208,23 @@ export function Sidebar() {
   }, [pathname, allHrefs.length]);
 
   return (
-    <aside
+    <>
+    {mobileOpen && <button type="button" aria-label="Close navigation overlay" tabIndex={-1} onClick={onMobileClose} className="fixed inset-0 z-40 bg-slate-900/40 lg:hidden" />}
+    <aside ref={drawerRef} id="erp-navigation" aria-label="Main navigation" role={mobileOpen ? 'dialog' : undefined} aria-modal={mobileOpen || undefined}
       className={cn(
-        'relative flex flex-col bg-white border-r border-slate-100 transition-all duration-300 ease-in-out',
-        collapsed ? 'w-[72px]' : 'w-64'
+        'fixed inset-y-0 left-0 z-50 flex w-64 shrink-0 flex-col bg-white border-r border-slate-100 transition-transform duration-200 lg:relative lg:z-auto lg:translate-x-0',
+        mobileOpen ? 'visible translate-x-0 shadow-xl' : 'invisible -translate-x-full lg:visible',
+        collapsed ? 'lg:w-[72px]' : 'lg:w-64'
       )}
-      style={{ minHeight: '100vh' }}
+
     >
       {/* Logo */}
-      <div className={cn('flex items-center border-b border-slate-100 h-16 flex-shrink-0 overflow-hidden', collapsed ? 'px-2 justify-center' : 'px-3 gap-2.5')}>
+      <div className={cn('flex items-center border-b border-slate-100 h-16 flex-shrink-0 overflow-hidden', compact ? 'px-2 justify-center' : 'px-3 gap-2.5')}>
         <div className="w-12 h-12 flex items-center justify-center flex-shrink-0">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={user?.brand?.logoUrl || brand.logo} alt={user?.brand?.name || brand.name} className="w-12 h-12 object-contain" />
         </div>
-        {!collapsed && (
+        {!compact && (
           <div className="min-w-0 flex-1">
             <p title={user?.school?.name ?? brand.name} className="font-bold text-sm text-gray-900 leading-tight truncate">{user?.school?.name ?? brand.name}</p>
             <p className="text-2xs text-slate-400 font-medium truncate">{user?.brand?.name || brand.name}</p>
@@ -207,13 +232,14 @@ export function Sidebar() {
         )}
       </div>
 
+      <button type="button" onClick={onMobileClose} aria-label="Close navigation" className="absolute right-2 top-4 rounded-lg bg-white p-2 lg:hidden"><X className="h-5 w-5" /></button>
       {/* Collapse toggle */}
       <button
         onClick={() => setCollapsed(c => !c)}
-        className="absolute -right-3 top-[72px] w-6 h-6 rounded-full bg-white border border-slate-200 shadow-sm flex items-center justify-center hover:bg-slate-50 transition-colors z-20"
-        aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        className="hidden lg:flex absolute -right-3 top-[72px] w-6 h-6 rounded-full bg-white border border-slate-200 shadow-sm items-center justify-center hover:bg-slate-50 transition-colors z-20"
+        aria-label={compact ? 'Expand sidebar' : 'Collapse sidebar'}
       >
-        {collapsed
+        {compact
           ? <ChevronRight className="w-3 h-3 text-slate-500" />
           : <ChevronLeft className="w-3 h-3 text-slate-500" />
         }
@@ -223,12 +249,12 @@ export function Sidebar() {
       <nav ref={navRef} onScroll={(e) => { kept.scrollTop = e.currentTarget.scrollTop; }} onClickCapture={(e) => { kept.scrollTop = e.currentTarget.scrollTop; }} className="flex-1 overflow-y-auto scrollbar-hide py-3 px-2">
         {dedupedGroups.map((group) => (
           <div key={group.title} className="mb-1">
-            {!collapsed && (
+            {!compact && (
               <p className="px-3 py-1.5 text-2xs font-semibold text-slate-400 uppercase tracking-widest">
                 {group.title}
               </p>
             )}
-            {collapsed && group.title !== dedupedGroups[0].title && (
+            {compact && group.title !== dedupedGroups[0].title && (
               <div className="mx-3 my-1 border-t border-slate-100" />
             )}
             <div className="space-y-0.5">
@@ -239,23 +265,24 @@ export function Sidebar() {
                   <Link
                     key={item.href}
                     href={item.href}
+                    onClick={onMobileClose}
                     onMouseEnter={() => prefetchPage(qc, item.href)}
                     onFocus={() => prefetchPage(qc, item.href)}
-                    title={collapsed ? item.label : undefined}
+                    title={compact ? item.label : undefined}
                     aria-current={active ? 'page' : undefined}
                     className={cn(
                       'relative flex items-center rounded-xl text-sm font-medium transition-all duration-150 group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400/60',
-                      collapsed ? 'px-2.5 py-2.5 justify-center' : 'px-3 py-2.5 gap-3',
+                      compact ? 'px-2.5 py-2.5 justify-center' : 'px-3 py-2.5 gap-3',
                       active
                         ? 'bg-gradient-to-r from-primary-50 to-violet-50 text-primary-700 shadow-sm ring-1 ring-primary-100'
                         : 'text-slate-500 hover:bg-slate-100 hover:text-slate-800'
                     )}
                   >
-                    {active && !collapsed && (
+                    {active && !compact && (
                       <span className="absolute left-0 top-1/2 h-6 w-1 -translate-y-1/2 rounded-r-full bg-primary-500" />
                     )}
-                    <Icon className={cn('flex-shrink-0 transition-colors', collapsed ? 'w-5 h-5' : 'w-4.5 h-4.5', active ? 'text-primary-600' : 'text-slate-400 group-hover:text-slate-600')} style={{ width: collapsed ? 20 : 18, height: collapsed ? 20 : 18 }} />
-                    {!collapsed && (
+                    <Icon className={cn('flex-shrink-0 transition-colors', compact ? 'w-5 h-5' : 'w-4.5 h-4.5', active ? 'text-primary-600' : 'text-slate-400 group-hover:text-slate-600')} style={{ width: compact ? 20 : 18, height: compact ? 20 : 18 }} />
+                    {!compact && (
                       <>
                         <span className="flex-1 truncate">{item.label}</span>
                         {item.badge && (
@@ -275,5 +302,6 @@ export function Sidebar() {
       </nav>
 
     </aside>
+    </>
   );
 }

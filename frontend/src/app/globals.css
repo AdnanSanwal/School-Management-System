@@ -338,3 +338,7 @@
 .payroll-table :where(th, td) { padding: 0.7rem 0.75rem; font-size: 0.75rem; white-space: nowrap; }
 .payroll-row-action { display: inline-flex; align-items: center; gap: 0.25rem; border: 1px solid #e2e8f0; border-radius: 0.45rem; padding: 0.25rem 0.45rem; font-size: 0.65rem; font-weight: 500; }
 .payroll-row-action:hover { background: #f5f3ff; border-color: #c4b5fd; }
+
+/* Let chart and table grid items shrink to the web ERP's available viewport. */
+.erp-main .grid > * { min-width: 0; }
+.erp-main .table-container { max-width: 100%; }

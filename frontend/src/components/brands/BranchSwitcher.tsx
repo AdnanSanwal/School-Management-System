@@ -22,5 +22,5 @@ export function BranchSwitcher() {
       window.location.replace(HOME_BY_ROLE[result.user.role] || '/dashboard');
     } catch (e) { toast.error(apiError(e)); setBusy(false); }
   };
-  return <select aria-label="Current branch" className="input !w-auto max-w-[190px] !py-2 text-xs" disabled={busy} value={user.school?.id ?? ''} onChange={e => switchTo(e.target.value)}>{user.branches.map(b => <option key={b.id} value={b.id} disabled={!b.isActive}>{b.name}{!b.isActive ? ' (suspended)' : ''}</option>)}</select>;
+  return <select aria-label="Current branch" className="input !w-auto max-w-[95px] min-[400px]:max-w-[120px] sm:max-w-[160px] lg:max-w-[190px] !py-2 text-xs" disabled={busy} value={user.school?.id ?? ''} onChange={e => switchTo(e.target.value)}>{user.branches.map(b => <option key={b.id} value={b.id} disabled={!b.isActive}>{b.name}{!b.isActive ? ' (suspended)' : ''}</option>)}</select>;
 }
